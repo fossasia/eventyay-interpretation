@@ -1,72 +1,62 @@
 {% extends "eventyay_common/event/base.html" %}
 {% load i18n %}
+{% load bootstrap3 %}
 {% block title %}{% trans "Interpretation" %}{% endblock %}
 {% block content %}
     <h1>{% trans "Interpretation" %}</h1>
 
-    <div class="alert alert-success">
-        {% blocktrans trimmed with event=event.name %}
-            The interpretation plugin is active and connected to <strong>{{ event }}</strong>.
+    <p class="text-muted">
+        {% blocktrans trimmed %}
+            Connect this event to a SUSI Translator server to provide live
+            transcription and translation for your rooms.
         {% endblocktrans %}
-    </div>
+    </p>
+
+    <form action="" method="post" class="form-horizontal">
+        {% csrf_token %}
+        {% bootstrap_form_errors form %}
+        <fieldset>
+            <legend>{% trans "SUSI server connection" %}</legend>
+            {% bootstrap_field form.base_url layout='horizontal' %}
+            {% bootstrap_field form.auth_token layout='horizontal' %}
+            {% bootstrap_field form.is_enabled layout='horizontal' %}
+        </fieldset>
+
+        <div class="form-group">
+            <div class="col-md-9 col-md-offset-3">
+                <button type="submit" class="btn btn-primary btn-save">
+                    {% trans "Save" %}
+                </button>
+                <button type="submit" name="test" value="1" class="btn btn-default">
+                    {% trans "Save and test connection" %}
+                </button>
+            </div>
+        </div>
+    </form>
 
     <div class="panel panel-default">
         <div class="panel-heading">
-            <h3 class="panel-title">{% trans "Event details" %}</h3>
+            <h3 class="panel-title">{% trans "Status" %}</h3>
         </div>
         <table class="table">
             <tbody>
                 <tr>
-                    <th>{% trans "Event name" %}</th>
-                    <td>{{ event.name }}</td>
-                </tr>
-                <tr>
-                    <th>{% trans "Event slug" %}</th>
-                    <td><code>{{ event.slug }}</code></td>
-                </tr>
-                <tr>
-                    <th>{% trans "Organizer" %}</th>
-                    <td>{{ event.organizer.name }}</td>
-                </tr>
-                <tr>
-                    <th>{% trans "Starts" %}</th>
-                    <td>{{ event.date_from }}</td>
-                </tr>
-                <tr>
-                    <th>{% trans "Ends" %}</th>
-                    <td>{{ event.date_to|default:"—" }}</td>
-                </tr>
-                {% if event.location %}
-                    <tr>
-                        <th>{% trans "Location" %}</th>
-                        <td>{{ event.location }}</td>
-                    </tr>
-                {% endif %}
-                <tr>
-                    <th>{% trans "Timezone" %}</th>
-                    <td>{{ event.timezone }}</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-
-    <div class="panel panel-default">
-        <div class="panel-heading">
-            <h3 class="panel-title">{% trans "Connection status" %}</h3>
-        </div>
-        <table class="table">
-            <tbody>
-                <tr>
-                    <th>{% trans "Plugin module" %}</th>
-                    <td><code>{{ plugin_module }}</code></td>
-                </tr>
-                <tr>
-                    <th>{% trans "Enabled for this event" %}</th>
+                    <th>{% trans "Plugin enabled for this event" %}</th>
                     <td>
                         {% if plugin_enabled %}
                             <span class="label label-success">{% trans "Yes" %}</span>
                         {% else %}
                             <span class="label label-danger">{% trans "No" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>{% trans "Interpretation enabled" %}</th>
+                    <td>
+                        {% if connection.is_enabled %}
+                            <span class="label label-success">{% trans "Yes" %}</span>
+                        {% else %}
+                            <span class="label label-default">{% trans "No" %}</span>
                         {% endif %}
                     </td>
                 </tr>
