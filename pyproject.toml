@@ -40,3 +40,27 @@ version = {attr = "interpretation.__version__"}
 [tool.setuptools.packages.find]
 include = ["interpretation*"]
 namespaces = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["migrations", ".ropeproject", "static", "_static", "build"]
+
+[tool.ruff.lint]
+# Mirror the previous flake8 default checks (E/F/W) plus isort (I).
+select = ["E", "F", "W", "I"]
+# E402: module level import not at top of file (was ignored under flake8).
+ignore = ["E402"]
+
+[tool.ruff.lint.per-file-ignores]
+"setup.py" = ["I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["interpretation"]
+known-third-party = ["pretix"]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

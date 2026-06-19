@@ -13,8 +13,8 @@ on:
       - 'interpretation/static/**'
 
 jobs:
-  isort:
-    name: isort
+  ruff:
+    name: ruff
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -31,53 +31,11 @@ jobs:
       - name: Install pretix
         run: pip3 install pretix
       - name: Install Dependencies
-        run: pip3 install isort -Ue .
-      - name: Run isort
-        run: isort -c .
-  flake:
-    name: flake8
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.11
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install pretix
-        run: pip3 install pretix
-      - name: Install Dependencies
-        run: pip3 install flake8 -Ue .
-      - name: Run flake8
-        run: flake8 .
-        working-directory: .
-  black:
-    name: black
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v1
-        with:
-          python-version: 3.11
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install pretix
-        run: pip3 install pretix
-      - name: Install Dependencies
-        run: pip3 install black -Ue .
-      - name: Run black
-        run: black --check .
-        working-directory: .
+        run: pip3 install ruff -Ue .
+      - name: Run ruff check
+        run: ruff check .
+      - name: Run ruff format check
+        run: ruff format --check .
   packaging:
     name: packaging
     runs-on: ubuntu-latest
