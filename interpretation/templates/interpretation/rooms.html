@@ -1,0 +1,78 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Interpretation rooms" %}{% endblock %}
+{% block content %}
+    <h1>{% trans "Interpretation rooms" %}</h1>
+
+    {% if not connection or not connection.is_enabled %}
+        <div class="alert alert-warning">
+            {% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug as dashboard_url %}
+            {% blocktrans trimmed with url=dashboard_url %}
+                Interpretation is not enabled yet. Configure and enable the
+                <a href="{{ url }}">SUSI server connection</a> first.
+            {% endblocktrans %}
+        </div>
+    {% endif %}
+
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>{% trans "Room" %}</th>
+                <th>{% trans "HLS stream" %}</th>
+                <th>{% trans "Status" %}</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in rooms %}
+                <tr>
+                    <td>{{ entry.room.name }}</td>
+                    <td>
+                        {% if entry.hls_url %}
+                            <code>{{ entry.hls_url }}</code>
+                        {% else %}
+                            <span class="text-muted">{% trans "Not configured" %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if entry.status == "running" %}
+                            <span class="label label-success">{% trans "Running" %}</span>
+                        {% elif entry.status == "error" %}
+                            <span class="label label-danger">{% trans "Error" %}</span>
+                        {% elif entry.status == "stopped" %}
+                            <span class="label label-default">{% trans "Stopped" %}</span>
+                        {% else %}
+                            <span class="label label-default">{% trans "Idle" %}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <a class="btn btn-default btn-sm"
+                           href="{% url 'plugins:interpretation:room.config' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
+                            {% trans "Configure" %}
+                        </a>
+                        {% if entry.status == "running" %}
+                            <form method="post" class="d-inline"
+                                  action="{% url 'plugins:interpretation:room.stop' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-warning btn-sm">{% trans "Stop" %}</button>
+                            </form>
+                        {% else %}
+                            <form method="post" class="d-inline"
+                                  action="{% url 'plugins:interpretation:room.start' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-primary btn-sm"
+                                        {% if not connection or not connection.is_enabled %}disabled{% endif %}>
+                                    {% trans "Start" %}
+                                </button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="4" class="text-muted">{% trans "This event has no rooms yet." %}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% load bootstrap3 %}
+{% block title %}{% trans "Room interpretation" %}{% endblock %}
+{% block content %}
+    <h1>{% blocktrans trimmed with room=room.name %}Interpretation: {{ room }}{% endblocktrans %}</h1>
+
+    {% if detected_hls_url %}
+        <p class="text-muted">
+            {% blocktrans trimmed with url=detected_hls_url %}
+                Detected stream from the room configuration: <code>{{ url }}</code>.
+                Leave the HLS field empty to use it automatically.
+            {% endblocktrans %}
+        </p>
+    {% endif %}
+
+    <form action="" method="post" class="form-horizontal">
+        {% csrf_token %}
+        {% bootstrap_form_errors form %}
+        <fieldset>
+            <legend>{% trans "Stream and languages" %}</legend>
+            {% bootstrap_field form.hls_url layout='horizontal' %}
+            {% bootstrap_field form.source_language layout='horizontal' %}
+            {% bootstrap_field form.target_languages layout='horizontal' %}
+        </fieldset>
+        <fieldset>
+            <legend>{% trans "Providers" %}</legend>
+            {% bootstrap_field form.transcription_provider layout='horizontal' %}
+            {% bootstrap_field form.translation_provider layout='horizontal' %}
+        </fieldset>
+        <div class="form-group">
+            <div class="col-md-9 col-md-offset-3">
+                <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
+                <a class="btn btn-default"
+                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Back to rooms" %}
+                </a>
+            </div>
+        </div>
+    </form>
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "Live transcript preview" %}</h3>
+        </div>
+        <div class="panel-body">
+            <p class="text-muted">
+                {% trans "Latest transcript from SUSI for this room's session (refreshes automatically). For testing only." %}
+            </p>
+            <pre id="transcript-preview" style="white-space: pre-wrap; min-height: 4em;">{% trans "Waiting for a running session…" %}</pre>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var url = "{% url 'plugins:interpretation:room.transcript' organizer=event.organizer.slug event=event.slug pk=room.pk %}";
+            var el = document.getElementById("transcript-preview");
+            function poll() {
+                fetch(url, {headers: {"Accept": "application/json"}})
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d.session) {
+                            el.textContent = "{% trans 'No running session. Start the room to see transcripts.' %}";
+                        } else if (d.error) {
+                            el.textContent = "{% trans 'Error fetching transcript:' %} " + d.error;
+                        } else {
+                            el.textContent = d.transcript || "{% trans 'Connected. Waiting for speech…' %}";
+                        }
+                    })
+                    .catch(function () { /* keep previous text on transient errors */ });
+            }
+            poll();
+            setInterval(poll, 4000);
+        })();
+    </script>
+{% endblock %}
