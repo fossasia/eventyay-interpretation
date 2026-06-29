@@ -58,7 +58,7 @@ def test_verify_invalid_token(monkeypatch):
         "request",
         lambda *a, **k: FakeResponse(200, {"authenticated": False}),
     )
-    result = SusiClient("https://susi.example.com", "bad-token").verify()
+    result = SusiClient("https://example.com", "bad-token").verify()
     assert result.ok is False
     assert "invalid" in result.message.lower() or "expired" in result.message.lower()
 
@@ -69,7 +69,7 @@ def test_verify_without_token(monkeypatch):
         "request",
         lambda *a, **k: FakeResponse(200, {"authenticated": False}),
     )
-    result = SusiClient("https://susi.example.com").verify()
+    result = SusiClient("https://example.com").verify()
     assert result.ok is False
     assert "token" in result.message.lower()
 
@@ -80,7 +80,7 @@ def test_verify_server_error(monkeypatch):
         "request",
         lambda *a, **k: FakeResponse(503, {}),
     )
-    result = SusiClient("https://susi.example.com", "tok").verify()
+    result = SusiClient("https://example.com", "tok").verify()
     assert result.ok is False
 
 
@@ -90,7 +90,7 @@ def test_verify_unreachable_raises(monkeypatch):
 
     monkeypatch.setattr(requests, "request", boom)
     with pytest.raises(SusiError):
-        SusiClient("https://susi.example.com", "tok").verify()
+        SusiClient("https://example.com", "tok").verify()
 
 
 def test_login_returns_token_from_cookie(monkeypatch):
@@ -102,7 +102,7 @@ def test_login_returns_token_from_cookie(monkeypatch):
         )
 
     monkeypatch.setattr(requests, "post", fake_post)
-    client = SusiClient("https://susi.example.com")
+    client = SusiClient("https://example.com")
     token = client.login("a@b.c", "secret")
     assert token == "jwt-xyz"
     assert client.auth_token == "jwt-xyz"
@@ -113,7 +113,7 @@ def test_login_rejects_bad_credentials(monkeypatch):
         requests, "post", lambda *a, **k: FakeResponse(401, {"status": "error"})
     )
     with pytest.raises(SusiError):
-        SusiClient("https://susi.example.com").login("a@b.c", "wrong")
+        SusiClient("https://example.com").login("a@b.c", "wrong")
 
 
 def test_create_session_returns_tenant_id(monkeypatch):
@@ -122,7 +122,7 @@ def test_create_session_returns_tenant_id(monkeypatch):
         "request",
         lambda *a, **k: FakeResponse(200, {"tenant_id": "abc123", "source": "url"}),
     )
-    tenant = SusiClient("https://susi.example.com", "tok").create_session("url")
+    tenant = SusiClient("https://example.com", "tok").create_session("url")
     assert tenant == "abc123"
 
 
@@ -133,4 +133,4 @@ def test_create_session_failure_raises(monkeypatch):
         lambda *a, **k: FakeResponse(400, {"error": "bad source"}),
     )
     with pytest.raises(SusiError):
-        SusiClient("https://susi.example.com", "tok").create_session("nope")
+        SusiClient("https://example.com", "tok").create_session("nope")
