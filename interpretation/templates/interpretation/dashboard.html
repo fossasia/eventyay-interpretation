@@ -17,9 +17,9 @@
         {% bootstrap_form_errors form %}
         <fieldset>
             <legend>{% trans "SUSI server connection" %}</legend>
-            {% bootstrap_field form.base_url layout='horizontal' %}
-            {% bootstrap_field form.auth_token layout='horizontal' %}
-            {% bootstrap_field form.is_enabled layout='horizontal' %}
+            {% bootstrap_field form.interpretation_base_url layout='horizontal' %}
+            {% bootstrap_field form.interpretation_auth_token layout='horizontal' %}
+            {% bootstrap_field form.interpretation_is_enabled layout='horizontal' %}
         </fieldset>
 
         <div class="form-group">
@@ -53,7 +53,7 @@
                 <tr>
                     <th>{% trans "Interpretation enabled" %}</th>
                     <td>
-                        {% if connection.is_enabled %}
+                        {% if interpretation_enabled %}
                             <span class="label label-success">{% trans "Yes" %}</span>
                         {% else %}
                             <span class="label label-default">{% trans "No" %}</span>
