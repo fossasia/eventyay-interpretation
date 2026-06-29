@@ -8,6 +8,28 @@ except ImportError:
     raise RuntimeError("Please use a later version of eventyay-tickets")
 
 
+def _configure_logging():
+    """Attach a console handler for interpretation caption/SUSI logs."""
+    import logging
+    import sys
+
+    from django.conf import settings
+
+    level = logging.DEBUG if settings.DEBUG else logging.INFO
+    logger = logging.getLogger("interpretation")
+    if logger.handlers:
+        return
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(level)
+    handler.setFormatter(
+        logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
+    )
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.propagate = False
+
+
 class InterpretationApp(PluginConfig):
     default = True
     name = "interpretation"
@@ -22,4 +44,5 @@ class InterpretationApp(PluginConfig):
         category = "FEATURE"
 
     def ready(self):
+        _configure_logging()
         from . import signals  # NOQA

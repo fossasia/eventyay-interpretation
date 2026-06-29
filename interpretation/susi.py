@@ -12,11 +12,19 @@ Relevant SUSI endpoints used here:
 
 from __future__ import annotations
 
+import logging
 import requests
 from dataclasses import dataclass
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 DEFAULT_TIMEOUT = 10
+
+logger = logging.getLogger(__name__)
+
+
+def susi_host(base_url: str) -> str:
+    """Return the host part of a SUSI base URL for log messages."""
+    return urlparse(base_url).netloc or base_url
 
 
 class SusiError(Exception):
@@ -169,7 +177,20 @@ class SusiClient:
     def latest_transcript(self, tenant_id: str, sentences: bool = True) -> SusiResult:
         """Fetch the most recent transcript for a tenant (non-destructive)."""
         params = {"tenant_id": tenant_id, "sentences": "true" if sentences else "false"}
-        return self._request("GET", "/transcripts/latest", params=params)
+        logger.debug(
+            "Polling SUSI latest transcript host=%s tenant_id=%s",
+            susi_host(self.base_url),
+            tenant_id,
+        )
+        result = self._request("GET", "/transcripts/latest", params=params)
+        logger.debug(
+            "SUSI latest transcript host=%s tenant_id=%s ok=%s chunk_id=%s",
+            susi_host(self.base_url),
+            tenant_id,
+            result.ok,
+            result.data.get("chunk_id"),
+        )
+        return result
 
     def open_translate_stream(
         self,
@@ -188,6 +209,12 @@ class SusiClient:
         if target_lang:
             params["target_lang"] = target_lang
         url = self._url("/api/v1/translate/stream")
+        logger.info(
+            "Opening SUSI translate SSE host=%s tenant_id=%s target_lang=%s",
+            susi_host(self.base_url),
+            tenant_id,
+            target_lang or "(source)",
+        )
         try:
             # (connect timeout, read timeout).
             resp = requests.get(
@@ -198,10 +225,28 @@ class SusiClient:
                 timeout=(self.timeout, read_timeout),
             )
         except requests.RequestException as exc:
+            logger.warning(
+                "SUSI translate SSE connection failed host=%s tenant_id=%s: %s",
+                susi_host(self.base_url),
+                tenant_id,
+                exc,
+            )
             raise SusiError(
                 f"Could not open SUSI caption stream at {url}: {exc}"
             ) from exc
         if not resp.ok:
             resp.close()
+            logger.warning(
+                "SUSI translate SSE rejected host=%s tenant_id=%s status=%s",
+                susi_host(self.base_url),
+                tenant_id,
+                resp.status_code,
+            )
             raise SusiError(f"SUSI caption stream returned HTTP {resp.status_code}.")
+        logger.info(
+            "SUSI translate SSE connected host=%s tenant_id=%s target_lang=%s",
+            susi_host(self.base_url),
+            tenant_id,
+            target_lang or "(source)",
+        )
         return resp

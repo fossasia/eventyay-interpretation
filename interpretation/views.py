@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import requests
 import threading
 from asgiref.sync import sync_to_async
@@ -14,7 +15,7 @@ from eventyay.control.permissions import EventPermissionRequiredMixin
 from .forms import RoomInterpretationForm, SusiConnectionForm
 from .models import RoomInterpretation, SusiConnection
 from .services import caption_payload_for_language, start_stream_session
-from .susi import SusiClient, SusiError
+from .susi import SusiClient, SusiError, susi_host
 from .utils import (
     clear_module_interpretation,
     get_room_hls_url,
@@ -22,6 +23,8 @@ from .utils import (
 )
 
 PLUGIN_MODULE = "interpretation"
+
+logger = logging.getLogger(__name__)
 
 # Seconds between emits while bridging SUSI's caption stream to the browser SSE.
 # Kept small so captions reach the player as soon as SUSI produces them; the
@@ -443,7 +446,21 @@ class InterpretationRoomTranscript(_RoomControlBase, View):
         try:
             result = client.latest_transcript(interpretation.susi_session_id)
         except SusiError as exc:
+            logger.warning(
+                "Admin transcript poll failed event=%s room=%s tenant_id=%s: %s",
+                request.event.slug,
+                room.pk,
+                interpretation.susi_session_id,
+                exc,
+            )
             return JsonResponse({"transcript": "", "session": True, "error": str(exc)})
+        logger.debug(
+            "Admin transcript poll event=%s room=%s tenant_id=%s chunk_id=%s",
+            request.event.slug,
+            room.pk,
+            interpretation.susi_session_id,
+            result.data.get("chunk_id"),
+        )
         return JsonResponse(
             {
                 "transcript": result.data.get("transcript", ""),
@@ -497,6 +514,19 @@ class InterpretationRoomCaptions(View):
 
         client = SusiClient(info["base_url"], info["auth_token"])
         tenant_id = info["tenant_id"]
+        event_slug = request.event.slug
+        room_pk = pk
+        susi_base = info["base_url"]
+
+        logger.info(
+            "Caption SSE client connected event=%s room=%s tenant_id=%s "
+            "target_lang=%s susi_host=%s",
+            event_slug,
+            room_pk,
+            tenant_id,
+            target_lang or "(source)",
+            susi_host(susi_base),
+        )
 
         def consume(state):
             """Read SUSI's translate SSE (with target_lang) in a worker thread.
@@ -512,9 +542,18 @@ class InterpretationRoomCaptions(View):
                     target_lang=target_lang,
                     read_timeout=CAPTION_UPSTREAM_READ_TIMEOUT,
                 )
-            except SusiError:
+            except SusiError as exc:
+                logger.warning(
+                    "Caption upstream SSE unavailable event=%s room=%s "
+                    "tenant_id=%s: %s; using transcript poll fallback",
+                    event_slug,
+                    room_pk,
+                    tenant_id,
+                    exc,
+                )
                 state["done"] = True
                 return
+            events = 0
             try:
                 for raw in upstream.iter_lines(decode_unicode=True):
                     if state["done"]:
@@ -528,11 +567,35 @@ class InterpretationRoomCaptions(View):
                     if not isinstance(data, dict) or data.get("status") == "connected":
                         continue
                     state["latest"] = data
-            except requests.RequestException:
-                pass
+                    events += 1
+                    logger.debug(
+                        "Caption upstream SSE event event=%s room=%s tenant_id=%s "
+                        "chunk_id=%s has_translation=%s",
+                        event_slug,
+                        room_pk,
+                        tenant_id,
+                        data.get("chunk_id"),
+                        bool(data.get("translation")),
+                    )
+            except requests.RequestException as exc:
+                logger.warning(
+                    "Caption upstream SSE read error event=%s room=%s tenant_id=%s: %s",
+                    event_slug,
+                    room_pk,
+                    tenant_id,
+                    exc,
+                )
             finally:
                 upstream.close()
                 state["done"] = True
+                logger.info(
+                    "Caption upstream SSE closed event=%s room=%s tenant_id=%s "
+                    "events_received=%s",
+                    event_slug,
+                    room_pk,
+                    tenant_id,
+                    events,
+                )
 
         async def event_stream():
             yield 'data: {"status": "connected"}\n\n'
@@ -545,15 +608,36 @@ class InterpretationRoomCaptions(View):
             target_requested = bool(target_lang)
             seen_translation = False
             last_serialized = None
+            logged_fallback = False
+            forwarded = 0
             loops = int(CAPTION_STREAM_MAX_SECONDS / CAPTION_POLL_INTERVAL)
             try:
                 for _i in range(loops):
                     data = state["latest"]
+                    source = "sse"
                     if data is None:
+                        if not logged_fallback:
+                            logger.info(
+                                "Caption relay using transcript poll fallback "
+                                "event=%s room=%s tenant_id=%s",
+                                event_slug,
+                                room_pk,
+                                tenant_id,
+                            )
+                            logged_fallback = True
+                        source = "poll"
                         try:
                             result = await poll(tenant_id)
                             data = result.data or None
-                        except SusiError:
+                        except SusiError as exc:
+                            logger.debug(
+                                "Caption poll fallback failed event=%s room=%s "
+                                "tenant_id=%s: %s",
+                                event_slug,
+                                room_pk,
+                                tenant_id,
+                                exc,
+                            )
                             data = None
                     if data:
                         if data.get("translation"):
@@ -565,6 +649,18 @@ class InterpretationRoomCaptions(View):
                             serialized = json.dumps(payload)
                             if serialized != last_serialized:
                                 last_serialized = serialized
+                                forwarded += 1
+                                logger.info(
+                                    "Caption relay forwarded event=%s room=%s "
+                                    "tenant_id=%s source=%s chunk_id=%s "
+                                    "target_lang=%s",
+                                    event_slug,
+                                    room_pk,
+                                    tenant_id,
+                                    source,
+                                    payload.get("chunk_id"),
+                                    target_lang or "(source)",
+                                )
                                 yield f"data: {serialized}\n\n"
                             else:
                                 yield ": keepalive\n\n"
@@ -575,6 +671,14 @@ class InterpretationRoomCaptions(View):
                     await asyncio.sleep(CAPTION_POLL_INTERVAL)
             finally:
                 state["done"] = True
+                logger.info(
+                    "Caption SSE client disconnected event=%s room=%s tenant_id=%s "
+                    "captions_forwarded=%s",
+                    event_slug,
+                    room_pk,
+                    tenant_id,
+                    forwarded,
+                )
 
         response = StreamingHttpResponse(
             event_stream(), content_type="text/event-stream"
