@@ -37,6 +37,12 @@ jobs:
       EVY_POSTGRES_DB: pretix
     steps:
       - uses: actions/checkout@v4
+      - name: Check out eventyay host
+        uses: actions/checkout@v4
+        with:
+          repository: fossasia/eventyay
+          ref: dev
+          path: eventyay-host
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -45,8 +51,11 @@ jobs:
         run: sudo apt update && sudo apt install -y gettext
       - name: Install eventyay host and test tools
         run: |
-          python -m pip install -U pip wheel setuptools
-          python -m pip install "eventyay-unified[test] @ git+https://github.com/fossasia/eventyay.git@dev#subdirectory=app"
+          python -m pip install -U "pip>=25.1" wheel setuptools
+          # The published wheel only lists `packages = ["eventyay"]`, so
+          # subpackages such as eventyay.config are missing unless we install
+          # from the source tree (editable) or set PYTHONPATH manually.
+          python -m pip install --group test -e "./eventyay-host/app"
       - name: Install plugin
         run: python -m pip install -e .
       - name: Verify eventyay is importable
