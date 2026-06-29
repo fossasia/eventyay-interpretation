@@ -83,3 +83,28 @@ def test_enabling_with_existing_token_and_redacted_input_is_accepted():
         settings={SETTING_AUTH_TOKEN: "stored-token"},
     )
     assert form.is_valid(), form.errors
+
+
+def test_redacted_token_is_resolved_to_stored_value():
+    form = _form(
+        {
+            SETTING_BASE_URL: PUBLIC_URL,
+            SETTING_AUTH_TOKEN: "*****",
+            SETTING_IS_ENABLED: False,
+        },
+        settings={SETTING_AUTH_TOKEN: "stored-token"},
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data[SETTING_AUTH_TOKEN] == "stored-token"
+
+
+def test_new_token_is_stripped():
+    form = _form(
+        {
+            SETTING_BASE_URL: PUBLIC_URL,
+            SETTING_AUTH_TOKEN: " tok ",
+            SETTING_IS_ENABLED: False,
+        }
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data[SETTING_AUTH_TOKEN] == "tok"

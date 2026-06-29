@@ -7,8 +7,13 @@ from eventyay.base.models import Event
 from eventyay.control.views.event import EventSettingsFormView, EventSettingsViewMixin
 
 from .forms import InterpretationSettingsForm
-from .settings import get_susi_client, is_interpretation_enabled
-from .susi import SusiError
+from .settings import (
+    SETTING_AUTH_TOKEN,
+    SETTING_BASE_URL,
+    is_interpretation_enabled,
+    get_base_url,
+)
+from .susi import SusiClient, SusiError
 
 PLUGIN_MODULE = "interpretation"
 
@@ -71,7 +76,7 @@ class InterpretationDashboard(
                     },
                 )
             if "test" in request.POST:
-                self._test_connection()
+                self._test_connection(form)
             else:
                 messages.success(request, _("Connection settings saved."))
             return redirect(self.get_success_url())
@@ -82,8 +87,12 @@ class InterpretationDashboard(
         )
         return self.render_to_response(self.get_context_data(form=form))
 
-    def _test_connection(self):
-        client = get_susi_client(self.request.event)
+    def _test_connection(self, form):
+        base_url = form.cleaned_data.get(SETTING_BASE_URL) or get_base_url(
+            self.request.event
+        )
+        token = form.cleaned_data.get(SETTING_AUTH_TOKEN, "")
+        client = SusiClient(base_url, token)
         try:
             result = client.verify()
         except SusiError as exc:
