@@ -5,6 +5,23 @@
 {% block content %}
     <h1>{% blocktrans trimmed with room=room.name %}Interpretation: {{ room }}{% endblocktrans %}</h1>
 
+    <p>
+        <a class="btn btn-default btn-sm"
+           href="{{ video_admin_url }}"
+           target="_blank"
+           rel="noopener noreferrer">
+            {% trans "Edit in video admin" %}
+        </a>
+        <a class="btn btn-default btn-sm"
+           href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+            {% trans "Back to rooms" %}
+        </a>
+    </p>
+
+    <p class="text-muted">
+        {% trans "Configure the stream in video admin. Use this page to test SUSI sessions and preview captions." %}
+    </p>
+
     {% if detected_stream_url %}
         <p class="text-muted">
             {% blocktrans trimmed with url=detected_stream_url %}
@@ -20,7 +37,6 @@
         <fieldset>
             <legend>{% trans "Stream and languages" %}</legend>
             {% bootstrap_field form.stream_url layout='horizontal' %}
-            {% bootstrap_field form.source_language layout='horizontal' %}
             {% bootstrap_field form.target_languages layout='horizontal' %}
         </fieldset>
         <fieldset>
@@ -31,13 +47,45 @@
         <div class="form-group">
             <div class="col-md-9 col-md-offset-3">
                 <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
-                <a class="btn btn-default"
-                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
-                    {% trans "Back to rooms" %}
-                </a>
             </div>
         </div>
     </form>
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "Session controls" %}</h3>
+        </div>
+        <div class="panel-body">
+            <p class="text-muted">
+                {% trans "Start or stop a SUSI session for caption testing. Status:" %}
+                {% if interpretation_status == "running" %}
+                    <span class="label label-success">{% trans "Running" %}</span>
+                {% elif interpretation_status == "error" %}
+                    <span class="label label-danger">{% trans "Error" %}</span>
+                {% elif interpretation_status == "stopped" %}
+                    <span class="label label-default">{% trans "Stopped" %}</span>
+                {% else %}
+                    <span class="label label-default">{% trans "Idle" %}</span>
+                {% endif %}
+            </p>
+            {% if interpretation_status == "running" %}
+                <form method="post"
+                      action="{% url 'plugins:interpretation:room.stop' organizer=event.organizer.slug event=event.slug pk=room.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning">{% trans "Stop session" %}</button>
+                </form>
+            {% else %}
+                <form method="post"
+                      action="{% url 'plugins:interpretation:room.start' organizer=event.organizer.slug event=event.slug pk=room.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary"
+                            {% if not interpretation_ready %}disabled{% endif %}>
+                        {% trans "Start session" %}
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
 
     <div class="panel panel-default">
         <div class="panel-heading">

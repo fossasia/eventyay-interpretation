@@ -11,6 +11,10 @@
         </a>
     </p>
 
+    <p class="text-muted">
+        {% trans "Room stream setup happens in video admin. This page shows interpretation status only." %}
+    </p>
+
     {% if not interpretation_ready %}
         <div class="alert alert-warning">
             {% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug as dashboard_url %}
@@ -53,26 +57,16 @@
                         {% endif %}
                     </td>
                     <td class="text-right">
+                        <a class="btn btn-primary btn-sm"
+                           href="{{ entry.video_admin_url }}"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                            {% trans "Edit in video admin" %}
+                        </a>
                         <a class="btn btn-default btn-sm"
                            href="{% url 'plugins:interpretation:room.config' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
-                            {% trans "Configure" %}
+                            {% trans "Caption preview" %}
                         </a>
-                        {% if entry.status == "running" %}
-                            <form method="post" class="d-inline"
-                                  action="{% url 'plugins:interpretation:room.stop' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-warning btn-sm">{% trans "Stop" %}</button>
-                            </form>
-                        {% else %}
-                            <form method="post" class="d-inline"
-                                  action="{% url 'plugins:interpretation:room.start' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-primary btn-sm"
-                                        {% if not interpretation_ready %}disabled{% endif %}>
-                                    {% trans "Start" %}
-                                </button>
-                            </form>
-                        {% endif %}
                     </td>
                 </tr>
             {% empty %}

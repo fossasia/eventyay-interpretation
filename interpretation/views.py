@@ -15,7 +15,7 @@ from .forms import (
     TEST_POST_KEY,
 )
 from .models import RoomInterpretation
-from .services import start_stream_session
+from .room_control import start_room_session, stop_room_session
 from .settings import (
     get_base_url,
     get_susi_client,
@@ -26,7 +26,7 @@ from .settings import (
     is_susi_connected,
 )
 from .susi import SusiError
-from .utils import get_room_stream_url
+from .utils import get_room_stream_url, video_admin_room_url
 
 PLUGIN_MODULE = "interpretation"
 
@@ -163,6 +163,16 @@ class _RoomControlBase(InterpretationEnabledMixin, EventPermissionRequiredMixin)
             },
         )
 
+    def room_config_url(self, pk):
+        return reverse(
+            "plugins:interpretation:room.config",
+            kwargs={
+                "organizer": self.request.event.organizer.slug,
+                "event": self.request.event.slug,
+                "pk": pk,
+            },
+        )
+
 
 class InterpretationRoomList(_RoomControlBase, TemplateView):
     """List the event's rooms with their interpretation status."""
@@ -192,6 +202,11 @@ class InterpretationRoomList(_RoomControlBase, TemplateView):
                         interpretation.status
                         if interpretation
                         else RoomInterpretation.STATUS_IDLE
+                    ),
+                    "video_admin_url": video_admin_room_url(
+                        self.request.event.organizer.slug,
+                        self.request.event.slug,
+                        room.pk,
                     ),
                 }
             )
@@ -225,9 +240,21 @@ class InterpretationRoomConfig(_RoomControlBase, FormView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["event"] = self.request.event
-        ctx["room"] = getattr(self, "room", None) or self.get_room(self.kwargs["pk"])
-        ctx["detected_stream_url"] = get_room_stream_url(ctx["room"])
+        event = self.request.event
+        room = getattr(self, "room", None) or self.get_room(self.kwargs["pk"])
+        interpretation = RoomInterpretation.objects.filter(room=room).first()
+        ctx["event"] = event
+        ctx["room"] = room
+        ctx["detected_stream_url"] = get_room_stream_url(room)
+        ctx["interpretation_ready"] = is_susi_configured(event)
+        ctx["interpretation_status"] = (
+            interpretation.status
+            if interpretation
+            else RoomInterpretation.STATUS_IDLE
+        )
+        ctx["video_admin_url"] = video_admin_room_url(
+            event.organizer.slug, event.slug, room.pk
+        )
         return ctx
 
     def get_success_url(self):
@@ -254,56 +281,15 @@ class InterpretationRoomStart(_RoomControlBase, View):
 
     def post(self, request, *args, **kwargs):
         room = self.get_room(kwargs["pk"])
-        event = request.event
-        if not is_susi_configured(event):
-            messages.error(
-                request,
-                _("Connect and enable SUSI on the interpretation dashboard before starting a room."),
-            )
-            return redirect(self.rooms_url())
-
-        interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
-
-        stream_url = interpretation.stream_url or get_room_stream_url(room)
-        if not stream_url:
-            messages.error(
-                request,
-                _("No stream URL is configured for this room."),
-            )
-            return redirect(self.rooms_url())
-
-        client = get_susi_client(event)
-        try:
-            tenant_id = start_stream_session(
-                client,
-                stream_url,
-                transcription_provider=interpretation.transcription_provider,
-                translation_provider=interpretation.translation_provider,
-            )
-        except SusiError as exc:
-            interpretation.status = RoomInterpretation.STATUS_ERROR
-            interpretation.stream_url = stream_url
-            interpretation.save()
-            messages.error(
-                request,
-                _("Could not start interpretation: %(error)s") % {"error": str(exc)},
-            )
-            return redirect(self.rooms_url())
-
-        interpretation.susi_session_id = tenant_id
-        interpretation.stream_url = stream_url
-        interpretation.status = RoomInterpretation.STATUS_RUNNING
-        interpretation.save()
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.started",
-                data={"tenant_id": tenant_id, "stream_url": stream_url},
-            )
+        result = start_room_session(room, request.event)
+        if not result.ok:
+            messages.error(request, result.error)
+            return redirect(self.room_config_url(kwargs["pk"]))
         messages.success(
             request,
             _("Interpretation started for room %(room)s.") % {"room": room.name},
         )
-        return redirect(self.rooms_url())
+        return redirect(self.room_config_url(kwargs["pk"]))
 
 
 class InterpretationRoomStop(_RoomControlBase, View):
@@ -313,36 +299,18 @@ class InterpretationRoomStop(_RoomControlBase, View):
 
     def post(self, request, *args, **kwargs):
         room = self.get_room(kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None or not interpretation.susi_session_id:
-            messages.warning(
-                request, _("No running interpretation session for this room.")
-            )
-            return redirect(self.rooms_url())
-
-        client = get_susi_client(request.event)
-        try:
-            client.stop_session(interpretation.susi_session_id)
-        except SusiError as exc:
-            messages.error(
-                request,
-                _("Could not stop interpretation: %(error)s") % {"error": str(exc)},
-            )
-            return redirect(self.rooms_url())
-
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.stopped",
-                data={"tenant_id": interpretation.susi_session_id},
-            )
-        interpretation.status = RoomInterpretation.STATUS_STOPPED
-        interpretation.susi_session_id = ""
-        interpretation.save()
+        result = stop_room_session(room, request.event)
+        if not result.ok:
+            if "No running" in result.error:
+                messages.warning(request, result.error)
+            else:
+                messages.error(request, result.error)
+            return redirect(self.room_config_url(kwargs["pk"]))
         messages.success(
             request,
             _("Interpretation stopped for room %(room)s.") % {"room": room.name},
         )
-        return redirect(self.rooms_url())
+        return redirect(self.room_config_url(kwargs["pk"]))
 
 
 class InterpretationRoomStatus(_RoomControlBase, View):

@@ -8,6 +8,8 @@ from interpretation.utils import (
     get_module_stream_url,
     get_room_stream_url,
     get_schedule_stream_url,
+    video_admin_room_url,
+    video_admin_room_resume_path,
 )
 
 
@@ -193,3 +195,7 @@ def test_start_stream_session_omits_empty_providers():
 def test_start_stream_session_requires_stream_url():
     with pytest.raises(ValueError):
         start_stream_session(RecordingClient(), "")
+
+
+def test_video_admin_room_resume_path():
+    assert video_admin_room_resume_path(42) == "video/admin/rooms/42"

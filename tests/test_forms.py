@@ -150,7 +150,6 @@ def test_room_form_parses_comma_separated_languages():
     form = RoomInterpretationForm(
         data={
             "stream_url": "https://stream.example.com/r.m3u8",
-            "source_language": "en",
             "target_languages": "de, fr ,es",
             "transcription_provider": "",
             "translation_provider": "",
@@ -164,7 +163,6 @@ def test_room_form_deduplicates_languages():
     form = RoomInterpretationForm(
         data={
             "stream_url": "",
-            "source_language": "",
             "target_languages": "de, de, fr",
             "transcription_provider": "",
             "translation_provider": "",
@@ -178,7 +176,6 @@ def test_room_form_empty_languages_is_empty_list():
     form = RoomInterpretationForm(
         data={
             "stream_url": "",
-            "source_language": "",
             "target_languages": "",
             "transcription_provider": "",
             "translation_provider": "",

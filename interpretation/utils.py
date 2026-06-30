@@ -79,3 +79,49 @@ def get_schedule_stream_url(room, at_time=None) -> str:
 def get_room_stream_url(room, at_time=None) -> str:
     """Best stream URL for a room: stage module first, then stream schedule."""
     return get_module_stream_url(room) or get_schedule_stream_url(room, at_time)
+
+
+def video_admin_room_resume_path(room_id: int) -> str:
+    return f"video/admin/rooms/{room_id}"
+
+
+def normalize_target_languages(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = value
+    elif isinstance(value, list):
+        if value and all(isinstance(item, str) for item in value):
+            if len(value) == 1 and "," in value[0]:
+                raw = value[0]
+            else:
+                codes = []
+                seen = set()
+                for code in value:
+                    code = (code or "").strip()
+                    if code and code not in seen:
+                        seen.add(code)
+                        codes.append(code)
+                return codes
+        raw = ",".join(str(item) for item in value)
+    else:
+        raw = str(value)
+    codes = []
+    seen = set()
+    for code in raw.split(","):
+        code = code.strip()
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(code)
+    return codes
+
+
+def video_admin_room_url(organizer_slug: str, event_slug: str, room_id: int) -> str:
+    """Commons link that mints a video token and opens the room editor."""
+    from django.urls import reverse
+
+    base = reverse(
+        "eventyay_common:event.create_access_to_video",
+        kwargs={"organizer": organizer_slug, "event": event_slug},
+    )
+    return f"{base}?resume_path={video_admin_room_resume_path(room_id)}"

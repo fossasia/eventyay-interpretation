@@ -189,8 +189,8 @@ class RoomInterpretationForm(forms.ModelForm):
 
     target_languages = forms.CharField(
         required=False,
-        label=_("Target languages"),
-        help_text=_("Comma-separated language codes to translate into, e.g. de, fr."),
+        label=_("Caption languages"),
+        help_text=_("Comma-separated language codes attendees can read captions in, e.g. de, fr."),
         widget=forms.TextInput(attrs={"placeholder": "de, fr, es"}),
     )
 
@@ -198,7 +198,6 @@ class RoomInterpretationForm(forms.ModelForm):
         model = RoomInterpretation
         fields = [
             "stream_url",
-            "source_language",
             "target_languages",
             "transcription_provider",
             "translation_provider",
@@ -209,7 +208,6 @@ class RoomInterpretationForm(forms.ModelForm):
                     "placeholder": "https://www.youtube.com/watch?v=… or https://…/stream.m3u8"
                 }
             ),
-            "source_language": forms.TextInput(attrs={"placeholder": "en"}),
         }
 
     def __init__(self, *args, **kwargs):
