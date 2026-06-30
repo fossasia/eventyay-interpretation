@@ -65,11 +65,22 @@ class InterpretationDashboard(
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
         ctx["susi_configured"] = is_susi_configured(event)
         ctx["susi_server_host"] = _susi_host(get_base_url(event))
         ctx["susi_account"] = _susi_account_label(event)
+        ctx["susi_welcome_name"] = _susi_welcome_name(event)
+        ctx["interpretation_providers"] = [
+            {"id": "none", "label": _("None")},
+            {"id": "susi", "label": _("SUSI Translator")},
+        ]
+        ctx["selected_provider"] = "none"
+        if not ctx["susi_configured"]:
+            form = ctx.get("form")
+            if form and form.errors:
+                ctx["selected_provider"] = "susi"
+            elif self.request.POST.get("interpretation_provider") == "susi":
+                ctx["selected_provider"] = "susi"
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -102,6 +113,12 @@ class InterpretationDashboard(
             _("We could not save your changes. See below for details."),
         )
         return self.form_invalid(form)
+
+
+def _susi_welcome_name(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    return name or email or ""
 
 
 def _susi_account_label(event) -> str:

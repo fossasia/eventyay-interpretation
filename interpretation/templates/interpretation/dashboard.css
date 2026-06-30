@@ -1,0 +1,358 @@
+/* eventyay interpretation dashboard — full-width commons layout */
+.interpretation-form {
+    --interp-blue: #2185d0;
+    --interp-blue-dark: #1a6fb3;
+    --interp-blue-soft: #e8f4fc;
+    --interp-border: #dce6ef;
+    --interp-text: #2c3e50;
+    --interp-muted: #6c7a89;
+    --interp-success: #3c9d6e;
+    width: 100%;
+    margin: 0 0 2rem;
+}
+/* Page heading */
+.interpretation-hero {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    width: 100%;
+    margin: 0 0 1.75rem;
+    padding: 0 0 1.5rem;
+    border-bottom: 2px dashed #b8c9d9;
+    background: none;
+    color: var(--interp-text);
+}
+.interpretation-hero-icon {
+    flex-shrink: 0;
+    width: 3rem;
+    height: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--interp-blue-soft);
+    color: var(--interp-blue);
+    font-size: 1.35rem;
+}
+.interpretation-hero-title {
+    margin: 0 0 0.4rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--interp-text);
+}
+.interpretation-hero-lead {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.55;
+    color: var(--interp-muted);
+}
+.interpretation-hero--welcome {
+    margin-top: 2rem;
+    padding-top: 1.25rem;
+    padding-bottom: 1.75rem;
+    align-items: center;
+}
+.interpretation-hero--welcome .interpretation-hero-icon {
+    width: 5rem;
+    height: 5rem;
+    font-size: 2.35rem;
+}
+.interpretation-hero--welcome .interpretation-hero-title {
+    font-size: 2.5rem;
+    line-height: 1.15;
+}
+.interpretation-hero--welcome .interpretation-hero-lead {
+    font-size: 1.65rem;
+    line-height: 1.45;
+}
+/* Main content */
+.interpretation-content {
+    width: 100%;
+}
+.interpretation-content--setup {
+    width: 100%;
+}
+.interpretation-content--setup .interpretation-fields,
+.interpretation-content--setup .interpretation-signin-btn {
+    max-width: 32rem;
+}
+.interpretation-content-footer {
+    margin-top: 0.5rem;
+}
+.interpretation-section-title {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--interp-text);
+}
+.interpretation-section-hint {
+    margin: 0 0 1.25rem;
+    font-size: 0.95rem;
+}
+.interpretation-section-title--signin {
+    font-size: 1.65rem;
+    line-height: 1.25;
+}
+.interpretation-section-hint--signin {
+    font-size: 1.4rem;
+    line-height: 1.45;
+    margin-bottom: 1.5rem;
+}
+/* Provider picker */
+.interpretation-provider-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.85rem 1rem;
+    margin-bottom: 1.75rem;
+    padding: 1rem 1.15rem;
+    background: var(--interp-blue-soft);
+    border: 1px solid #c5dff3;
+}
+.interpretation-provider-label {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.6rem;
+    color: var(--interp-text);
+    flex: 0 0 auto;
+}
+.interpretation-provider-select {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 14rem;
+    max-width: 22rem;
+    height: 40px;
+    border: 2px solid #a8c4de;
+    box-shadow: none;
+}
+.interpretation-provider-select:focus {
+    border-color: var(--interp-blue);
+    box-shadow: 0 0 0 2px rgba(33, 133, 208, 0.2);
+}
+.interpretation-provider-panel {
+    animation: interpretation-fade-in 0.2s ease;
+}
+.interpretation-provider-panel[hidden] {
+    display: none !important;
+}
+@keyframes interpretation-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+/* Login fields */
+.interpretation-fields .form-group {
+    margin-bottom: 1rem;
+}
+.interpretation-fields .form-control {
+    height: 42px;
+    border-color: var(--interp-border);
+}
+.interpretation-fields .form-control:focus {
+    border-color: var(--interp-blue);
+    box-shadow: 0 0 0 2px rgba(33, 133, 208, 0.15);
+}
+.interpretation-signin-btn {
+    margin-top: 0.5rem;
+}
+.interpretation-signin-btn .fa {
+    margin-right: 0.35rem;
+}
+/* Connected status */
+.interpretation-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+.interpretation-stat {
+    padding: 1rem 1.15rem;
+    background: #f8fbfd;
+    border: 1px solid #e8f0f6;
+}
+.interpretation-stat-label {
+    display: block;
+    margin-bottom: 0.45rem;
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--interp-muted);
+}
+.interpretation-stat-value {
+    display: block;
+    font-size: 1.55rem;
+    font-weight: 500;
+    color: var(--interp-text);
+    line-height: 1.35;
+}
+.interpretation-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    font-size: 1.3rem;
+    font-weight: 600;
+    border-radius: 999px;
+    background: #eef2f6;
+    color: var(--interp-muted);
+}
+.interpretation-badge--primary {
+    background: var(--interp-blue-soft);
+    color: var(--interp-blue-dark);
+}
+.interpretation-badge--success {
+    background: #e6f4ec;
+    color: var(--interp-success);
+}
+.interpretation-panel {
+    margin-bottom: 1.25rem;
+}
+.interpretation-panel .panel-heading {
+    font-weight: 600;
+}
+/* Account row */
+.interpretation-account-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+}
+.interpretation-account-main {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    min-width: 0;
+}
+.interpretation-status-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--interp-success);
+    box-shadow: 0 0 0 3px rgba(60, 157, 110, 0.2);
+}
+.interpretation-account-name {
+    font-weight: 600;
+    font-size: 1.4rem;
+    color: var(--interp-text);
+    line-height: 1.35;
+}
+.interpretation-account-server {
+    font-size: 1.2rem;
+    color: var(--interp-muted);
+    margin-top: 0.15rem;
+}
+.interpretation-account-actions .btn {
+    font-size: 1.3rem;
+    padding: 0.5rem 1rem;
+}
+.interpretation-account-actions .btn-link {
+    color: var(--interp-blue);
+    font-size: 1.3rem;
+}
+.interpretation-account-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem 0.5rem;
+}
+.interpretation-enable-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+.interpretation-enable-card .checkbox {
+    margin: 0;
+}
+.interpretation-enable-card .checkbox label {
+    font-weight: 500;
+    font-size: 1.4rem;
+    color: var(--interp-text);
+}
+/* Switch account */
+.interpretation-switch-account {
+    font-size: 1.25rem;
+}
+.interpretation-switch-account summary {
+    cursor: pointer;
+    color: var(--interp-blue);
+    user-select: none;
+    list-style: none;
+    font-weight: 500;
+}
+.interpretation-switch-account summary::-webkit-details-marker {
+    display: none;
+}
+.interpretation-switch-account summary::before {
+    content: "▸ ";
+}
+.interpretation-switch-account[open] summary::before {
+    content: "▾ ";
+}
+.interpretation-switch-account summary:hover {
+    color: var(--interp-blue-dark);
+    text-decoration: underline;
+}
+.interpretation-switch-account-body {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eef2f6;
+    max-width: 32rem;
+}
+.interpretation-switch-account-body .form-group {
+    margin-bottom: 0.85rem;
+}
+.interpretation-switch-account-body .form-control {
+    height: 40px;
+}
+@media (max-width: 767px) {
+    .interpretation-hero {
+        flex-direction: column;
+        padding-bottom: 1.25rem;
+    }
+    .interpretation-hero--welcome .interpretation-hero-icon {
+        width: 3.75rem;
+        height: 3.75rem;
+        font-size: 1.75rem;
+    }
+    .interpretation-hero--welcome .interpretation-hero-title {
+        font-size: 1.65rem;
+    }
+    .interpretation-hero--welcome .interpretation-hero-lead {
+        font-size: 1.2rem;
+    }
+    .interpretation-section-title--signin {
+        font-size: 1.35rem;
+    }
+    .interpretation-section-hint--signin {
+        font-size: 1.15rem;
+    }
+    .interpretation-provider-label {
+        font-size: 1.3rem;
+    }
+    .interpretation-provider-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .interpretation-provider-select {
+        max-width: none;
+        width: 100%;
+    }
+    .interpretation-content--setup .interpretation-fields,
+    .interpretation-content--setup .interpretation-fields,
+    .interpretation-content--setup .interpretation-signin-btn {
+        max-width: none;
+    }
+    .interpretation-account-card,
+    .interpretation-enable-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .interpretation-enable-card .btn {
+        width: 100%;
+    }
+}

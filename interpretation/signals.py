@@ -18,7 +18,7 @@ settings_hierarkey.add_default(SETTING_BASE_URL, "", str)
 settings_hierarkey.add_default(SETTING_AUTH_TOKEN, "", str)
 settings_hierarkey.add_default(SETTING_SUSI_EMAIL, "", str)
 settings_hierarkey.add_default(SETTING_SUSI_NAME, "", str)
-settings_hierarkey.add_default(SETTING_IS_ENABLED, False, bool)
+settings_hierarkey.add_default(SETTING_IS_ENABLED, True, bool)
 
 
 @receiver(nav_event_common, dispatch_uid="interpretation_nav_event_common")
