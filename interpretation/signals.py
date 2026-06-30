@@ -6,6 +6,9 @@ from eventyay.control.signals import nav_event_common
 
 @receiver(nav_event_common, dispatch_uid="interpretation_nav_event_common")
 def navbar_entry_common(sender, request=None, **kwargs):
+    if not request or not request.user.is_authenticated:
+        return []
+
     if not request.user.has_event_permission(
         request.organizer,
         request.event,
