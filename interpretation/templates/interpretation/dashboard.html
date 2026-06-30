@@ -2,77 +2,142 @@
 {% load i18n bootstrap3 %}
 {% block title %}{% trans "Interpretation" %}{% endblock %}
 {% block content %}
-    <h1>{% trans "Interpretation" %}</h1>
+    <style>{% include "interpretation/dashboard.css" %}</style>
 
-    <p class="text-muted">
-        {% blocktrans trimmed with event_name=event.name %}
-            Live transcription and translation for {{ event_name }} via SUSI Translator.
-        {% endblocktrans %}
-    </p>
+    <form action="" method="post" class="interpretation-form">
+        {% csrf_token %}
+        {% bootstrap_form_errors form %}
 
-    <div class="panel panel-default">
-        <div class="panel-heading">
-            <h3 class="panel-title">{% trans "Status" %}</h3>
-        </div>
-        <table class="table">
-            <tbody>
-                <tr>
-                    <th>{% trans "Event" %}</th>
-                    <td>{{ event.name }}</td>
-                </tr>
-                <tr>
-                    <th>{% trans "Plugin enabled for this event" %}</th>
-                    <td>
-                        {% if plugin_enabled %}
-                            <span class="label label-success">{% trans "Yes" %}</span>
-                        {% else %}
-                            <span class="label label-danger">{% trans "No" %}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr>
-                    <th>{% trans "Interpretation enabled" %}</th>
-                    <td>
-                        {% if interpretation_enabled %}
-                            <span class="label label-success">{% trans "Yes" %}</span>
-                        {% else %}
-                            <span class="label label-default">{% trans "No" %}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr>
-                    <th>{% trans "SUSI server connected" %}</th>
-                    <td>
-                        {% if susi_configured %}
-                            <span class="label label-success">{% trans "Yes" %}</span>
-                            {% if susi_server_host %}
-                                <span class="text-muted">({{ susi_server_host }})</span>
-                            {% endif %}
-                        {% else %}
-                            <span class="label label-warning">{% trans "No" %}</span>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% if susi_account %}
-                <tr>
-                    <th>{% trans "SUSI account" %}</th>
-                    <td>{{ susi_account }}</td>
-                </tr>
+        <header class="interpretation-hero interpretation-hero--welcome">
+            <div class="interpretation-hero-icon" aria-hidden="true">
+                <span class="fa fa-language"></span>
+            </div>
+            <div class="interpretation-hero-text">
+                {% if susi_configured %}
+                    <h2 class="interpretation-hero-title">
+                        {% blocktrans trimmed with name=susi_welcome_name %}
+                            Welcome, {{ name }}
+                        {% endblocktrans %}
+                    </h2>
+                    <p class="interpretation-hero-lead">
+                        {% trans "SUSI Translator is now active in eventyay videos!" %}
+                    </p>
+                {% else %}
+                    <h2 class="interpretation-hero-title">{% trans "Welcome to the interpretation dashboard" %}</h2>
+                    <p class="interpretation-hero-lead">
+                        {% trans "Connect an interpretation provider to offer live translation and captions in eventyay video." %}
+                    </p>
                 {% endif %}
-            </tbody>
-        </table>
-    </div>
+            </div>
+        </header>
 
-    <div class="panel panel-default">
-        <div class="panel-heading">
-            <h3 class="panel-title">{% trans "SUSI connection" %}</h3>
-        </div>
-        <div class="panel-body">
-            <form action="" method="post" class="form-horizontal">
-                {% csrf_token %}
-                {% bootstrap_form_errors form %}
-                {% include form.template with form=form %}
-            </form>
-        </div>
-    </div>
+        {% if not susi_configured %}
+            <div class="interpretation-content interpretation-content--setup">
+                <div class="interpretation-provider-row">
+                    <label class="interpretation-provider-label" for="interpretation-provider">
+                        {% trans "Choose your interpreter" %}
+                    </label>
+                    <select id="interpretation-provider" name="interpretation_provider" class="form-control interpretation-provider-select">
+                        {% for provider in interpretation_providers %}
+                            <option value="{{ provider.id }}"{% if provider.id == selected_provider %} selected{% endif %}>
+                                {{ provider.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="interpretation-provider-panel interpretation-signin-section" data-provider-panel="susi"{% if selected_provider != "susi" %} hidden{% endif %}>
+                    <h3 class="interpretation-section-title interpretation-section-title--signin">{% trans "Sign in to SUSI Translator" %}</h3>
+                    <p class="interpretation-section-hint interpretation-section-hint--signin text-muted">
+                        {% trans "Enter your SUSI account details to link interpretation to this event." %}
+                    </p>
+                    {% include "interpretation/susi_login_form.html" with form=form %}
+                </div>
+            </div>
+        {% else %}
+            <div class="interpretation-content">
+                <div class="interpretation-status-grid">
+                    <div class="interpretation-stat">
+                        <span class="interpretation-stat-label">{% trans "Interpreter" %}</span>
+                        <span class="interpretation-stat-value">
+                            <span class="interpretation-badge interpretation-badge--primary">{% trans "SUSI Translator" %}</span>
+                        </span>
+                    </div>
+                    <div class="interpretation-stat">
+                        <span class="interpretation-stat-label">{% trans "Event" %}</span>
+                        <span class="interpretation-stat-value">{{ event.name }}</span>
+                    </div>
+                    <div class="interpretation-stat">
+                        <span class="interpretation-stat-label">{% trans "Event code" %}</span>
+                        <span class="interpretation-stat-value">{{ event.slug }}</span>
+                    </div>
+                    <div class="interpretation-stat">
+                        <span class="interpretation-stat-label">{% trans "Live interpretation" %}</span>
+                        <span class="interpretation-stat-value">
+                            {% if interpretation_enabled %}
+                                <span class="interpretation-badge interpretation-badge--success">{% trans "On" %}</span>
+                            {% else %}
+                                <span class="interpretation-badge">{% trans "Off" %}</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="panel panel-default interpretation-panel">
+                    <div class="panel-heading">{% trans "Connected account" %}</div>
+                    <div class="panel-body">
+                        <div class="interpretation-account-card">
+                            <div class="interpretation-account-main">
+                                <span class="interpretation-status-dot" aria-hidden="true"></span>
+                                <div>
+                                    <div class="interpretation-account-name">{{ susi_account }}</div>
+                                    <div class="interpretation-account-server">{{ susi_server_host }}</div>
+                                </div>
+                            </div>
+                            <div class="interpretation-account-actions">
+                                <button type="submit" name="interpretation_test_connection" value="1" class="btn btn-default">
+                                    {% trans "Test connection" %}
+                                </button>
+                                <button type="submit" name="interpretation_disconnect" value="1" class="btn btn-link">
+                                    {% trans "Sign out" %}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel panel-default interpretation-panel">
+                    <div class="panel-heading">{% trans "Settings" %}</div>
+                    <div class="panel-body">
+                        <div class="interpretation-enable-card">
+                            {% bootstrap_field form.interpretation_is_enabled show_label=True show_help=False %}
+                            <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="interpretation-content-footer">
+                    {% include "interpretation/susi_connected_panel.html" with form=form %}
+                </div>
+            </div>
+        {% endif %}
+    </form>
+
+    {% if not susi_configured %}
+        <script>
+            (function () {
+                var select = document.getElementById("interpretation-provider");
+                if (!select) return;
+                var panels = document.querySelectorAll("[data-provider-panel]");
+                function sync() {
+                    var value = select.value;
+                    panels.forEach(function (panel) {
+                        panel.hidden = panel.getAttribute("data-provider-panel") !== value;
+                    });
+                }
+                select.addEventListener("change", sync);
+                sync();
+            })();
+        </script>
+    {% endif %}
 {% endblock %}

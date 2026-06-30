@@ -30,7 +30,7 @@ def get_susi_name(event: Event) -> str:
 
 
 def is_interpretation_enabled(event: Event) -> bool:
-    return event.settings.get(SETTING_IS_ENABLED, default=False, as_type=bool)
+    return event.settings.get(SETTING_IS_ENABLED, default=True, as_type=bool)
 
 
 def is_susi_configured(event: Event) -> bool:

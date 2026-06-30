@@ -30,6 +30,10 @@ class _FakeEvent:
         self.settings = _FakeSettings(settings)
 
 
+def test_is_interpretation_enabled_defaults_true():
+    assert is_interpretation_enabled(_FakeEvent()) is True
+
+
 def test_settings_helpers_read_event_values():
     event = _FakeEvent(
         {
