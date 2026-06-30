@@ -4,9 +4,11 @@ from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
 from .settings import (
+    get_base_url,
+    get_susi_email,
+    get_susi_name,
     is_interpretation_enabled,
     is_susi_configured,
-    get_base_url,
 )
 
 PLUGIN_MODULE = "interpretation"
@@ -44,7 +46,16 @@ class InterpretationDashboard(
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
         ctx["susi_configured"] = is_susi_configured(event)
         ctx["susi_server_host"] = _susi_host(get_base_url(event))
+        ctx["susi_account"] = _susi_account_label(event)
         return ctx
+
+
+def _susi_account_label(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    if name and email:
+        return f"{name} ({email})"
+    return email or name
 
 
 def _susi_host(base_url: str) -> str:
