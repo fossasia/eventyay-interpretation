@@ -53,6 +53,12 @@
                         {% endif %}
                     </td>
                 </tr>
+                {% if susi_account %}
+                <tr>
+                    <th>{% trans "SUSI account" %}</th>
+                    <td>{{ susi_account }}</td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
     </div>

@@ -1,10 +1,11 @@
-"""Tests for the InterpretationSettingsForm validation logic."""
+"""Tests for InterpretationAdminForm validation and connect flow."""
 
-from interpretation.forms import InterpretationSettingsForm
+from interpretation.forms import CONNECT_POST_KEY, InterpretationAdminForm
 from interpretation.settings import (
     SETTING_AUTH_TOKEN,
     SETTING_BASE_URL,
     SETTING_IS_ENABLED,
+    SETTING_SUSI_EMAIL,
 )
 
 PUBLIC_URL = "https://example.com"
@@ -34,15 +35,22 @@ class _FakeEvent:
         self.settings = _FakeSettings(settings)
 
 
-def _form(data, settings=None):
-    return InterpretationSettingsForm(obj=_FakeEvent(settings), data=data)
+def _form(data, settings=None, prefix="interpretation"):
+    post = {}
+    for key, value in data.items():
+        if key == CONNECT_POST_KEY:
+            post[key] = value
+        else:
+            post[f"{prefix}-{key}"] = value
+    return InterpretationAdminForm(
+        obj=_FakeEvent(settings), data=post, prefix=prefix
+    )
 
 
 def test_base_url_trailing_slash_is_stripped():
     form = _form(
         {
             SETTING_BASE_URL: f"{PUBLIC_URL}/",
-            SETTING_AUTH_TOKEN: "",
             SETTING_IS_ENABLED: False,
         }
     )
@@ -50,34 +58,21 @@ def test_base_url_trailing_slash_is_stripped():
     assert form.cleaned_data[SETTING_BASE_URL] == PUBLIC_URL
 
 
-def test_enabling_without_token_is_rejected():
+def test_enabling_without_connection_is_rejected():
     form = _form(
         {
             SETTING_BASE_URL: PUBLIC_URL,
-            SETTING_AUTH_TOKEN: "",
             SETTING_IS_ENABLED: True,
         }
     )
     assert not form.is_valid()
-    assert SETTING_AUTH_TOKEN in form.errors
+    assert SETTING_IS_ENABLED in form.errors
 
 
-def test_enabling_with_token_is_accepted():
+def test_enabling_with_existing_token_is_accepted():
     form = _form(
         {
             SETTING_BASE_URL: PUBLIC_URL,
-            SETTING_AUTH_TOKEN: "tok",
-            SETTING_IS_ENABLED: True,
-        }
-    )
-    assert form.is_valid(), form.errors
-
-
-def test_enabling_with_existing_token_and_redacted_input_is_accepted():
-    form = _form(
-        {
-            SETTING_BASE_URL: PUBLIC_URL,
-            SETTING_AUTH_TOKEN: "*****",
             SETTING_IS_ENABLED: True,
         },
         settings={SETTING_AUTH_TOKEN: "stored-token"},
@@ -85,26 +80,44 @@ def test_enabling_with_existing_token_and_redacted_input_is_accepted():
     assert form.is_valid(), form.errors
 
 
-def test_redacted_token_is_resolved_to_stored_value():
+def test_connect_requires_email_and_password():
     form = _form(
         {
             SETTING_BASE_URL: PUBLIC_URL,
-            SETTING_AUTH_TOKEN: "*****",
-            SETTING_IS_ENABLED: False,
-        },
-        settings={SETTING_AUTH_TOKEN: "stored-token"},
+            "susi_connect_email": "",
+            "susi_connect_password": "",
+            CONNECT_POST_KEY: "1",
+        }
     )
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data[SETTING_AUTH_TOKEN] == "stored-token"
+    assert not form.is_valid()
+    assert "susi_connect_email" in form.errors
+    assert "susi_connect_password" in form.errors
 
 
-def test_new_token_is_stripped():
+def test_connect_with_credentials_is_valid(monkeypatch):
+    from django.contrib import messages
+
+    from interpretation.susi import SusiLoginResult
+
+    monkeypatch.setattr(messages, "success", lambda *a, **k: None)
+    monkeypatch.setattr(messages, "error", lambda *a, **k: None)
+
+    def fake_login(self, email, password):
+        return SusiLoginResult(token="jwt", email=email, name="Bot")
+
+    monkeypatch.setattr(
+        "interpretation.forms.SusiClient.login",
+        fake_login,
+    )
     form = _form(
         {
             SETTING_BASE_URL: PUBLIC_URL,
-            SETTING_AUTH_TOKEN: " tok ",
-            SETTING_IS_ENABLED: False,
+            "susi_connect_email": "bot@example.com",
+            "susi_connect_password": "secret",
+            CONNECT_POST_KEY: "1",
         }
     )
     assert form.is_valid(), form.errors
-    assert form.cleaned_data[SETTING_AUTH_TOKEN] == "tok"
+    form.run_connect_action(request=type("R", (), {})())
+    assert form.obj.settings.get(SETTING_AUTH_TOKEN) == "jwt"
+    assert form.obj.settings.get(SETTING_SUSI_EMAIL) == "bot@example.com"
