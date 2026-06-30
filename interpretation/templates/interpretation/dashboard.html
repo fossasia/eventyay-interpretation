@@ -1,0 +1,74 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Interpretation" %}{% endblock %}
+{% block content %}
+    <h1>{% trans "Interpretation" %}</h1>
+
+    <p class="text-muted">
+        {% blocktrans trimmed with event_name=event.name %}
+            Live transcription and translation for {{ event_name }} via SUSI Translator.
+        {% endblocktrans %}
+    </p>
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "Status" %}</h3>
+        </div>
+        <table class="table">
+            <tbody>
+                <tr>
+                    <th>{% trans "Event" %}</th>
+                    <td>{{ event.name }}</td>
+                </tr>
+                <tr>
+                    <th>{% trans "Plugin enabled for this event" %}</th>
+                    <td>
+                        {% if plugin_enabled %}
+                            <span class="label label-success">{% trans "Yes" %}</span>
+                        {% else %}
+                            <span class="label label-danger">{% trans "No" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>{% trans "Interpretation enabled" %}</th>
+                    <td>
+                        {% if interpretation_enabled %}
+                            <span class="label label-success">{% trans "Yes" %}</span>
+                        {% else %}
+                            <span class="label label-default">{% trans "No" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>{% trans "SUSI server configured" %}</th>
+                    <td>
+                        {% if susi_configured %}
+                            <span class="label label-success">{% trans "Yes" %}</span>
+                            {% if susi_server_host %}
+                                <span class="text-muted">({{ susi_server_host }})</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="label label-warning">{% trans "No" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if susi_account %}
+                <tr>
+                    <th>{% trans "SUSI account" %}</th>
+                    <td>{{ susi_account }}</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if not susi_configured %}
+        <p class="text-muted">
+            {% blocktrans trimmed %}
+                SUSI connection credentials are configured by a system administrator
+                in the video admin under the event settings for this event.
+            {% endblocktrans %}
+        </p>
+    {% endif %}
+{% endblock %}
