@@ -140,7 +140,7 @@ def build_room_captions_url(event, room_pk, request=None) -> str:
     return path
 
 
-def video_admin_room_resume_path(room_id: int) -> str:
+def room_settings_resume_path(room_id: int) -> str:
     return f"video/admin/rooms/{room_id}"
 
 
@@ -175,12 +175,12 @@ def normalize_target_languages(value) -> list[str]:
     return codes
 
 
-def video_admin_room_url(organizer_slug: str, event_slug: str, room_id: int) -> str:
-    """Commons link that mints a video token and opens the room editor."""
+def room_settings_url(organizer_slug: str, event_slug: str, room_id: int) -> str:
+    """Commons link that opens the video room editor for interpretation settings."""
     from django.urls import reverse
 
     base = reverse(
         "eventyay_common:event.create_access_to_video",
         kwargs={"organizer": organizer_slug, "event": event_slug},
     )
-    return f"{base}?resume_path={video_admin_room_resume_path(room_id)}"
+    return f"{base}?resume_path={room_settings_resume_path(room_id)}"

@@ -9,9 +9,8 @@ from interpretation.utils import (
     get_module_stream_url,
     get_room_stream_url,
     get_schedule_stream_url,
+    room_settings_resume_path,
     set_module_interpretation,
-    video_admin_room_url,
-    video_admin_room_resume_path,
 )
 
 
@@ -259,5 +258,5 @@ def test_clear_module_interpretation_noop_when_absent():
     assert clear_module_interpretation(room) is False
 
 
-def test_video_admin_room_resume_path():
-    assert video_admin_room_resume_path(42) == "video/admin/rooms/42"
+def test_room_settings_resume_path():
+    assert room_settings_resume_path(42) == "video/admin/rooms/42"

@@ -14,7 +14,7 @@
     </p>
 
     <p class="text-muted interpretation-rooms-lead">
-        {% trans "Live interpretation activity per room. Configure caption languages and sessions in video admin." %}
+        {% trans "Live interpretation activity per room. Use Room settings to configure caption languages and sessions." %}
     </p>
 
     {% if not interpretation_ready %}
@@ -57,14 +57,10 @@
                         </td>
                         <td class="text-right interpretation-room-actions">
                             <a class="btn btn-primary btn-sm"
-                               href="{{ entry.video_admin_url }}"
+                               href="{{ entry.room_settings_url }}"
                                target="_blank"
                                rel="noopener noreferrer">
-                                {% trans "Video admin" %}
-                            </a>
-                            <a class="interpretation-room-link"
-                               href="{% url 'plugins:interpretation:room.config' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
-                                {% trans "Caption preview" %}
+                                {% trans "Room settings" %}
                             </a>
                         </td>
                     </tr>
