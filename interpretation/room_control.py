@@ -88,7 +88,27 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
             data.get("translation_provider") or ""
         ).strip()
     interpretation.save()
+    if interpretation.status == RoomInterpretation.STATUS_RUNNING:
+        _refresh_caption_languages(room, interpretation, event)
     return interpretation
+
+
+def _refresh_caption_languages(room, interpretation, event) -> None:
+    modules = room.module_config or []
+    changed = False
+    for module in modules:
+        if not isinstance(module, dict):
+            continue
+        config = module.get("config") or {}
+        info = config.get("interpretation")
+        if not info or not info.get("enabled"):
+            continue
+        info["languages"] = list(interpretation.target_languages or [])
+        changed = True
+    if changed:
+        room.module_config = modules
+        room.save(update_fields=["module_config"])
+        _notify_room_config_changed(event)
 
 
 @dataclass
