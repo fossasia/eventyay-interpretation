@@ -18,8 +18,8 @@ class InterpretationEnabledMixin:
 
 
 class InterpretationDashboard(
-    InterpretationEnabledMixin,
     EventPermissionRequiredMixin,
+    InterpretationEnabledMixin,
     TemplateView,
 ):
     template_name = "interpretation/dashboard.html"
