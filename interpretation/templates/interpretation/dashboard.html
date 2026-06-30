@@ -83,15 +83,6 @@
                     </div>
                 </div>
 
-                {% if susi_ready %}
-                    <p class="interpretation-rooms-cta">
-                        <a class="btn btn-primary btn-lg"
-                           href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
-                            {% trans "Manage interpretation rooms" %}
-                        </a>
-                    </p>
-                {% endif %}
-
                 <div class="panel panel-default interpretation-panel">
                     <div class="panel-heading">{% trans "Connected account" %}</div>
                     <div class="panel-body">
@@ -104,6 +95,10 @@
                                 </div>
                             </div>
                             <div class="interpretation-account-actions">
+                                <a class="btn btn-default"
+                                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                                    {% trans "View rooms" %}
+                                </a>
                                 <button type="submit" name="interpretation_test_connection" value="1" class="btn btn-default">
                                     {% trans "Test connection" %}
                                 </button>

@@ -1,13 +1,13 @@
 {% extends "eventyay_common/event/base.html" %}
 {% load i18n %}
-{% block title %}{% trans "Interpretation rooms" %}{% endblock %}
+{% block title %}{% trans "Rooms" %}{% endblock %}
 {% block content %}
-    <h1>{% trans "Interpretation rooms" %}</h1>
+    <h1>{% trans "Rooms" %}</h1>
 
     <p>
         <a class="btn btn-default btn-sm"
            href="{% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug %}">
-            {% trans "Back to interpretation overview" %}
+            {% trans "Back to interpretation dashboard" %}
         </a>
     </p>
 
