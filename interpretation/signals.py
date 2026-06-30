@@ -1,5 +1,5 @@
 from django.dispatch import receiver
-from django.urls import resolve, reverse
+from django.urls import Resolver404, resolve, reverse
 from django.utils.translation import gettext_lazy as _
 from eventyay.control.signals import nav_event_common
 
@@ -14,7 +14,12 @@ def navbar_entry_common(sender, request=None, **kwargs):
     ):
         return []
 
-    url = resolve(request.path_info)
+    try:
+        url = resolve(request.path_info)
+        is_active = (url.namespace == "plugins:interpretation")
+    except Resolver404:
+        is_active = False
+
     return [
         {
             "label": _("Interpretation"),
@@ -25,7 +30,7 @@ def navbar_entry_common(sender, request=None, **kwargs):
                     "organizer": request.event.organizer.slug,
                 },
             ),
-            "active": url.namespace == "plugins:interpretation",
+            "active": is_active,
             "icon": "language",
         }
     ]
