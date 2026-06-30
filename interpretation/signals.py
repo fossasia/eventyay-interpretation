@@ -14,6 +14,9 @@ def navbar_entry_common(sender, request=None, **kwargs):
     ):
         return []
 
+    if "interpretation" not in request.event.get_plugins():
+        return []
+
     url = resolve(request.path_info)
     return [
         {
