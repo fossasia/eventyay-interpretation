@@ -1,5 +1,5 @@
 {% extends "eventyay_common/event/base.html" %}
-{% load i18n %}
+{% load i18n bootstrap3 %}
 {% block title %}{% trans "Interpretation" %}{% endblock %}
 {% block content %}
     <h1>{% trans "Interpretation" %}</h1>
@@ -41,7 +41,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <th>{% trans "SUSI server configured" %}</th>
+                    <th>{% trans "SUSI server connected" %}</th>
                     <td>
                         {% if susi_configured %}
                             <span class="label label-success">{% trans "Yes" %}</span>
@@ -63,12 +63,16 @@
         </table>
     </div>
 
-    {% if not susi_configured %}
-        <p class="text-muted">
-            {% blocktrans trimmed %}
-                SUSI connection credentials are configured by a system administrator
-                in the video admin under the event settings for this event.
-            {% endblocktrans %}
-        </p>
-    {% endif %}
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "SUSI connection" %}</h3>
+        </div>
+        <div class="panel-body">
+            <form action="" method="post" class="form-horizontal">
+                {% csrf_token %}
+                {% bootstrap_form_errors form %}
+                {% include form.template with form=form %}
+            </form>
+        </div>
+    </div>
 {% endblock %}

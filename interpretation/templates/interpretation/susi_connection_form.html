@@ -1,9 +1,8 @@
 {% load i18n bootstrap3 %}
-<div class="interpretation-admin-settings">
-    <p class="text-muted interpretation-admin-intro">
+<div class="interpretation-susi-connection">
+    <p class="text-muted interpretation-susi-intro">
         {% blocktrans trimmed %}
-            Sign in with a SUSI Translator service account. Credentials are not
-            shown to event organizers.
+            Sign in with a SUSI Translator service account for this event.
         {% endblocktrans %}
     </p>
 
@@ -12,12 +11,12 @@
     {% if form.is_connected %}
         <div class="form-group">
             <div class="col-md-offset-3 col-md-9">
-                <div class="alert alert-success interpretation-admin-alert">
+                <div class="alert alert-success interpretation-susi-alert">
                     {% blocktrans trimmed with account=form.connected_label %}
                         Connected to SUSI as {{ account }}.
                     {% endblocktrans %}
                 </div>
-                <div class="interpretation-admin-actions">
+                <div class="interpretation-susi-actions">
                     <button type="submit" name="interpretation_disconnect" value="1" class="btn btn-warning">
                         {% trans "Disconnect" %}
                     </button>
@@ -25,7 +24,7 @@
                         {% trans "Test connection" %}
                     </button>
                 </div>
-                <p class="text-muted interpretation-admin-hint">
+                <p class="text-muted interpretation-susi-hint">
                     {% trans "Sign in again to replace the stored session (for example after token expiry)." %}
                 </p>
             </div>
@@ -47,38 +46,46 @@
         </div>
     </div>
 
-    <hr class="interpretation-admin-divider">
+    <hr class="interpretation-susi-divider">
 
     {% bootstrap_field form.interpretation_is_enabled layout="horizontal" %}
+
+    <div class="form-group submit-group">
+        <div class="col-md-offset-3 col-md-9">
+            <button type="submit" class="btn btn-primary btn-save">
+                {% trans "Save" %}
+            </button>
+        </div>
+    </div>
 </div>
 <style>
-    .interpretation-admin-settings .interpretation-admin-intro {
+    .interpretation-susi-connection .interpretation-susi-intro {
         margin: 0 0 1.25rem 0;
         padding-left: 25%;
     }
     @media (max-width: 991px) {
-        .interpretation-admin-settings .interpretation-admin-intro {
+        .interpretation-susi-connection .interpretation-susi-intro {
             padding-left: 0;
         }
     }
-    .interpretation-admin-settings .interpretation-admin-alert {
+    .interpretation-susi-connection .interpretation-susi-alert {
         margin-bottom: 0.75rem;
     }
-    .interpretation-admin-settings .interpretation-admin-actions .btn {
+    .interpretation-susi-connection .interpretation-susi-actions .btn {
         margin-right: 0.5rem;
         margin-bottom: 0.5rem;
     }
-    .interpretation-admin-settings .interpretation-admin-hint {
+    .interpretation-susi-connection .interpretation-susi-hint {
         margin: 0.75rem 0 0;
     }
-    .interpretation-admin-settings .interpretation-admin-divider {
+    .interpretation-susi-connection .interpretation-susi-divider {
         margin: 1.5rem 0 1.25rem;
         border-color: #e5e5e5;
     }
-    .interpretation-admin-settings .form-group {
+    .interpretation-susi-connection .form-group {
         margin-bottom: 1rem;
     }
-    .interpretation-admin-settings .help-block {
+    .interpretation-susi-connection .help-block {
         margin-bottom: 0;
     }
 </style>
