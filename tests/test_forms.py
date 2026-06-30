@@ -1,6 +1,6 @@
-"""Tests for InterpretationAdminForm validation and connect flow."""
+"""Tests for InterpretationSettingsForm validation and connect flow."""
 
-from interpretation.forms import CONNECT_POST_KEY, InterpretationAdminForm
+from interpretation.forms import CONNECT_POST_KEY, InterpretationSettingsForm
 from interpretation.settings import (
     SETTING_AUTH_TOKEN,
     SETTING_BASE_URL,
@@ -11,9 +11,24 @@ from interpretation.settings import (
 PUBLIC_URL = "https://example.com"
 
 
+class _FakeDefaults:
+    def items(self):
+        return []
+
+
+class _FakeH:
+    defaults = _FakeDefaults()
+    attribute_name = "settings"
+
+    def get_declared_type(self, key):
+        return str
+
+
 class _FakeSettings:
     def __init__(self, data=None):
         self._data = dict(data or {})
+        self._parent = None
+        self._h = _FakeH()
 
     def get(self, key, default=None, as_type=str):
         if key not in self._data:
@@ -29,6 +44,12 @@ class _FakeSettings:
     def set(self, key, value):
         self._data[key] = value
 
+    def _cache(self):
+        return self._data.keys()
+
+    def freeze(self):
+        return self._data.copy()
+
 
 class _FakeEvent:
     def __init__(self, settings=None):
@@ -42,7 +63,7 @@ def _form(data, settings=None, prefix="interpretation"):
             post[key] = value
         else:
             post[f"{prefix}-{key}"] = value
-    return InterpretationAdminForm(
+    return InterpretationSettingsForm(
         obj=_FakeEvent(settings), data=post, prefix=prefix
     )
 
