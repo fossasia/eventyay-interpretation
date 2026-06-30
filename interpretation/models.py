@@ -14,13 +14,12 @@ class RoomInterpretation(LoggedModel):
 
     STATUS_IDLE = "idle"
     STATUS_RUNNING = "running"
+    # Legacy DB values; normalized to idle on read/write.
     STATUS_STOPPED = "stopped"
     STATUS_ERROR = "error"
     STATUS_CHOICES = (
         (STATUS_IDLE, _("Idle")),
         (STATUS_RUNNING, _("Running")),
-        (STATUS_STOPPED, _("Stopped")),
-        (STATUS_ERROR, _("Error")),
     )
 
     room = models.OneToOneField(

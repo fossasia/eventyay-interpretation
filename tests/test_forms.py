@@ -1,6 +1,10 @@
-"""Tests for InterpretationAdminForm and RoomInterpretationForm."""
+"""Tests for InterpretationSettingsForm and RoomInterpretationForm."""
 
-from interpretation.forms import CONNECT_POST_KEY, InterpretationAdminForm, RoomInterpretationForm
+from interpretation.forms import (
+    CONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    RoomInterpretationForm,
+)
 from interpretation.settings import (
     SETTING_AUTH_TOKEN,
     SETTING_BASE_URL,
@@ -11,19 +15,24 @@ from interpretation.settings import (
 PUBLIC_URL = "https://example.com"
 
 
-class _FakeHierarkey:
-    defaults = {}
+class _FakeDefaults:
+    def items(self):
+        return []
+
+
+class _FakeH:
+    defaults = _FakeDefaults()
+    attribute_name = "settings"
 
     def get_declared_type(self, key):
         return str
 
 
 class _FakeSettings:
-    _parent = None
-    _h = _FakeHierarkey()
-
     def __init__(self, data=None):
         self._data = dict(data or {})
+        self._parent = None
+        self._h = _FakeH()
 
     def get(self, key, default=None, as_type=str):
         if key not in self._data:
@@ -33,14 +42,14 @@ class _FakeSettings:
             return bool(value)
         return as_type(value)
 
+    def set(self, key, value):
+        self._data[key] = value
+
     def _cache(self):
         return self._data.keys()
 
     def freeze(self):
         return self._data.copy()
-
-    def set(self, key, value):
-        self._data[key] = value
 
 
 class _FakeEvent:
@@ -55,7 +64,7 @@ def _form(data, settings=None, prefix="interpretation"):
             post[key] = value
         else:
             post[f"{prefix}-{key}"] = value
-    return InterpretationAdminForm(
+    return InterpretationSettingsForm(
         obj=_FakeEvent(settings), data=post, prefix=prefix
     )
 
@@ -134,13 +143,13 @@ def test_connect_with_credentials_is_valid(monkeypatch):
     form.run_connect_action(request=type("R", (), {})())
     assert form.obj.settings.get(SETTING_AUTH_TOKEN) == "jwt"
     assert form.obj.settings.get(SETTING_SUSI_EMAIL) == "bot@example.com"
+    assert form.obj.settings.get(SETTING_IS_ENABLED, as_type=bool) is True
 
 
 def test_room_form_parses_comma_separated_languages():
     form = RoomInterpretationForm(
         data={
             "stream_url": "https://stream.example.com/r.m3u8",
-            "source_language": "en",
             "target_languages": "de, fr ,es",
             "transcription_provider": "",
             "translation_provider": "",
@@ -154,7 +163,6 @@ def test_room_form_deduplicates_languages():
     form = RoomInterpretationForm(
         data={
             "stream_url": "",
-            "source_language": "",
             "target_languages": "de, de, fr",
             "transcription_provider": "",
             "translation_provider": "",
@@ -168,7 +176,6 @@ def test_room_form_empty_languages_is_empty_list():
     form = RoomInterpretationForm(
         data={
             "stream_url": "",
-            "source_language": "",
             "target_languages": "",
             "transcription_provider": "",
             "translation_provider": "",

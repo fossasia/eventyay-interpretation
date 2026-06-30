@@ -1,53 +1,57 @@
 {% extends "eventyay_common/event/base.html" %}
 {% load i18n %}
-{% load bootstrap3 %}
-{% block title %}{% trans "Room interpretation" %}{% endblock %}
+{% block title %}{% trans "Caption preview" %}{% endblock %}
 {% block content %}
-    <h1>{% blocktrans trimmed with room=room.name %}Interpretation: {{ room }}{% endblocktrans %}</h1>
+    <h1>{% blocktrans trimmed with room=room.name %}Caption preview: {{ room }}{% endblocktrans %}</h1>
 
-    {% if detected_stream_url %}
-        <p class="text-muted">
-            {% blocktrans trimmed with url=detected_stream_url %}
-                Detected stream from the room configuration: <code>{{ url }}</code>.
-                Leave the stream URL field empty to use it automatically.
-            {% endblocktrans %}
-        </p>
-    {% endif %}
-
-    <form action="" method="post" class="form-horizontal">
-        {% csrf_token %}
-        {% bootstrap_form_errors form %}
-        <fieldset>
-            <legend>{% trans "Stream and languages" %}</legend>
-            {% bootstrap_field form.stream_url layout='horizontal' %}
-            {% bootstrap_field form.source_language layout='horizontal' %}
-            {% bootstrap_field form.target_languages layout='horizontal' %}
-        </fieldset>
-        <fieldset>
-            <legend>{% trans "Providers" %}</legend>
-            {% bootstrap_field form.transcription_provider layout='horizontal' %}
-            {% bootstrap_field form.translation_provider layout='horizontal' %}
-        </fieldset>
-        <div class="form-group">
-            <div class="col-md-9 col-md-offset-3">
-                <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
-                <a class="btn btn-default"
-                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
-                    {% trans "Back to rooms" %}
-                </a>
-            </div>
-        </div>
-    </form>
+    <p>
+        <a class="btn btn-default btn-sm"
+           href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+            {% trans "Back to rooms" %}
+        </a>
+    </p>
 
     <div class="panel panel-default">
         <div class="panel-heading">
-            <h3 class="panel-title">{% trans "Live transcript preview" %}</h3>
+            <h3 class="panel-title">{% trans "Caption preview" %}</h3>
         </div>
         <div class="panel-body">
             <p class="text-muted">
-                {% trans "Latest transcript from SUSI for this room's session (refreshes automatically). For testing only." %}
+                {% trans "Latest captions from SUSI for this room (refreshes automatically)." %}
             </p>
             <pre id="transcript-preview" style="white-space: pre-wrap; min-height: 4em;">{% trans "Waiting for a running session…" %}</pre>
+        </div>
+    </div>
+
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "Session controls" %}</h3>
+        </div>
+        <div class="panel-body">
+            <p class="text-muted">
+                {% trans "Start or stop a SUSI session for caption testing. Status:" %}
+                {% if interpretation_status == "running" %}
+                    <span class="label label-success">{% trans "Running" %}</span>
+                {% else %}
+                    <span class="label label-default">{% trans "Idle" %}</span>
+                {% endif %}
+            </p>
+            {% if interpretation_status == "running" %}
+                <form method="post"
+                      action="{% url 'plugins:interpretation:room.stop' organizer=event.organizer.slug event=event.slug pk=room.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-warning">{% trans "Stop session" %}</button>
+                </form>
+            {% else %}
+                <form method="post"
+                      action="{% url 'plugins:interpretation:room.start' organizer=event.organizer.slug event=event.slug pk=room.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary"
+                            {% if not interpretation_ready %}disabled{% endif %}>
+                        {% trans "Start session" %}
+                    </button>
+                </form>
+            {% endif %}
         </div>
     </div>
 
@@ -60,9 +64,9 @@
                     .then(function (r) { return r.json(); })
                     .then(function (d) {
                         if (!d.session) {
-                            el.textContent = "{% trans 'No running session. Start the room to see transcripts.' %}";
+                            el.textContent = "{% trans 'No running session. Start the room to see captions.' %}";
                         } else if (d.error) {
-                            el.textContent = "{% trans 'Error fetching transcript:' %} " + d.error;
+                            el.textContent = "{% trans 'Error fetching captions:' %} " + d.error;
                         } else {
                             el.textContent = d.transcript || "{% trans 'Connected. Waiting for speech…' %}";
                         }

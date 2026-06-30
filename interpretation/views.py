@@ -11,9 +11,19 @@ from django.views.generic import FormView, TemplateView, View
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
-from .forms import RoomInterpretationForm
+from .forms import (
+    CONNECT_POST_KEY,
+    DISCONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    TEST_POST_KEY,
+)
 from .models import RoomInterpretation
-from .services import start_stream_session
+from .room_control import (
+    normalize_session_status,
+    serialize_room_interpretation,
+    start_room_session,
+    stop_room_session,
+)
 from .settings import (
     get_auth_token,
     get_base_url,
@@ -23,13 +33,11 @@ from .settings import (
     is_interpretation_enabled,
     is_susi_configured,
     is_susi_connected,
+    INTERPRETER_NONE,
+    INTERPRETER_SUSI,
 )
 from .susi import SusiClient, SusiError
-from .utils import (
-    clear_module_interpretation,
-    get_room_stream_url,
-    set_module_interpretation,
-)
+from .utils import build_room_captions_url, video_admin_room_url
 
 PLUGIN_MODULE = "interpretation"
 
@@ -54,24 +62,88 @@ class InterpretationDashboard(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
     EventPermissionRequiredMixin,
-    TemplateView,
+    FormView,
 ):
-    """Read-only overview of interpretation status for event organizers."""
+    """Interpretation overview and SUSI connection settings for organizers."""
 
+    form_class = InterpretationSettingsForm
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["obj"] = self.request.event
+        kwargs["prefix"] = "interpretation"
+        return kwargs
+
+    def get_success_url(self):
+        return reverse(
+            "plugins:interpretation:dashboard",
+            kwargs={
+                "organizer": self.request.event.organizer.slug,
+                "event": self.request.event.slug,
+            },
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
         ctx["susi_configured"] = is_susi_connected(event)
         ctx["susi_ready"] = is_susi_configured(event)
         ctx["susi_server_host"] = _susi_host(get_base_url(event))
         ctx["susi_account"] = _susi_account_label(event)
+        ctx["susi_welcome_name"] = _susi_welcome_name(event)
+        ctx["interpretation_providers"] = [
+            {"id": INTERPRETER_NONE, "label": _("None")},
+            {"id": INTERPRETER_SUSI, "label": _("SUSI Translator")},
+        ]
+        ctx["selected_provider"] = INTERPRETER_NONE
+        if not ctx["susi_configured"]:
+            form = ctx.get("form")
+            if form and form.errors:
+                ctx["selected_provider"] = INTERPRETER_SUSI
+            elif self.request.POST.get("interpretation_provider") == INTERPRETER_SUSI:
+                ctx["selected_provider"] = INTERPRETER_SUSI
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        if DISCONNECT_POST_KEY in request.POST:
+            form.run_disconnect_action(request)
+            return redirect(self.get_success_url())
+        if CONNECT_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_connect_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if TEST_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_test_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Your changes have been saved."))
+            return redirect(self.get_success_url())
+        messages.error(
+            request,
+            _("We could not save your changes. See below for details."),
+        )
+        return self.form_invalid(form)
+
+
+def _susi_welcome_name(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    return name or email or ""
 
 
 def _susi_account_label(event) -> str:
@@ -96,7 +168,7 @@ class _RoomControlBase(InterpretationEnabledMixin, EventPermissionRequiredMixin)
     permission = "can_change_event_settings"
 
     def get_room(self, pk):
-        return get_object_or_404(self.request.event.rooms, pk=pk)
+        return get_object_or_404(self.request.event.rooms.filter(deleted=False), pk=pk)
 
     def rooms_url(self):
         return reverse(
@@ -104,6 +176,16 @@ class _RoomControlBase(InterpretationEnabledMixin, EventPermissionRequiredMixin)
             kwargs={
                 "organizer": self.request.event.organizer.slug,
                 "event": self.request.event.slug,
+            },
+        )
+
+    def room_config_url(self, pk):
+        return reverse(
+            "plugins:interpretation:room.config",
+            kwargs={
+                "organizer": self.request.event.organizer.slug,
+                "event": self.request.event.slug,
+                "pk": pk,
             },
         )
 
@@ -121,21 +203,16 @@ class InterpretationRoomList(_RoomControlBase, TemplateView):
             for ri in RoomInterpretation.objects.filter(room__event=event)
         }
         rooms = []
-        for room in event.rooms.all():
+        for room in event.rooms.filter(deleted=False):
             interpretation = existing.get(room.pk)
+            data = serialize_room_interpretation(room, event, interpretation)
             rooms.append(
                 {
                     "room": room,
-                    "interpretation": interpretation,
-                    "stream_url": (
-                        interpretation.stream_url
-                        if interpretation and interpretation.stream_url
-                        else get_room_stream_url(room)
-                    ),
-                    "status": (
-                        interpretation.status
-                        if interpretation
-                        else RoomInterpretation.STATUS_IDLE
+                    "status": data["status"],
+                    "caption_languages": data["target_languages"],
+                    "video_admin_url": video_admin_room_url(
+                        event.organizer.slug, event.slug, room.pk
                     ),
                 }
             )
@@ -145,50 +222,25 @@ class InterpretationRoomList(_RoomControlBase, TemplateView):
         return ctx
 
 
-class InterpretationRoomConfig(_RoomControlBase, FormView):
-    """Edit interpretation configuration for a single room."""
+class InterpretationRoomConfig(_RoomControlBase, TemplateView):
+    """Caption preview and session controls for a single room."""
 
     template_name = "interpretation/room_config.html"
-    form_class = RoomInterpretationForm
-
-    def get_object(self):
-        room = self.get_room(self.kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None:
-            interpretation = RoomInterpretation(
-                room=room,
-                stream_url=get_room_stream_url(room),
-            )
-        self.room = room
-        return interpretation
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["instance"] = self.get_object()
-        return kwargs
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["event"] = self.request.event
-        ctx["room"] = getattr(self, "room", None) or self.get_room(self.kwargs["pk"])
-        ctx["detected_stream_url"] = get_room_stream_url(ctx["room"])
+        event = self.request.event
+        room = self.get_room(self.kwargs["pk"])
+        interpretation = RoomInterpretation.objects.filter(room=room).first()
+        ctx["event"] = event
+        ctx["room"] = room
+        ctx["interpretation_ready"] = is_susi_configured(event)
+        ctx["interpretation_status"] = normalize_session_status(
+            interpretation.status
+            if interpretation
+            else RoomInterpretation.STATUS_IDLE
+        )
         return ctx
-
-    def get_success_url(self):
-        return self.rooms_url()
-
-    def form_valid(self, form):
-        if not is_susi_configured(self.request.event):
-            messages.error(
-                self.request,
-                _("Connect and enable SUSI in video admin before setting up rooms."),
-            )
-            return redirect(self.get_success_url())
-        interpretation = form.save(commit=False)
-        interpretation.room = self.get_room(self.kwargs["pk"])
-        interpretation.save()
-        messages.success(self.request, _("Room interpretation settings saved."))
-        return redirect(self.get_success_url())
 
 
 class InterpretationRoomStart(_RoomControlBase, View):
@@ -198,77 +250,19 @@ class InterpretationRoomStart(_RoomControlBase, View):
 
     def post(self, request, *args, **kwargs):
         room = self.get_room(kwargs["pk"])
-        event = request.event
-        if not is_susi_configured(event):
-            messages.error(
-                request,
-                _("Connect and enable SUSI in video admin before starting a room."),
-            )
-            return redirect(self.rooms_url())
-
-        interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
-
-        stream_url = interpretation.stream_url or get_room_stream_url(room)
-        if not stream_url:
-            messages.error(
-                request,
-                _("No stream URL is configured for this room."),
-            )
-            return redirect(self.rooms_url())
-
-        client = get_susi_client(event)
-        try:
-            tenant_id = start_stream_session(
-                client,
-                stream_url,
-                transcription_provider=interpretation.transcription_provider,
-                translation_provider=interpretation.translation_provider,
-            )
-        except SusiError as exc:
-            interpretation.status = RoomInterpretation.STATUS_ERROR
-            interpretation.stream_url = stream_url
-            interpretation.save()
-            messages.error(
-                request,
-                _("Could not start interpretation: %(error)s") % {"error": str(exc)},
-            )
-            return redirect(self.rooms_url())
-
-        interpretation.susi_session_id = tenant_id
-        interpretation.stream_url = stream_url
-        interpretation.status = RoomInterpretation.STATUS_RUNNING
-        interpretation.save()
-
-        captions_url = request.build_absolute_uri(
-            reverse(
-                "plugins:interpretation:room.captions",
-                kwargs={
-                    "organizer": event.organizer.slug,
-                    "event": event.slug,
-                    "pk": room.pk,
-                },
-            )
-        )
-        if set_module_interpretation(
+        result = start_room_session(
             room,
-            {
-                "enabled": True,
-                "languages": interpretation.target_languages,
-                "url": captions_url,
-            },
-        ):
-            room.save(update_fields=["module_config"])
-
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.started",
-                data={"tenant_id": tenant_id, "stream_url": stream_url},
-            )
+            request.event,
+            captions_url=build_room_captions_url(request.event, room.pk, request),
+        )
+        if not result.ok:
+            messages.error(request, result.error)
+            return redirect(self.room_config_url(kwargs["pk"]))
         messages.success(
             request,
             _("Interpretation started for room %(room)s.") % {"room": room.name},
         )
-        return redirect(self.rooms_url())
+        return redirect(self.room_config_url(kwargs["pk"]))
 
 
 class InterpretationRoomStop(_RoomControlBase, View):
@@ -278,40 +272,18 @@ class InterpretationRoomStop(_RoomControlBase, View):
 
     def post(self, request, *args, **kwargs):
         room = self.get_room(kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None or not interpretation.susi_session_id:
-            messages.warning(
-                request, _("No running interpretation session for this room.")
-            )
-            return redirect(self.rooms_url())
-
-        client = get_susi_client(request.event)
-        try:
-            client.stop_session(interpretation.susi_session_id)
-        except SusiError as exc:
-            messages.error(
-                request,
-                _("Could not stop interpretation: %(error)s") % {"error": str(exc)},
-            )
-            return redirect(self.rooms_url())
-
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.stopped",
-                data={"tenant_id": interpretation.susi_session_id},
-            )
-        interpretation.status = RoomInterpretation.STATUS_STOPPED
-        interpretation.susi_session_id = ""
-        interpretation.save()
-
-        if clear_module_interpretation(room):
-            room.save(update_fields=["module_config"])
-
+        result = stop_room_session(room, request.event)
+        if not result.ok:
+            if "No running" in result.error:
+                messages.warning(request, result.error)
+            else:
+                messages.error(request, result.error)
+            return redirect(self.room_config_url(kwargs["pk"]))
         messages.success(
             request,
             _("Interpretation stopped for room %(room)s.") % {"room": room.name},
         )
-        return redirect(self.rooms_url())
+        return redirect(self.room_config_url(kwargs["pk"]))
 
 
 class InterpretationRoomStatus(_RoomControlBase, View):
@@ -326,7 +298,7 @@ class InterpretationRoomStatus(_RoomControlBase, View):
             raise Http404("No interpretation configured for this room.")
 
         payload = {
-            "status": interpretation.status,
+            "status": normalize_session_status(interpretation.status),
             "session_id": interpretation.susi_session_id,
             "susi": None,
         }
@@ -383,7 +355,7 @@ class InterpretationRoomCaptions(View):
         def load():
             if PLUGIN_MODULE not in request.event.get_plugins():
                 return None, "disabled"
-            room = get_object_or_404(request.event.rooms, pk=pk)
+            room = get_object_or_404(request.event.rooms.filter(deleted=False), pk=pk)
             interp = RoomInterpretation.objects.filter(room=room).first()
             if interp is None or not interp.susi_session_id:
                 return None, "nosession"
