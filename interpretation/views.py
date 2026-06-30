@@ -7,7 +7,13 @@ from django.views.generic import FormView, TemplateView, View
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
-from .forms import RoomInterpretationForm
+from .forms import (
+    CONNECT_POST_KEY,
+    DISCONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    RoomInterpretationForm,
+    TEST_POST_KEY,
+)
 from .models import RoomInterpretation
 from .services import start_stream_session
 from .settings import (
@@ -40,24 +46,88 @@ class InterpretationDashboard(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
     EventPermissionRequiredMixin,
-    TemplateView,
+    FormView,
 ):
-    """Read-only overview of interpretation status for event organizers."""
+    """Interpretation overview and SUSI connection settings for organizers."""
 
+    form_class = InterpretationSettingsForm
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["obj"] = self.request.event
+        kwargs["prefix"] = "interpretation"
+        return kwargs
+
+    def get_success_url(self):
+        return reverse(
+            "plugins:interpretation:dashboard",
+            kwargs={
+                "organizer": self.request.event.organizer.slug,
+                "event": self.request.event.slug,
+            },
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
         ctx["susi_configured"] = is_susi_connected(event)
         ctx["susi_ready"] = is_susi_configured(event)
         ctx["susi_server_host"] = _susi_host(get_base_url(event))
         ctx["susi_account"] = _susi_account_label(event)
+        ctx["susi_welcome_name"] = _susi_welcome_name(event)
+        ctx["interpretation_providers"] = [
+            {"id": "none", "label": _("None")},
+            {"id": "susi", "label": _("SUSI Translator")},
+        ]
+        ctx["selected_provider"] = "none"
+        if not ctx["susi_configured"]:
+            form = ctx.get("form")
+            if form and form.errors:
+                ctx["selected_provider"] = "susi"
+            elif self.request.POST.get("interpretation_provider") == "susi":
+                ctx["selected_provider"] = "susi"
         return ctx
+
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        if DISCONNECT_POST_KEY in request.POST:
+            form.run_disconnect_action(request)
+            return redirect(self.get_success_url())
+        if CONNECT_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_connect_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if TEST_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_test_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Your changes have been saved."))
+            return redirect(self.get_success_url())
+        messages.error(
+            request,
+            _("We could not save your changes. See below for details."),
+        )
+        return self.form_invalid(form)
+
+
+def _susi_welcome_name(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    return name or email or ""
 
 
 def _susi_account_label(event) -> str:
@@ -167,7 +237,7 @@ class InterpretationRoomConfig(_RoomControlBase, FormView):
         if not is_susi_configured(self.request.event):
             messages.error(
                 self.request,
-                _("Connect and enable SUSI in video admin before setting up rooms."),
+                _("Connect and enable SUSI on the interpretation dashboard before setting up rooms."),
             )
             return redirect(self.get_success_url())
         interpretation = form.save(commit=False)
@@ -188,7 +258,7 @@ class InterpretationRoomStart(_RoomControlBase, View):
         if not is_susi_configured(event):
             messages.error(
                 request,
-                _("Connect and enable SUSI in video admin before starting a room."),
+                _("Connect and enable SUSI on the interpretation dashboard before starting a room."),
             )
             return redirect(self.rooms_url())
 

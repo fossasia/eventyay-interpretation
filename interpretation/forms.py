@@ -21,11 +21,9 @@ DISCONNECT_POST_KEY = "interpretation_disconnect"
 TEST_POST_KEY = "interpretation_test_connection"
 
 
-class InterpretationAdminForm(SettingsForm):
-    """Video admin form: connect to SUSI with email/password, no manual JWT."""
+class InterpretationSettingsForm(SettingsForm):
+    """Commons dashboard form: connect to SUSI with email/password."""
 
-    title = _("Interpretation (SUSI)")
-    template = "interpretation/video_admin_settings.html"
     connect_action_post_key = CONNECT_POST_KEY
     disconnect_action_post_key = DISCONNECT_POST_KEY
     test_action_post_key = TEST_POST_KEY
@@ -140,6 +138,7 @@ class InterpretationAdminForm(SettingsForm):
             email=result.email,
             name=result.name,
         )
+        self.obj.settings.set(SETTING_IS_ENABLED, True)
         label = result.name or result.email
         if result.name and result.email:
             label = f"{result.name} ({result.email})"

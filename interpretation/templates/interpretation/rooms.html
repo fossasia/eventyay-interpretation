@@ -15,9 +15,8 @@
         <div class="alert alert-warning">
             {% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug as dashboard_url %}
             {% blocktrans trimmed with url=dashboard_url %}
-                Interpretation is not ready yet. An administrator must connect and
-                enable SUSI in video admin. See the
-                <a href="{{ url }}">interpretation overview</a> for status.
+                Interpretation is not ready yet. Connect and enable SUSI on the
+                <a href="{{ url }}">interpretation dashboard</a> first.
             {% endblocktrans %}
         </div>
     {% endif %}
