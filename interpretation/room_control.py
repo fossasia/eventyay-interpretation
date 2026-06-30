@@ -23,6 +23,13 @@ def get_interpretation(room) -> RoomInterpretation | None:
     return RoomInterpretation.objects.filter(room=room).first()
 
 
+def normalize_session_status(status: str) -> str:
+    """Map legacy stopped/error rows to idle for display and API."""
+    if status == RoomInterpretation.STATUS_RUNNING:
+        return RoomInterpretation.STATUS_RUNNING
+    return RoomInterpretation.STATUS_IDLE
+
+
 def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     if interpretation is None:
         interpretation = get_interpretation(room)
@@ -40,9 +47,9 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "translation_provider": interpretation.translation_provider
         if interpretation
         else "",
-        "status": interpretation.status
-        if interpretation
-        else RoomInterpretation.STATUS_IDLE,
+        "status": normalize_session_status(
+            interpretation.status if interpretation else RoomInterpretation.STATUS_IDLE
+        ),
         "session_id": interpretation.susi_session_id if interpretation else "",
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
@@ -116,7 +123,7 @@ def start_room_session(
             translation_provider=interpretation.translation_provider,
         )
     except SusiError as exc:
-        interpretation.status = RoomInterpretation.STATUS_ERROR
+        interpretation.status = RoomInterpretation.STATUS_IDLE
         interpretation.stream_url = stream_url
         interpretation.save()
         return SessionResult(ok=False, error=str(exc), interpretation=interpretation)
@@ -152,7 +159,7 @@ def stop_room_session(room, event) -> SessionResult:
             "interpretation.room.stopped",
             data={"tenant_id": interpretation.susi_session_id},
         )
-    interpretation.status = RoomInterpretation.STATUS_STOPPED
+    interpretation.status = RoomInterpretation.STATUS_IDLE
     interpretation.susi_session_id = ""
     interpretation.save()
     return SessionResult(ok=True, interpretation=interpretation)

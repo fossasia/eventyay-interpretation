@@ -205,6 +205,10 @@
     background: #e6f4ec;
     color: var(--interp-success);
 }
+.interpretation-badge--danger {
+    background: #fdecea;
+    color: #c0392b;
+}
 .interpretation-panel {
     margin-bottom: 1.25rem;
 }
@@ -355,4 +359,25 @@
     .interpretation-enable-card .btn {
         width: 100%;
     }
+}
+
+/* Rooms activity list */
+.interpretation-rooms-lead {
+    margin-bottom: 1.25rem;
+    max-width: 42rem;
+}
+.interpretation-rooms-table .interpretation-room-name {
+    font-weight: 600;
+}
+.interpretation-rooms-table .interpretation-badge {
+    font-size: 1rem;
+    padding: 0.3rem 0.85rem;
+}
+.interpretation-room-actions {
+    white-space: nowrap;
+}
+.interpretation-room-link {
+    display: inline-block;
+    margin-left: 0.75rem;
+    font-size: 0.95rem;
 }

@@ -36,7 +36,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             self._room_cache = None
             return None
         self._room_cache = get_object_or_404(
-            Room.objects.filter(event=self.event),
+            Room.objects.filter(event=self.event, deleted=False),
             pk=room_id,
         )
         return self._room_cache

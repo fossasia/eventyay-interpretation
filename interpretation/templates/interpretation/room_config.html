@@ -1,55 +1,27 @@
 {% extends "eventyay_common/event/base.html" %}
 {% load i18n %}
-{% load bootstrap3 %}
-{% block title %}{% trans "Room interpretation" %}{% endblock %}
+{% block title %}{% trans "Caption preview" %}{% endblock %}
 {% block content %}
-    <h1>{% blocktrans trimmed with room=room.name %}Interpretation: {{ room }}{% endblocktrans %}</h1>
+    <h1>{% blocktrans trimmed with room=room.name %}Caption preview: {{ room }}{% endblocktrans %}</h1>
 
     <p>
-        <a class="btn btn-default btn-sm"
-           href="{{ video_admin_url }}"
-           target="_blank"
-           rel="noopener noreferrer">
-            {% trans "Edit in video admin" %}
-        </a>
         <a class="btn btn-default btn-sm"
            href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
             {% trans "Back to rooms" %}
         </a>
     </p>
 
-    <p class="text-muted">
-        {% trans "Configure the stream in video admin. Use this page to test SUSI sessions and preview captions." %}
-    </p>
-
-    {% if detected_stream_url %}
-        <p class="text-muted">
-            {% blocktrans trimmed with url=detected_stream_url %}
-                Detected stream from the room configuration: <code>{{ url }}</code>.
-                Leave the stream URL field empty to use it automatically.
-            {% endblocktrans %}
-        </p>
-    {% endif %}
-
-    <form action="" method="post" class="form-horizontal">
-        {% csrf_token %}
-        {% bootstrap_form_errors form %}
-        <fieldset>
-            <legend>{% trans "Stream and languages" %}</legend>
-            {% bootstrap_field form.stream_url layout='horizontal' %}
-            {% bootstrap_field form.target_languages layout='horizontal' %}
-        </fieldset>
-        <fieldset>
-            <legend>{% trans "Providers" %}</legend>
-            {% bootstrap_field form.transcription_provider layout='horizontal' %}
-            {% bootstrap_field form.translation_provider layout='horizontal' %}
-        </fieldset>
-        <div class="form-group">
-            <div class="col-md-9 col-md-offset-3">
-                <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
-            </div>
+    <div class="panel panel-default">
+        <div class="panel-heading">
+            <h3 class="panel-title">{% trans "Caption preview" %}</h3>
         </div>
-    </form>
+        <div class="panel-body">
+            <p class="text-muted">
+                {% trans "Latest captions from SUSI for this room (refreshes automatically)." %}
+            </p>
+            <pre id="transcript-preview" style="white-space: pre-wrap; min-height: 4em;">{% trans "Waiting for a running session…" %}</pre>
+        </div>
+    </div>
 
     <div class="panel panel-default">
         <div class="panel-heading">
@@ -60,10 +32,6 @@
                 {% trans "Start or stop a SUSI session for caption testing. Status:" %}
                 {% if interpretation_status == "running" %}
                     <span class="label label-success">{% trans "Running" %}</span>
-                {% elif interpretation_status == "error" %}
-                    <span class="label label-danger">{% trans "Error" %}</span>
-                {% elif interpretation_status == "stopped" %}
-                    <span class="label label-default">{% trans "Stopped" %}</span>
                 {% else %}
                     <span class="label label-default">{% trans "Idle" %}</span>
                 {% endif %}
@@ -87,18 +55,6 @@
         </div>
     </div>
 
-    <div class="panel panel-default">
-        <div class="panel-heading">
-            <h3 class="panel-title">{% trans "Live transcript preview" %}</h3>
-        </div>
-        <div class="panel-body">
-            <p class="text-muted">
-                {% trans "Latest transcript from SUSI for this room's session (refreshes automatically). For testing only." %}
-            </p>
-            <pre id="transcript-preview" style="white-space: pre-wrap; min-height: 4em;">{% trans "Waiting for a running session…" %}</pre>
-        </div>
-    </div>
-
     <script>
         (function () {
             var url = "{% url 'plugins:interpretation:room.transcript' organizer=event.organizer.slug event=event.slug pk=room.pk %}";
@@ -108,9 +64,9 @@
                     .then(function (r) { return r.json(); })
                     .then(function (d) {
                         if (!d.session) {
-                            el.textContent = "{% trans 'No running session. Start the room to see transcripts.' %}";
+                            el.textContent = "{% trans 'No running session. Start the room to see captions.' %}";
                         } else if (d.error) {
-                            el.textContent = "{% trans 'Error fetching transcript:' %} " + d.error;
+                            el.textContent = "{% trans 'Error fetching captions:' %} " + d.error;
                         } else {
                             el.textContent = d.transcript || "{% trans 'Connected. Waiting for speech…' %}";
                         }
