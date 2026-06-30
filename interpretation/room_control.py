@@ -8,9 +8,9 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import RoomInterpretation
 from .services import start_stream_session
-from .settings import get_susi_client, is_susi_configured
+from .settings import get_susi_client, is_susi_configured, is_susi_connected, is_interpretation_enabled
 from .susi import SusiError
-from .utils import get_room_stream_url, normalize_target_languages
+from .utils import get_room_stream_url, normalize_target_languages, interpretation_dashboard_url
 
 PLUGIN_MODULE = "interpretation"
 
@@ -46,13 +46,19 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "session_id": interpretation.susi_session_id if interpretation else "",
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
+        "plugin_enabled": plugin_enabled(event),
+        "susi_connected": is_susi_connected(event),
+        "interpretation_enabled": is_interpretation_enabled(event),
         "interpretation_ready": is_susi_configured(event),
+        "dashboard_url": interpretation_dashboard_url(
+            event.organizer.slug, event.slug
+        ),
     }
 
 
 def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
-    if not is_susi_configured(event):
-        raise ValueError(_("Connect and enable SUSI on the interpretation dashboard first."))
+    if not is_susi_connected(event):
+        raise ValueError(_("Connect to SUSI on the interpretation dashboard first."))
 
     interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
     if "target_languages" in data:
@@ -78,7 +84,9 @@ class SessionResult:
     interpretation: RoomInterpretation | None = None
 
 
-def start_room_session(room, event) -> SessionResult:
+def start_room_session(
+    room, event, *, stream_url_override: str = ""
+) -> SessionResult:
     if not is_susi_configured(event):
         return SessionResult(
             ok=False,
@@ -90,7 +98,8 @@ def start_room_session(room, event) -> SessionResult:
         )
 
     interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
-    stream_url = interpretation.stream_url or get_room_stream_url(room)
+    override = (stream_url_override or "").strip()
+    stream_url = override or interpretation.stream_url or get_room_stream_url(room)
     if not stream_url:
         return SessionResult(
             ok=False,

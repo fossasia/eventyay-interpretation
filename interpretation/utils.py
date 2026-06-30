@@ -81,6 +81,15 @@ def get_room_stream_url(room, at_time=None) -> str:
     return get_module_stream_url(room) or get_schedule_stream_url(room, at_time)
 
 
+def interpretation_dashboard_url(organizer_slug: str, event_slug: str) -> str:
+    from django.urls import reverse
+
+    return reverse(
+        "plugins:interpretation:dashboard",
+        kwargs={"organizer": organizer_slug, "event": event_slug},
+    )
+
+
 def video_admin_room_resume_path(room_id: int) -> str:
     return f"video/admin/rooms/{room_id}"
 

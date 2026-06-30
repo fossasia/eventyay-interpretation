@@ -24,6 +24,8 @@ from .settings import (
     is_interpretation_enabled,
     is_susi_configured,
     is_susi_connected,
+    INTERPRETER_NONE,
+    INTERPRETER_SUSI,
 )
 from .susi import SusiError
 from .utils import get_room_stream_url, video_admin_room_url
@@ -80,16 +82,16 @@ class InterpretationDashboard(
         ctx["susi_account"] = _susi_account_label(event)
         ctx["susi_welcome_name"] = _susi_welcome_name(event)
         ctx["interpretation_providers"] = [
-            {"id": "none", "label": _("None")},
-            {"id": "susi", "label": _("SUSI Translator")},
+            {"id": INTERPRETER_NONE, "label": _("None")},
+            {"id": INTERPRETER_SUSI, "label": _("SUSI Translator")},
         ]
-        ctx["selected_provider"] = "none"
+        ctx["selected_provider"] = INTERPRETER_NONE
         if not ctx["susi_configured"]:
             form = ctx.get("form")
             if form and form.errors:
-                ctx["selected_provider"] = "susi"
-            elif self.request.POST.get("interpretation_provider") == "susi":
-                ctx["selected_provider"] = "susi"
+                ctx["selected_provider"] = INTERPRETER_SUSI
+            elif self.request.POST.get("interpretation_provider") == INTERPRETER_SUSI:
+                ctx["selected_provider"] = INTERPRETER_SUSI
         return ctx
 
     def post(self, request, *args, **kwargs):

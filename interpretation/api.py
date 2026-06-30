@@ -64,7 +64,12 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="start")
     def start(self, request, room_pk=None, **kwargs):
         room = self._ensure_room()
-        result = start_room_session(room, self.event)
+        stream_url_override = ""
+        if isinstance(request.data, dict):
+            stream_url_override = (request.data.get("stream_url") or "").strip()
+        result = start_room_session(
+            room, self.event, stream_url_override=stream_url_override
+        )
         if not result.ok:
             return Response({"detail": result.error}, status=400)
         return Response(serialize_room_interpretation(room, self.event, result.interpretation))

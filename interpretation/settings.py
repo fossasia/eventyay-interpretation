@@ -12,6 +12,9 @@ SETTING_SUSI_EMAIL = "interpretation_susi_email"
 SETTING_SUSI_NAME = "interpretation_susi_name"
 SETTING_IS_ENABLED = "interpretation_is_enabled"
 
+INTERPRETER_NONE = "none"
+INTERPRETER_SUSI = "susi"
+
 
 def get_base_url(event: Event) -> str:
     return event.settings.get(SETTING_BASE_URL, default="", as_type=str)
