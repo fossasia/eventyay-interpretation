@@ -1,27 +1,42 @@
 test:
     image:
         name: pretix/ci-image
+    services:
+        - name: postgres:16
+          alias: postgres
+    variables:
+        POSTGRES_DB: pretix
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        EVY_RUNNING_ENVIRONMENT: testing
+        EVY_POSTGRES_HOST: postgres
+        EVY_POSTGRES_PORT: "5432"
+        EVY_POSTGRES_USER: postgres
+        EVY_POSTGRES_PASSWORD: postgres
+        EVY_POSTGRES_DB: pretix
     before_script:
         - pip install -U pip uv
-        - uv pip install --system -U wheel setuptools pytest pytest-django coverage
-        - uv pip install --system -U git+https://github.com/pretix/pretix.git@master#egg=pretix
+        - git clone --depth 1 -b dev https://github.com/fossasia/eventyay.git eventyay-host
+        - uv pip install --system -U wheel setuptools coverage
+        - uv pip install --system -e "./eventyay-host/app"
+        - uv pip install --system pytest pytest-django pytest-env
     script:
         - uv pip install --system -e .
+        - python -c "import eventyay.config.settings; print('eventyay OK')"
         - make
-        - coverage run -m pytest tests
+        - coverage run -m pytest tests -v
         - coverage report
 style:
     image:
         name: pretix/ci-image
     before_script:
         - pip install -U pip uv
-        - uv pip install --system -U wheel setuptools isort black flake8 check-manifest
+        - uv pip install --system -U wheel setuptools ruff check-manifest
         - uv pip install --system -U git+https://github.com/pretix/pretix.git@master#egg=pretix
     script:
         - uv pip install --system -e .
-        - black --check .
-        - isort -c --gitignore .
-        - flake8 --extend-exclude .cache .
+        - ruff check .
+        - ruff format --check .
         - check-manifest --ignore .cache .
 pypi:
     image:

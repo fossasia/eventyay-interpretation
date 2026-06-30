@@ -12,25 +12,54 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Tests
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pretix
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      EVY_RUNNING_ENVIRONMENT: testing
+      EVY_POSTGRES_HOST: localhost
+      EVY_POSTGRES_PORT: "5432"
+      EVY_POSTGRES_USER: postgres
+      EVY_POSTGRES_PASSWORD: postgres
+      EVY_POSTGRES_DB: pretix
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v1
+      - uses: actions/checkout@v4
+      - name: Check out eventyay host
+        uses: actions/checkout@v4
         with:
-          python-version: 3.11
-      - uses: actions/cache@v4
+          repository: fossasia/eventyay
+          ref: dev
+          path: eventyay-host
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/setup.py') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          python-version: '3.12'
       - name: Install system dependencies
-        run: sudo apt update && sudo apt install gettext
-      - name: Install pretix
-        run: pip3 install pretix
-      - name: Install Dependencies
-        run: pip3 install pytest pytest-django -Ue .
-      - name: Run checks
-        run: py.test tests
+        run: sudo apt update && sudo apt install -y gettext
+      - name: Install eventyay host and test tools
+        run: |
+          python -m pip install -U pip wheel setuptools
+          # The published wheel only lists `packages = ["eventyay"]`, so
+          # subpackages such as eventyay.config are missing unless we install
+          # from the source tree (editable) or set PYTHONPATH manually.
+          python -m pip install -e "./eventyay-host/app"
+          python -m pip install pytest pytest-django pytest-env coverage
+      - name: Install plugin
+        run: python -m pip install -e .
+      - name: Verify eventyay is importable
+        run: python -c "import eventyay.config.settings; print('eventyay OK')"
+      - name: Run tests
+        run: python -m pytest tests -v
