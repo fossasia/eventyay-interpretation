@@ -23,5 +23,9 @@ def is_interpretation_enabled(event: Event) -> bool:
     return event.settings.get(SETTING_IS_ENABLED, default=False, as_type=bool)
 
 
+def is_susi_configured(event: Event) -> bool:
+    return bool(get_base_url(event) and get_auth_token(event))
+
+
 def get_susi_client(event: Event) -> SusiClient:
     return SusiClient(get_base_url(event), get_auth_token(event))

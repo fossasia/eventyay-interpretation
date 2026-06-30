@@ -1,19 +1,13 @@
-from django.contrib import messages
-from django.db import transaction
-from django.shortcuts import redirect
-from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from eventyay.base.models import Event
-from eventyay.control.views.event import EventSettingsFormView, EventSettingsViewMixin
+from django.views.generic import TemplateView
+from eventyay.control.permissions import EventPermissionRequiredMixin
+from eventyay.control.views.event import EventSettingsViewMixin
 
-from .forms import InterpretationSettingsForm
 from .settings import (
-    SETTING_AUTH_TOKEN,
-    SETTING_BASE_URL,
     is_interpretation_enabled,
+    is_susi_configured,
     get_base_url,
 )
-from .susi import SusiClient, SusiError
 
 PLUGIN_MODULE = "interpretation"
 
@@ -21,6 +15,8 @@ PLUGIN_MODULE = "interpretation"
 class InterpretationEnabledMixin:
     def dispatch(self, request, *args, **kwargs):
         if PLUGIN_MODULE not in request.event.get_plugins():
+            from django.shortcuts import redirect
+
             return redirect(
                 "eventyay_common:event.plugins",
                 organizer=request.event.organizer.slug,
@@ -32,81 +28,28 @@ class InterpretationEnabledMixin:
 class InterpretationDashboard(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
-    EventSettingsFormView,
+    EventPermissionRequiredMixin,
+    TemplateView,
 ):
-    """Configure the per-event SUSI connection and test connectivity."""
+    """Read-only overview of interpretation status for event organizers."""
 
-    model = Event
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
-    form_class = InterpretationSettingsForm
-
-    def get_success_url(self):
-        return reverse(
-            "plugins:interpretation:dashboard",
-            kwargs={
-                "organizer": self.request.event.organizer.slug,
-                "event": self.request.event.slug,
-            },
-        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_module"] = PLUGIN_MODULE
         ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
+        ctx["susi_configured"] = is_susi_configured(event)
+        ctx["susi_server_host"] = _susi_host(get_base_url(event))
         return ctx
 
-    @transaction.atomic
-    def post(self, request, *args, **kwargs):
-        form = self.get_form()
-        if form.is_valid():
-            form.save()
-            self._save_decoupled(form)
-            if form.has_changed():
-                request.event.log_action(
-                    "eventyay.event.settings",
-                    user=request.user,
-                    data={
-                        k: form.cleaned_data.get(k)
-                        for k in form.changed_data
-                        if k != "interpretation_auth_token"
-                    },
-                )
-            if "test" in request.POST:
-                self._test_connection(form)
-            else:
-                messages.success(request, _("Connection settings saved."))
-            return redirect(self.get_success_url())
 
-        messages.error(
-            request,
-            _("Please correct the errors below before saving."),
-        )
-        return self.render_to_response(self.get_context_data(form=form))
+def _susi_host(base_url: str) -> str:
+    if not base_url:
+        return ""
+    from urllib.parse import urlparse
 
-    def _test_connection(self, form):
-        base_url = form.cleaned_data.get(SETTING_BASE_URL) or get_base_url(
-            self.request.event
-        )
-        token = form.cleaned_data.get(SETTING_AUTH_TOKEN, "")
-        client = SusiClient(base_url, token)
-        try:
-            result = client.verify()
-        except SusiError as exc:
-            messages.error(
-                self.request, _("Connection failed: %(error)s") % {"error": str(exc)}
-            )
-            return
-        if result.ok:
-            messages.success(
-                self.request,
-                _("Connection successful: %(message)s") % {"message": result.message},
-            )
-        else:
-            messages.warning(
-                self.request,
-                _("Connection issue: %(message)s") % {"message": result.message},
-            )
+    return urlparse(base_url).netloc or base_url
