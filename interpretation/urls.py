@@ -1,15 +1,18 @@
 from django.urls import path
+from eventyay.api.urls import room_router
 from eventyay.common.urls import OrganizerSlugConverter  # noqa: F401
 
+from .api import RoomInterpretationViewSet
 from .views import (
     InterpretationDashboard,
     InterpretationRoomCaptions,
-    InterpretationRoomConfig,
     InterpretationRoomList,
-    InterpretationRoomStart,
-    InterpretationRoomStatus,
-    InterpretationRoomStop,
-    InterpretationRoomTranscript,
+)
+
+room_router.register(
+    "interpretation",
+    RoomInterpretationViewSet,
+    basename="room-interpretation",
 )
 
 _PREFIX = "common/event/<orgslug:organizer>/<slug:event>/interpretation/"
@@ -24,31 +27,6 @@ urlpatterns = [
         _PREFIX + "rooms/",
         InterpretationRoomList.as_view(),
         name="rooms",
-    ),
-    path(
-        _PREFIX + "rooms/<int:pk>/",
-        InterpretationRoomConfig.as_view(),
-        name="room.config",
-    ),
-    path(
-        _PREFIX + "rooms/<int:pk>/start/",
-        InterpretationRoomStart.as_view(),
-        name="room.start",
-    ),
-    path(
-        _PREFIX + "rooms/<int:pk>/stop/",
-        InterpretationRoomStop.as_view(),
-        name="room.stop",
-    ),
-    path(
-        _PREFIX + "rooms/<int:pk>/status/",
-        InterpretationRoomStatus.as_view(),
-        name="room.status",
-    ),
-    path(
-        _PREFIX + "rooms/<int:pk>/transcript/",
-        InterpretationRoomTranscript.as_view(),
-        name="room.transcript",
     ),
     path(
         _PREFIX + "rooms/<int:pk>/captions/",

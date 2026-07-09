@@ -3,36 +3,47 @@ import json
 import logging
 import requests
 import threading
+
 from asgiref.sync import sync_to_async
 from django.contrib import messages
-from django.http import Http404, JsonResponse, StreamingHttpResponse
+from django.http import Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import FormView, TemplateView, View
 from eventyay.control.permissions import EventPermissionRequiredMixin
+from eventyay.control.views.event import EventSettingsViewMixin
 
-from .forms import RoomInterpretationForm, SusiConnectionForm
-from .models import RoomInterpretation, SusiConnection
-from .services import caption_payload_for_language, start_stream_session
-from .susi import SusiClient, SusiError, susi_host
-from .utils import (
-    clear_module_interpretation,
-    get_room_hls_url,
-    set_module_interpretation,
+from .forms import (
+    CONNECT_POST_KEY,
+    DISCONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    TEST_POST_KEY,
 )
+from .models import RoomInterpretation
+from .room_control import serialize_room_interpretation
+from .services import caption_payload_for_language
+from .settings import (
+    get_auth_token,
+    get_base_url,
+    get_susi_email,
+    get_susi_name,
+    is_interpretation_enabled,
+    is_susi_configured,
+    is_susi_connected,
+    INTERPRETER_NONE,
+    INTERPRETER_SUSI,
+)
+from .susi import SusiClient, SusiError, susi_host
+from .utils import room_settings_url
 
 PLUGIN_MODULE = "interpretation"
 
 logger = logging.getLogger(__name__)
 
 # Seconds between emits while bridging SUSI's caption stream to the browser SSE.
-# Kept small so captions reach the player as soon as SUSI produces them; the
-# background consumer updates the latest event in real time.
 CAPTION_POLL_INTERVAL = 0.5
-# Max lifetime of a single SSE connection; the browser EventSource reconnects.
 CAPTION_STREAM_MAX_SECONDS = 600
-# Read timeout for the upstream SUSI stream so the consumer can exit on idle.
 CAPTION_UPSTREAM_READ_TIMEOUT = 30
 
 
@@ -49,22 +60,20 @@ class InterpretationEnabledMixin:
 
 class InterpretationDashboard(
     InterpretationEnabledMixin,
+    EventSettingsViewMixin,
     EventPermissionRequiredMixin,
     FormView,
 ):
-    """Configure the per-event SUSI connection and test connectivity."""
+    """Interpretation overview and SUSI connection settings for organizers."""
 
+    form_class = InterpretationSettingsForm
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
-    form_class = SusiConnectionForm
-
-    def get_object(self):
-        connection = SusiConnection.objects.filter(event=self.request.event).first()
-        return connection
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-        kwargs["instance"] = self.get_object()
+        kwargs["obj"] = self.request.event
+        kwargs["prefix"] = "interpretation"
         return kwargs
 
     def get_success_url(self):
@@ -80,394 +89,112 @@ class InterpretationDashboard(
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_module"] = PLUGIN_MODULE
-        ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
-        ctx["connection"] = self.get_object()
+        ctx["interpretation_enabled"] = is_interpretation_enabled(event)
+        ctx["susi_configured"] = is_susi_connected(event)
+        ctx["susi_ready"] = is_susi_configured(event)
+        ctx["susi_server_host"] = _susi_host(get_base_url(event))
+        ctx["susi_account"] = _susi_account_label(event)
+        ctx["susi_welcome_name"] = _susi_welcome_name(event)
+        ctx["interpretation_providers"] = [
+            {"id": INTERPRETER_NONE, "label": _("None")},
+            {"id": INTERPRETER_SUSI, "label": _("SUSI Translator")},
+        ]
+        ctx["selected_provider"] = INTERPRETER_NONE
+        if not ctx["susi_configured"]:
+            form = ctx.get("form")
+            if form and form.errors:
+                ctx["selected_provider"] = INTERPRETER_SUSI
+            elif self.request.POST.get("interpretation_provider") == INTERPRETER_SUSI:
+                ctx["selected_provider"] = INTERPRETER_SUSI
         return ctx
 
-    def form_valid(self, form):
-        connection = form.save(commit=False)
-        connection.event = self.request.event
-        connection.save()
-
-        # "Save and test" button performs an immediate connectivity check.
-        if "test" in self.request.POST:
-            self._test_connection(connection)
-        else:
-            messages.success(self.request, _("Connection settings saved."))
-        return redirect(self.get_success_url())
-
-    def form_invalid(self, form):
+    def post(self, request, *args, **kwargs):
+        form = self.get_form()
+        if DISCONNECT_POST_KEY in request.POST:
+            form.run_disconnect_action(request)
+            return redirect(self.get_success_url())
+        if CONNECT_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_connect_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if TEST_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_test_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Your changes have been saved."))
+            return redirect(self.get_success_url())
         messages.error(
-            self.request,
-            _("Please correct the errors below before saving."),
+            request,
+            _("We could not save your changes. See below for details."),
         )
-        return super().form_invalid(form)
-
-    def _test_connection(self, connection):
-        client = SusiClient(connection.base_url, connection.auth_token)
-        try:
-            result = client.verify()
-        except SusiError as exc:
-            messages.error(
-                self.request, _("Connection failed: %(error)s") % {"error": str(exc)}
-            )
-            return
-        if result.ok:
-            messages.success(
-                self.request,
-                _("Connection successful: %(message)s") % {"message": result.message},
-            )
-        else:
-            messages.warning(
-                self.request,
-                _("Connection issue: %(message)s") % {"message": result.message},
-            )
+        return self.form_invalid(form)
 
 
-class _RoomControlBase(InterpretationEnabledMixin, EventPermissionRequiredMixin):
-    """Shared helpers for per-room interpretation control views."""
-
-    permission = "can_change_event_settings"
-
-    def get_connection(self):
-        return SusiConnection.objects.filter(event=self.request.event).first()
-
-    def get_room(self, pk):
-        return get_object_or_404(self.request.event.rooms, pk=pk)
-
-    def rooms_url(self):
-        return reverse(
-            "plugins:interpretation:rooms",
-            kwargs={
-                "organizer": self.request.event.organizer.slug,
-                "event": self.request.event.slug,
-            },
-        )
-
-    def captions_url_for(self, room):
-        return self.request.build_absolute_uri(
-            reverse(
-                "plugins:interpretation:room.captions",
-                kwargs={
-                    "organizer": self.request.event.organizer.slug,
-                    "event": self.request.event.slug,
-                    "pk": room.pk,
-                },
-            )
-        )
+def _susi_welcome_name(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    return name or email or ""
 
 
-class InterpretationRoomList(_RoomControlBase, TemplateView):
+def _susi_account_label(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    if name and email:
+        return f"{name} ({email})"
+    return email or name
+
+
+def _susi_host(base_url: str) -> str:
+    if not base_url:
+        return ""
+    from urllib.parse import urlparse
+
+    return urlparse(base_url).netloc or base_url
+
+
+class InterpretationRoomList(
+    InterpretationEnabledMixin, EventPermissionRequiredMixin, TemplateView
+):
     """List the event's rooms with their interpretation status."""
 
     template_name = "interpretation/rooms.html"
+    permission = "can_change_event_settings"
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
-        connection = self.get_connection()
         existing = {
             ri.room_id: ri
             for ri in RoomInterpretation.objects.filter(room__event=event)
         }
         rooms = []
-        for room in event.rooms.all():
+        for room in event.rooms.filter(deleted=False):
             interpretation = existing.get(room.pk)
+            data = serialize_room_interpretation(room, event, interpretation)
             rooms.append(
                 {
                     "room": room,
-                    "interpretation": interpretation,
-                    "hls_url": (
-                        interpretation.hls_url
-                        if interpretation and interpretation.hls_url
-                        else get_room_hls_url(room)
-                    ),
-                    "status": (
-                        interpretation.status
-                        if interpretation
-                        else RoomInterpretation.STATUS_IDLE
+                    "status": data["status"],
+                    "caption_languages": data["target_languages"],
+                    "room_settings_url": room_settings_url(
+                        event.organizer.slug, event.slug, room.pk
                     ),
                 }
             )
         ctx["event"] = event
-        ctx["connection"] = connection
+        ctx["interpretation_ready"] = is_susi_configured(event)
         ctx["rooms"] = rooms
         return ctx
-
-
-class InterpretationRoomConfig(_RoomControlBase, FormView):
-    """Edit interpretation configuration for a single room."""
-
-    template_name = "interpretation/room_config.html"
-    form_class = RoomInterpretationForm
-
-    def get_object(self):
-        room = self.get_room(self.kwargs["pk"])
-        connection = self.get_connection()
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None and connection is not None:
-            interpretation = RoomInterpretation(room=room, connection=connection)
-            # Pre-fill the HLS URL from the room's stream configuration.
-            interpretation.hls_url = get_room_hls_url(room)
-        self.room = room
-        return interpretation
-
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["instance"] = self.get_object()
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["event"] = self.request.event
-        ctx["room"] = getattr(self, "room", None) or self.get_room(self.kwargs["pk"])
-        ctx["detected_hls_url"] = get_room_hls_url(ctx["room"])
-        return ctx
-
-    def get_success_url(self):
-        return self.rooms_url()
-
-    def form_valid(self, form):
-        connection = self.get_connection()
-        if connection is None:
-            messages.error(
-                self.request,
-                _("Configure the SUSI server connection before setting up rooms."),
-            )
-            return redirect(self.get_success_url())
-        interpretation = form.save(commit=False)
-        room = self.get_room(self.kwargs["pk"])
-        interpretation.room = room
-        interpretation.connection = connection
-        interpretation.save()
-
-        # Keep the video frontend's language list in sync when a session is live,
-        # so newly added target languages appear without re-starting the session.
-        if interpretation.susi_session_id and set_module_interpretation(
-            room,
-            {
-                "enabled": True,
-                "languages": interpretation.target_languages,
-                "url": self.captions_url_for(room),
-            },
-        ):
-            room.save(update_fields=["module_config"])
-            messages.success(
-                self.request,
-                _(
-                    "Room interpretation settings saved. Viewers may need to "
-                    "reload the video to see new languages."
-                ),
-            )
-        else:
-            messages.success(self.request, _("Room interpretation settings saved."))
-        return redirect(self.get_success_url())
-
-
-class InterpretationRoomStart(_RoomControlBase, View):
-    """Start a SUSI transcription session for a room's HLS stream."""
-
-    http_method_names = ["post"]
-
-    def post(self, request, *args, **kwargs):
-        room = self.get_room(kwargs["pk"])
-        connection = self.get_connection()
-        if connection is None or not connection.is_enabled or not connection.auth_token:
-            messages.error(
-                request,
-                _("Enable and configure the SUSI connection before starting a room."),
-            )
-            return redirect(self.rooms_url())
-
-        interpretation, _created = RoomInterpretation.objects.get_or_create(
-            room=room,
-            defaults={"connection": connection},
-        )
-        if interpretation.connection_id != connection.id:
-            interpretation.connection = connection
-
-        hls_url = interpretation.hls_url or get_room_hls_url(room)
-        if not hls_url:
-            messages.error(
-                request,
-                _("No HLS stream URL is configured for this room."),
-            )
-            return redirect(self.rooms_url())
-
-        client = SusiClient(connection.base_url, connection.auth_token)
-        try:
-            tenant_id = start_stream_session(
-                client,
-                hls_url,
-                source_type="url",
-                transcription_provider=interpretation.transcription_provider,
-                translation_provider=interpretation.translation_provider,
-            )
-        except SusiError as exc:
-            interpretation.status = RoomInterpretation.STATUS_ERROR
-            interpretation.hls_url = hls_url
-            interpretation.save()
-            message = str(exc)
-            if "403" in message or "admin" in message.lower():
-                messages.error(
-                    request,
-                    _(
-                        "SUSI rejected the direct stream URL. Direct HLS sources "
-                        "require an admin token on the SUSI server."
-                    ),
-                )
-            else:
-                messages.error(
-                    request,
-                    _("Could not start interpretation: %(error)s") % {"error": message},
-                )
-            return redirect(self.rooms_url())
-
-        interpretation.susi_session_id = tenant_id
-        interpretation.hls_url = hls_url
-        interpretation.status = RoomInterpretation.STATUS_RUNNING
-        interpretation.save()
-
-        # Expose caption discovery info to the video frontend via module_config.
-        captions_url = self.captions_url_for(room)
-        if set_module_interpretation(
-            room,
-            {
-                "enabled": True,
-                "languages": interpretation.target_languages,
-                "url": captions_url,
-            },
-        ):
-            room.save(update_fields=["module_config"])
-
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.started",
-                data={"tenant_id": tenant_id, "hls_url": hls_url},
-            )
-        messages.success(
-            request,
-            _("Interpretation started for room %(room)s.") % {"room": room.name},
-        )
-        return redirect(self.rooms_url())
-
-
-class InterpretationRoomStop(_RoomControlBase, View):
-    """Stop a room's running SUSI session."""
-
-    http_method_names = ["post"]
-
-    def post(self, request, *args, **kwargs):
-        room = self.get_room(kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None or not interpretation.susi_session_id:
-            messages.warning(
-                request, _("No running interpretation session for this room.")
-            )
-            return redirect(self.rooms_url())
-
-        connection = interpretation.connection
-        client = SusiClient(connection.base_url, connection.auth_token)
-        try:
-            client.stop_session(interpretation.susi_session_id)
-        except SusiError as exc:
-            messages.error(
-                request,
-                _("Could not stop interpretation: %(error)s") % {"error": str(exc)},
-            )
-            return redirect(self.rooms_url())
-
-        if hasattr(interpretation, "log_action"):
-            interpretation.log_action(
-                "interpretation.room.stopped",
-                data={"tenant_id": interpretation.susi_session_id},
-            )
-        interpretation.status = RoomInterpretation.STATUS_STOPPED
-        interpretation.susi_session_id = ""
-        interpretation.save()
-
-        if clear_module_interpretation(room):
-            room.save(update_fields=["module_config"])
-
-        messages.success(
-            request,
-            _("Interpretation stopped for room %(room)s.") % {"room": room.name},
-        )
-        return redirect(self.rooms_url())
-
-
-class InterpretationRoomStatus(_RoomControlBase, View):
-    """Return the warm-up status of a room's SUSI session as JSON."""
-
-    http_method_names = ["get"]
-
-    def get(self, request, *args, **kwargs):
-        room = self.get_room(kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None:
-            raise Http404("No interpretation configured for this room.")
-
-        payload = {
-            "status": interpretation.status,
-            "session_id": interpretation.susi_session_id,
-            "susi": None,
-        }
-        if interpretation.susi_session_id:
-            connection = interpretation.connection
-            client = SusiClient(connection.base_url, connection.auth_token)
-            try:
-                result = client.session_status(interpretation.susi_session_id)
-                payload["susi"] = result.data.get("status")
-            except SusiError as exc:
-                payload["susi"] = "error"
-                payload["error"] = str(exc)
-        return JsonResponse(payload)
-
-
-class InterpretationRoomTranscript(_RoomControlBase, View):
-    """Read-only preview of the latest SUSI transcript for a room (testing aid).
-
-    Proxies the request server-side so the SUSI token is never exposed to the
-    browser. Intended for organizers to verify output before the attendee-facing
-    caption view exists.
-    """
-
-    http_method_names = ["get"]
-
-    def get(self, request, *args, **kwargs):
-        room = self.get_room(kwargs["pk"])
-        interpretation = RoomInterpretation.objects.filter(room=room).first()
-        if interpretation is None or not interpretation.susi_session_id:
-            return JsonResponse({"transcript": "", "session": False})
-
-        connection = interpretation.connection
-        client = SusiClient(connection.base_url, connection.auth_token)
-        try:
-            result = client.latest_transcript(interpretation.susi_session_id)
-        except SusiError as exc:
-            logger.warning(
-                "Admin transcript poll failed event=%s room=%s tenant_id=%s: %s",
-                request.event.slug,
-                room.pk,
-                interpretation.susi_session_id,
-                exc,
-            )
-            return JsonResponse({"transcript": "", "session": True, "error": str(exc)})
-        logger.debug(
-            "Admin transcript poll event=%s room=%s tenant_id=%s chunk_id=%s",
-            request.event.slug,
-            room.pk,
-            interpretation.susi_session_id,
-            result.data.get("chunk_id"),
-        )
-        return JsonResponse(
-            {
-                "transcript": result.data.get("transcript", ""),
-                "chunk_id": result.data.get("chunk_id", ""),
-                "session": True,
-            }
-        )
 
 
 class InterpretationRoomCaptions(View):
@@ -482,18 +209,13 @@ class InterpretationRoomCaptions(View):
         def load():
             if PLUGIN_MODULE not in request.event.get_plugins():
                 return None, "disabled"
-            room = get_object_or_404(request.event.rooms, pk=pk)
-            interp = (
-                RoomInterpretation.objects.filter(room=room)
-                .select_related("connection")
-                .first()
-            )
+            room = get_object_or_404(request.event.rooms.filter(deleted=False), pk=pk)
+            interp = RoomInterpretation.objects.filter(room=room).first()
             if interp is None or not interp.susi_session_id:
                 return None, "nosession"
-            # Snapshot the plain fields we need so no ORM access happens later.
             return {
-                "base_url": interp.connection.base_url,
-                "auth_token": interp.connection.auth_token,
+                "base_url": get_base_url(request.event),
+                "auth_token": get_auth_token(request.event),
                 "tenant_id": interp.susi_session_id,
                 "target_languages": list(interp.target_languages or []),
             }, None
@@ -529,13 +251,6 @@ class InterpretationRoomCaptions(View):
         )
 
         def consume(state):
-            """Read SUSI's translate SSE (with target_lang) in a worker thread.
-
-            Keeps ``state['latest']`` set to the most recent caption event so the
-            async emitter can forward it at a steady cadence. Using the translate
-            stream (not /transcripts/latest) is what makes translated text
-            available for the requested language.
-            """
             try:
                 upstream = client.open_translate_stream(
                     tenant_id,
@@ -568,15 +283,6 @@ class InterpretationRoomCaptions(View):
                         continue
                     state["latest"] = data
                     events += 1
-                    logger.debug(
-                        "Caption upstream SSE event event=%s room=%s tenant_id=%s "
-                        "chunk_id=%s has_translation=%s",
-                        event_slug,
-                        room_pk,
-                        tenant_id,
-                        data.get("chunk_id"),
-                        bool(data.get("translation")),
-                    )
             except requests.RequestException as exc:
                 logger.warning(
                     "Caption upstream SSE read error event=%s room=%s tenant_id=%s: %s",
@@ -601,43 +307,20 @@ class InterpretationRoomCaptions(View):
             yield 'data: {"status": "connected"}\n\n'
             state = {"latest": None, "done": False}
             threading.Thread(target=consume, args=(state,), daemon=True).start()
-            # Fallback source-transcript poll, so captions show even if the
-            # translate stream is slow or unavailable (translation, when present,
-            # comes from the translate stream via state["latest"]).
             poll = sync_to_async(client.latest_transcript, thread_sensitive=False)
             target_requested = bool(target_lang)
             seen_translation = False
             last_serialized = None
-            logged_fallback = False
             forwarded = 0
             loops = int(CAPTION_STREAM_MAX_SECONDS / CAPTION_POLL_INTERVAL)
             try:
                 for _i in range(loops):
                     data = state["latest"]
-                    source = "sse"
                     if data is None:
-                        if not logged_fallback:
-                            logger.info(
-                                "Caption relay using transcript poll fallback "
-                                "event=%s room=%s tenant_id=%s",
-                                event_slug,
-                                room_pk,
-                                tenant_id,
-                            )
-                            logged_fallback = True
-                        source = "poll"
                         try:
                             result = await poll(tenant_id)
                             data = result.data or None
-                        except SusiError as exc:
-                            logger.debug(
-                                "Caption poll fallback failed event=%s room=%s "
-                                "tenant_id=%s: %s",
-                                event_slug,
-                                room_pk,
-                                tenant_id,
-                                exc,
-                            )
+                        except SusiError:
                             data = None
                     if data:
                         if data.get("translation"):
@@ -650,17 +333,6 @@ class InterpretationRoomCaptions(View):
                             if serialized != last_serialized:
                                 last_serialized = serialized
                                 forwarded += 1
-                                logger.info(
-                                    "Caption relay forwarded event=%s room=%s "
-                                    "tenant_id=%s source=%s chunk_id=%s "
-                                    "target_lang=%s",
-                                    event_slug,
-                                    room_pk,
-                                    tenant_id,
-                                    source,
-                                    payload.get("chunk_id"),
-                                    target_lang or "(source)",
-                                )
                                 yield f"data: {serialized}\n\n"
                             else:
                                 yield ": keepalive\n\n"

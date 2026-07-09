@@ -1,10 +1,8 @@
-"""Orchestration helpers that drive the SUSI client for a room session.
-
-These functions are intentionally free of Django/ORM and request state so they
-can be unit-tested directly with a mocked client.
-"""
+"""Orchestration helpers that drive the SUSI client for a room session."""
 
 from __future__ import annotations
+
+from .utils import SUSI_STREAM_TYPE
 
 
 def _provider_config(provider_name: str):
@@ -59,32 +57,29 @@ def caption_payload_for_language(
     return None
 
 
-def source_for(source_type: str) -> str:
-    """Map a stream source type to a SUSI session source alias."""
-    return "youtube" if source_type == "youtube" else "url"
-
-
 def start_stream_session(
     client,
-    hls_url: str,
+    stream_url: str,
     *,
-    source_type: str = "url",
     transcription_provider: str = "",
     translation_provider: str = "",
 ) -> str:
-    """Create a SUSI session and configure it to ingest ``hls_url``.
+    """Create a SUSI session and configure it to ingest ``stream_url``.
 
-    Returns the SUSI tenant/session id. Raises ``SusiError`` (from the client)
-    on failure.
+    All Eventyay stream URLs are sent through SUSI's ``youtube`` source
+    (``YouTubeSource``), which handles YouTube, Twitch, Vimeo, and HLS via
+    yt-dlp / ffmpeg.
+
+    Returns the SUSI tenant/session id. Raises ``SusiError`` on failure.
     """
-    if not hls_url:
-        raise ValueError("hls_url is required to start a session")
+    if not stream_url:
+        raise ValueError("stream_url is required to start a session")
 
-    tenant_id = client.create_session(source=source_for(source_type))
+    tenant_id = client.create_session(source=SUSI_STREAM_TYPE)
     client.configure(
         tenant_id,
-        stream_url=hls_url,
-        source_type=source_type,
+        stream_url=stream_url,
+        stream_type=SUSI_STREAM_TYPE,
         transcription=_provider_config(transcription_provider),
         translation=_provider_config(translation_provider),
     )

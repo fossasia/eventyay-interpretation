@@ -1,61 +1,97 @@
-"""Helpers for resolving a room's stream configuration."""
+"""Resolve the stream URL Eventyay exposes for a room."""
 
 from __future__ import annotations
 
-NATIVE_LIVESTREAM_TYPE = "livestream.native"
+NATIVE_LIVESTREAM = "livestream.native"
+YOUTUBE_LIVESTREAM = "livestream.youtube"
+IFRAME_LIVESTREAM = "livestream.iframe"
+
+STREAM_MODULES = frozenset({
+    NATIVE_LIVESTREAM,
+    YOUTUBE_LIVESTREAM,
+    IFRAME_LIVESTREAM,
+})
+
+# SUSI ``YouTubeSource``: yt-dlp for platform URLs, ffmpeg for direct ``.m3u8``.
+SUSI_STREAM_TYPE = "youtube"
+
+# Embed-only schedules have no direct audio URL for SUSI to ingest.
+_SKIP_SCHEDULE_TYPES = frozenset({"iframe"})
 
 
-def get_module_hls_url(room) -> str:
-    """Return the HLS URL configured on the room's native livestream module.
-    Returns an empty string when there is no native livestream module or no
-    URL configured.
-    """
-    modules = room.module_config or []
-    for module in modules:
-        if not isinstance(module, dict):
-            continue
-        if module.get("type") == NATIVE_LIVESTREAM_TYPE:
-            config = module.get("config") or {}
-            return (config.get("hls_url") or "").strip()
+def _strip(url: str) -> str:
+    return (url or "").strip()
+
+
+def _youtube_url(value: str) -> str:
+    value = _strip(value)
+    if not value:
+        return ""
+    if "://" in value:
+        return value
+    return f"https://www.youtube.com/watch?v={value}"
+
+
+def _url_from_module(module: dict) -> str:
+    module_type = module.get("type")
+    config = module.get("config") or {}
+    if module_type == NATIVE_LIVESTREAM:
+        return _strip(config.get("hls_url"))
+    if module_type == YOUTUBE_LIVESTREAM:
+        return _youtube_url(config.get("ytid", ""))
+    if module_type == IFRAME_LIVESTREAM:
+        return _strip(config.get("url"))
     return ""
 
 
-def get_schedule_hls_url(room, at_time=None) -> str:
-    """Return an HLS URL from the room's stream schedules.
-    Prefers a schedule that is currently active; otherwise falls back to the
-    most recent HLS schedule. Returns an empty string when none is found.
-    """
+def get_module_stream_url(room) -> str:
+    """URL from the room's stage module (native HLS, YouTube, or iframe player)."""
+    for module in room.module_config or []:
+        if not isinstance(module, dict):
+            continue
+        url = _url_from_module(module)
+        if url:
+            return url
+    return ""
+
+
+def _schedules(room):
     schedules = getattr(room, "stream_schedules", None)
+    if schedules is None:
+        return None
+    if hasattr(schedules, "exclude"):
+        return schedules.exclude(stream_type__in=_SKIP_SCHEDULE_TYPES)
+    return schedules
+
+
+def get_schedule_stream_url(room, at_time=None) -> str:
+    """URL from timed stream schedules (YouTube, Vimeo, HLS, native, …)."""
+    schedules = _schedules(room)
     if schedules is None:
         return ""
 
-    hls_schedules = schedules.filter(stream_type="hls")
-
-    active = [s for s in hls_schedules if s.is_active(at_time)]
+    items = list(schedules)
+    active = [s for s in items if s.is_active(at_time) and _strip(s.url)]
     if active:
-        return (active[0].url or "").strip()
+        return _strip(active[0].url)
 
-    latest = hls_schedules.order_by("-start_time").first()
-    if latest:
-        return (latest.url or "").strip()
-    return ""
+    dated = [s for s in items if _strip(s.url)]
+    if not dated:
+        return ""
+    latest = max(dated, key=lambda s: s.start_time)
+    return _strip(latest.url)
 
 
-def get_room_hls_url(room, at_time=None) -> str:
-    """Best-effort HLS URL for a room.
-    Checks the native livestream module first (the persistent room stream),
-    then falls back to the room's HLS stream schedules.
-    """
-    return get_module_hls_url(room) or get_schedule_hls_url(room, at_time)
+def get_room_stream_url(room, at_time=None) -> str:
+    """Best stream URL for a room: stage module first, then stream schedule."""
+    return get_module_stream_url(room) or get_schedule_stream_url(room, at_time)
 
 
 def set_module_interpretation(room, info: dict) -> bool:
-    """Write interpretation discovery info into the native livestream module.
-    Returns True if a native livestream module was found and updated.
-    """
+    """Write caption discovery info into the room's active stream module."""
     modules = room.module_config or []
     for module in modules:
-        if isinstance(module, dict) and module.get("type") == NATIVE_LIVESTREAM_TYPE:
+        if isinstance(module, dict) and module.get("type") in STREAM_MODULES:
             config = module.setdefault("config", {})
             config["interpretation"] = info
             room.module_config = modules
@@ -64,11 +100,11 @@ def set_module_interpretation(room, info: dict) -> bool:
 
 
 def clear_module_interpretation(room) -> bool:
-    """Remove interpretation discovery info from the native livestream module."""
+    """Remove caption discovery info from the room's stream module."""
     modules = room.module_config or []
     changed = False
     for module in modules:
-        if isinstance(module, dict) and module.get("type") == NATIVE_LIVESTREAM_TYPE:
+        if isinstance(module, dict) and module.get("type") in STREAM_MODULES:
             config = module.get("config") or {}
             if "interpretation" in config:
                 config.pop("interpretation", None)
@@ -76,3 +112,75 @@ def clear_module_interpretation(room) -> bool:
     if changed:
         room.module_config = modules
     return changed
+
+
+def interpretation_dashboard_url(organizer_slug: str, event_slug: str) -> str:
+    from django.urls import reverse
+
+    return reverse(
+        "plugins:interpretation:dashboard",
+        kwargs={"organizer": organizer_slug, "event": event_slug},
+    )
+
+
+def build_room_captions_url(event, room_pk, request=None) -> str:
+    """Absolute URL for the attendee-facing caption SSE endpoint."""
+    from django.urls import reverse
+
+    path = reverse(
+        "plugins:interpretation:room.captions",
+        kwargs={
+            "organizer": event.organizer.slug,
+            "event": event.slug,
+            "pk": room_pk,
+        },
+    )
+    if request is not None:
+        return request.build_absolute_uri(path)
+    return path
+
+
+def room_settings_resume_path(room_id: int) -> str:
+    return f"video/admin/rooms/{room_id}"
+
+
+def normalize_target_languages(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = value
+    elif isinstance(value, list):
+        if value and all(isinstance(item, str) for item in value):
+            if len(value) == 1 and "," in value[0]:
+                raw = value[0]
+            else:
+                codes = []
+                seen = set()
+                for code in value:
+                    code = (code or "").strip()
+                    if code and code not in seen:
+                        seen.add(code)
+                        codes.append(code)
+                return codes
+        raw = ",".join(str(item) for item in value)
+    else:
+        raw = str(value)
+    codes = []
+    seen = set()
+    for code in raw.split(","):
+        code = code.strip()
+        if code and code not in seen:
+            seen.add(code)
+            codes.append(code)
+    return codes
+
+
+def room_settings_url(organizer_slug: str, event_slug: str, room_id: int) -> str:
+    """Commons link that opens the video room editor for interpretation settings."""
+    from django.urls import reverse
+
+    base = reverse(
+        "eventyay_common:event.create_access_to_video",
+        kwargs={"organizer": organizer_slug, "event": event_slug},
+    )
+    return f"{base}?resume_path={room_settings_resume_path(room_id)}"

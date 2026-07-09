@@ -39,6 +39,13 @@ class SusiResult:
     message: str = ""
 
 
+@dataclass
+class SusiLoginResult:
+    token: str
+    email: str
+    name: str
+
+
 class SusiClient:
     """Minimal client for talking to a SUSI Translator server."""
 
@@ -108,7 +115,7 @@ class SusiClient:
             result.message = "Server reachable but token is invalid or expired."
         return result
 
-    def login(self, email: str, password: str) -> str:
+    def login(self, email: str, password: str) -> SusiLoginResult:
         """Authenticate with email/password and return the JWT access token.
         stored and reused as a Bearer token.
         """
@@ -125,15 +132,26 @@ class SusiClient:
         if not resp.ok:
             raise SusiError("Invalid SUSI credentials or server rejected login.")
 
+        try:
+            data = resp.json() if resp.content else {}
+        except ValueError:
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+
         token = resp.cookies.get("access_token_cookie")
         if not token:
             raise SusiError("Login succeeded but no access token was returned.")
         self.auth_token = token
-        return token
+        return SusiLoginResult(
+            token=token,
+            email=(data.get("email") or email).strip(),
+            name=(data.get("name") or "").strip(),
+        )
 
     # -- lifecycle ---------------------------------------------------
 
-    def create_session(self, source: str = "url") -> str:
+    def create_session(self, source: str = "youtube") -> str:
         """Mint a tenant/session ID for a given audio source."""
         result = self._request("POST", "/session", json={"source": source})
         if not result.ok:
@@ -148,7 +166,7 @@ class SusiClient:
         tenant_id: str,
         *,
         stream_url: str = "",
-        source_type: str = "url",
+        stream_type: str = "youtube",
         transcription: dict | None = None,
         translation: dict | None = None,
     ) -> SusiResult:
@@ -160,7 +178,8 @@ class SusiClient:
             payload["translation"] = translation
         if stream_url:
             payload["stream_url"] = stream_url
-            payload["source_type"] = source_type
+            # SUSI reads ``stream_type`` (defaults to ``youtube`` if omitted).
+            payload["stream_type"] = stream_type
         result = self._request("POST", "/api/v1/translate/configure", json=payload)
         if not result.ok:
             raise SusiError(f"Failed to configure SUSI tenant: {result.data}")
