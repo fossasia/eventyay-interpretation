@@ -37,6 +37,24 @@ def normalize_session_status(status: str) -> str:
     return RoomInterpretation.STATUS_IDLE
 
 
+def attendee_interpretation_payload(
+    interpretation: RoomInterpretation, *, captions_url: str = ""
+) -> dict | None:
+    """Build stream-module interpretation config pushed to attendees."""
+    if not interpretation.room_enabled:
+        return None
+    running = (
+        interpretation.status == RoomInterpretation.STATUS_RUNNING
+        and bool((captions_url or "").strip())
+    )
+    return {
+        "room_enabled": True,
+        "enabled": running,
+        "languages": list(interpretation.target_languages or []),
+        "url": captions_url.strip() if running else "",
+    }
+
+
 def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     if interpretation is None:
         interpretation = get_interpretation(room)
@@ -54,6 +72,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "translation_provider": interpretation.translation_provider
         if interpretation
         else "",
+        "room_enabled": bool(interpretation.room_enabled) if interpretation else False,
         "status": normalize_session_status(
             interpretation.status if interpretation else RoomInterpretation.STATUS_IDLE
         ),
@@ -87,28 +106,23 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
         interpretation.translation_provider = (
             data.get("translation_provider") or ""
         ).strip()
+    if "room_enabled" in data:
+        interpretation.room_enabled = bool(data.get("room_enabled"))
     interpretation.save()
-    if interpretation.status == RoomInterpretation.STATUS_RUNNING:
-        _refresh_caption_languages(room, interpretation, event)
+
+    if "room_enabled" in data and not interpretation.room_enabled:
+        if interpretation.status == RoomInterpretation.STATUS_RUNNING:
+            stop_room_session(room, event)
+            return get_interpretation(room) or interpretation
+        sync_attendee_interpretation(room, interpretation, event)
+        return interpretation
+
+    if interpretation.room_enabled:
+        captions_url = ""
+        if interpretation.status == RoomInterpretation.STATUS_RUNNING:
+            captions_url = build_room_captions_url(event, room.pk, request=None)
+        sync_attendee_interpretation(room, interpretation, event, captions_url=captions_url)
     return interpretation
-
-
-def _refresh_caption_languages(room, interpretation, event) -> None:
-    modules = room.module_config or []
-    changed = False
-    for module in modules:
-        if not isinstance(module, dict):
-            continue
-        config = module.get("config") or {}
-        info = config.get("interpretation")
-        if not info or not info.get("enabled"):
-            continue
-        info["languages"] = list(interpretation.target_languages or [])
-        changed = True
-    if changed:
-        room.module_config = modules
-        room.save(update_fields=["module_config"])
-        _notify_room_config_changed(event)
 
 
 @dataclass
@@ -125,22 +139,16 @@ def _notify_room_config_changed(event) -> None:
     async_to_sync(notify_event_change)(event.id)
 
 
-def _publish_caption_discovery(room, interpretation, captions_url: str) -> None:
-    if not captions_url:
-        return
-    if set_module_interpretation(
-        room,
-        {
-            "enabled": True,
-            "languages": list(interpretation.target_languages or []),
-            "url": captions_url,
-        },
-    ):
-        room.save(update_fields=["module_config"])
-
-
-def _clear_caption_discovery(room, event) -> None:
-    if clear_module_interpretation(room):
+def sync_attendee_interpretation(
+    room, interpretation, event, *, captions_url: str = ""
+) -> None:
+    payload = attendee_interpretation_payload(interpretation, captions_url=captions_url)
+    changed = False
+    if payload is None:
+        changed = clear_module_interpretation(room)
+    else:
+        changed = set_module_interpretation(room, payload)
+    if changed:
         room.save(update_fields=["module_config"])
         _notify_room_config_changed(event)
 
@@ -159,6 +167,12 @@ def start_room_session(
         )
 
     interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
+    if not interpretation.room_enabled:
+        return SessionResult(
+            ok=False,
+            error=str(_("Enable interpretation for this room first.")),
+            interpretation=interpretation,
+        )
     override = (stream_url_override or "").strip()
     stream_url = override or interpretation.stream_url or get_room_stream_url(room)
     if not stream_url:
@@ -191,9 +205,7 @@ def start_room_session(
             "interpretation.room.started",
             data={"tenant_id": tenant_id, "stream_url": stream_url},
         )
-    _publish_caption_discovery(room, interpretation, captions_url)
-    if captions_url:
-        _notify_room_config_changed(event)
+    sync_attendee_interpretation(room, interpretation, event, captions_url=captions_url)
     return SessionResult(ok=True, interpretation=interpretation)
 
 
@@ -219,5 +231,5 @@ def stop_room_session(room, event) -> SessionResult:
     interpretation.status = RoomInterpretation.STATUS_IDLE
     interpretation.susi_session_id = ""
     interpretation.save()
-    _clear_caption_discovery(room, event)
+    sync_attendee_interpretation(room, interpretation, event, captions_url="")
     return SessionResult(ok=True, interpretation=interpretation)

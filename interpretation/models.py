@@ -69,6 +69,14 @@ class RoomInterpretation(LoggedModel):
         choices=STATUS_CHOICES,
         default=STATUS_IDLE,
     )
+    room_enabled = models.BooleanField(
+        verbose_name=_("Interpretation enabled for room"),
+        default=False,
+        help_text=_(
+            "When enabled, interpretation controls and the caption bar are "
+            "shown for this room."
+        ),
+    )
 
     class Meta:
         verbose_name = _("Room interpretation")
