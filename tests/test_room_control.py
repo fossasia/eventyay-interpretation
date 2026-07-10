@@ -1,5 +1,9 @@
+"""Tests for attendee interpretation payload and room sync flags."""
+
+from unittest.mock import patch
+
 from interpretation.models import RoomInterpretation
-from interpretation.room_control import attendee_interpretation_payload
+from interpretation.room_control import attendee_interpretation_payload, update_room_interpretation
 
 
 class FakeInterpretation:
@@ -34,3 +38,32 @@ def test_attendee_payload_live_when_session_running():
         "languages": ["de"],
         "url": "https://x/captions/",
     }
+
+
+def test_update_room_interpretation_can_skip_attendee_sync():
+    class FakeRoom:
+        pk = 1
+
+    class FakeEvent:
+        pass
+
+    interpretation = FakeInterpretation(room_enabled=True, languages=["de"])
+
+    with patch(
+        "interpretation.room_control.is_susi_connected", return_value=True
+    ), patch(
+        "interpretation.room_control.RoomInterpretation.objects.get_or_create",
+        return_value=(interpretation, False),
+    ) as get_or_create, patch(
+        "interpretation.room_control.resync_attendee_interpretation"
+    ) as resync:
+        interpretation.save = lambda: None
+        update_room_interpretation(
+            FakeRoom(),
+            FakeEvent(),
+            {"target_languages": ["fr"]},
+            sync_attendees=False,
+        )
+        resync.assert_not_called()
+        assert interpretation.target_languages == ["fr"]
+        get_or_create.assert_called_once()

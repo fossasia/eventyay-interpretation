@@ -89,7 +89,9 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     }
 
 
-def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
+def update_room_interpretation(
+    room, event, data: dict, *, sync_attendees: bool = True
+) -> RoomInterpretation:
     if not is_susi_connected(event):
         raise ValueError(_("Connect to SUSI on the interpretation dashboard first."))
 
@@ -117,12 +119,28 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
         sync_attendee_interpretation(room, interpretation, event)
         return interpretation
 
-    if interpretation.room_enabled:
-        captions_url = ""
-        if interpretation.status == RoomInterpretation.STATUS_RUNNING:
-            captions_url = build_room_captions_url(event, room.pk, request=None)
-        sync_attendee_interpretation(room, interpretation, event, captions_url=captions_url)
+    if sync_attendees and interpretation.room_enabled:
+        resync_attendee_interpretation(room, event, interpretation=interpretation)
     return interpretation
+
+
+def resync_attendee_interpretation(
+    room, event, *, interpretation=None, notify: bool = True
+) -> None:
+    """Push current interpretation state into the room stream module for attendees."""
+    if interpretation is None:
+        interpretation = get_interpretation(room)
+    if interpretation is None:
+        return
+    captions_url = ""
+    if (
+        interpretation.room_enabled
+        and interpretation.status == RoomInterpretation.STATUS_RUNNING
+    ):
+        captions_url = build_room_captions_url(event, room.pk, request=None)
+    sync_attendee_interpretation(
+        room, interpretation, event, captions_url=captions_url, notify=notify
+    )
 
 
 @dataclass
@@ -134,13 +152,17 @@ class SessionResult:
 
 def _notify_room_config_changed(event) -> None:
     from asgiref.sync import async_to_sync
+    from django.db import transaction
+
     from eventyay.base.services.event import notify_event_change
 
-    async_to_sync(notify_event_change)(event.id)
+    # ponytail: defer until request transaction commits so websocket event.update
+    # does not run nested inside the HTTP handler (that path closes with server.fatal).
+    transaction.on_commit(lambda: async_to_sync(notify_event_change)(event.id))
 
 
 def sync_attendee_interpretation(
-    room, interpretation, event, *, captions_url: str = ""
+    room, interpretation, event, *, captions_url: str = "", notify: bool = True
 ) -> None:
     payload = attendee_interpretation_payload(interpretation, captions_url=captions_url)
     changed = False
@@ -150,7 +172,8 @@ def sync_attendee_interpretation(
         changed = set_module_interpretation(room, payload)
     if changed:
         room.save(update_fields=["module_config"])
-        _notify_room_config_changed(event)
+        if notify:
+            _notify_room_config_changed(event)
 
 
 def start_room_session(

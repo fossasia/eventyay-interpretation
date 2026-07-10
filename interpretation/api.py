@@ -11,6 +11,7 @@ from eventyay.base.models.room import Room
 from .models import RoomInterpretation
 from .room_control import (
     plugin_enabled,
+    resync_attendee_interpretation,
     serialize_room_interpretation,
     start_room_session,
     stop_room_session,
@@ -56,11 +57,23 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if request.method == "GET":
             return Response(serialize_room_interpretation(room, self.event))
 
+        data = dict(request.data)
+        sync_attendees = data.pop("sync_attendees", True)
+        if isinstance(sync_attendees, str):
+            sync_attendees = sync_attendees.lower() not in ("0", "false", "no")
         try:
-            interpretation = update_room_interpretation(room, self.event, request.data)
+            interpretation = update_room_interpretation(
+                room, self.event, data, sync_attendees=bool(sync_attendees)
+            )
         except ValueError as exc:
             raise ValidationError({"detail": str(exc)}) from exc
         return Response(serialize_room_interpretation(room, self.event, interpretation))
+
+    @action(detail=False, methods=["post"], url_path="sync")
+    def sync(self, request, room_pk=None, **kwargs):
+        room = self._ensure_room()
+        resync_attendee_interpretation(room, self.event)
+        return Response(serialize_room_interpretation(room, self.event))
 
     @action(detail=False, methods=["post"], url_path="start")
     def start(self, request, room_pk=None, **kwargs):
