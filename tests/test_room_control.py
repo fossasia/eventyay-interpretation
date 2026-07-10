@@ -40,6 +40,12 @@ def test_attendee_payload_live_when_session_running():
     }
 
 
+def test_attendee_payload_preserves_admin_language_order():
+    interp = FakeInterpretation(room_enabled=True, languages=["hi", "en", "de"])
+    payload = attendee_interpretation_payload(interp)
+    assert payload["languages"] == ["hi", "en", "de"]
+
+
 def test_update_room_interpretation_can_skip_attendee_sync():
     class FakeRoom:
         pk = 1
