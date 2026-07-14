@@ -7,7 +7,29 @@ import time
 from .utils import SUSI_STREAM_TYPE
 
 # ponytail: emit on chunk rollover; tick only for trailing phrase
-CAPTION_QUIET_FLUSH_SECONDS = 0.6
+CAPTION_QUIET_FLUSH_SECONDS = 1.2
+
+
+def _retry_pending_emits(state: dict, build_payload) -> list[dict]:
+    pending = state.get("pending_emit") or []
+    if not pending:
+        return []
+    out: list[dict] = []
+    still_pending = []
+    for chunk_id in pending:
+        flushed = _emit_chunk(state, chunk_id, build_payload)
+        if flushed:
+            out.append(flushed)
+        else:
+            still_pending.append(chunk_id)
+    state["pending_emit"] = still_pending
+    return out
+
+
+def _queue_pending_emit(state: dict, chunk_id) -> None:
+    pending = state.setdefault("pending_emit", [])
+    if chunk_id not in pending:
+        pending.append(chunk_id)
 
 
 def _provider_config(provider_name: str):
@@ -115,19 +137,16 @@ def caption_coalesce_ingest_frame(
     frames = state.setdefault("frames", {})
     frames[chunk_id] = data
 
-    out: list[dict] = []
+    out: list[dict] = _retry_pending_emits(state, build_payload)
     prev_chunk = state.get("chunk_id")
 
     if prev_chunk is not None and chunk_id != prev_chunk:
-        if isinstance(prev_chunk, int) and isinstance(chunk_id, int) and chunk_id > prev_chunk:
-            for cid in range(prev_chunk, chunk_id):
-                flushed = _emit_chunk(state, cid, build_payload)
-                if flushed:
-                    out.append(flushed)
+        # ponytail: chunk_id is a SUSI timestamp, not 1..n; never range() between ids
+        flushed = _emit_chunk(state, prev_chunk, build_payload)
+        if flushed:
+            out.append(flushed)
         else:
-            flushed = _emit_chunk(state, prev_chunk, build_payload)
-            if flushed:
-                out.append(flushed)
+            _queue_pending_emit(state, prev_chunk)
 
     state["chunk_id"] = chunk_id
     state["last_partial_monotonic"] = now

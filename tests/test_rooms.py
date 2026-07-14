@@ -345,21 +345,23 @@ def test_caption_coalesce_emits_on_chunk_change_with_full_text():
     assert out == [final]
 
 
-def test_caption_coalesce_emits_skipped_chunk_ids():
+def test_caption_coalesce_emits_previous_timestamp_chunk():
     state: dict = {}
+    first = 1_734_567_890_100
+    second = 1_734_567_891_500
     caption_coalesce_ingest_frame(
         state,
-        {"chunk_id": 2, "transcript": "two", "translation": "two"},
+        {"chunk_id": first, "transcript": "one", "translation": "one"},
         _source_payload,
         now=0.0,
     )
     out = caption_coalesce_ingest_frame(
         state,
-        {"chunk_id": 5, "transcript": "five", "translation": "five"},
+        {"chunk_id": second, "transcript": "two", "translation": "two"},
         _source_payload,
         now=0.1,
     )
-    assert [item["chunk_id"] for item in out] == [2]
+    assert out == [{"chunk_id": first, "transcript": "one", "translation": "one"}]
 
 
 def test_caption_coalesce_tick_emits_trailing_chunk():
@@ -371,9 +373,45 @@ def test_caption_coalesce_tick_emits_trailing_chunk():
         now=0.0,
     )
     assert caption_coalesce_tick(state, _source_payload, now=0.2) is None
-    out = caption_coalesce_tick(state, _source_payload, now=0.7)
+    out = caption_coalesce_tick(state, _source_payload, now=1.3)
     assert out["transcript"] == "last line"
-    assert caption_coalesce_tick(state, _source_payload, now=1.2) is None
+    assert caption_coalesce_tick(state, _source_payload, now=2.0) is None
+
+
+def test_caption_coalesce_retries_pending_emit():
+    state: dict = {}
+    first = 1_734_567_890_100
+    second = 1_734_567_891_500
+
+    def build(data):
+        text = data.get("transcript") or ""
+        if text == "incomplete":
+            return None
+        return caption_payload_for_language(
+            data, target_requested=False, seen_translation=False, finalize=True
+        )
+
+    caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": first, "transcript": "incomplete", "translation": "incomplete"},
+        build,
+        now=0.0,
+    )
+    assert caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": second, "transcript": "two", "translation": "two"},
+        build,
+        now=0.1,
+    ) == []
+    frames = state.setdefault("frames", {})
+    frames[first] = {"chunk_id": first, "transcript": "one", "translation": "one"}
+    out = caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": second, "transcript": "two final", "translation": "two final"},
+        build,
+        now=0.2,
+    )
+    assert out[0]["transcript"] == "one"
 
 
 def test_caption_coalesce_normalizes_chunk_id_types():

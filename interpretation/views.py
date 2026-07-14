@@ -360,11 +360,12 @@ class InterpretationRoomCaptions(View):
                             )
                         )
 
-                    tick_payload = caption_coalesce_tick(
-                        coalesce_state, build_payload
-                    )
-                    if tick_payload:
-                        out_lines.extend(emit_payloads([tick_payload]))
+                    if not pending_events:
+                        tick_payload = caption_coalesce_tick(
+                            coalesce_state, build_payload
+                        )
+                        if tick_payload:
+                            out_lines.extend(emit_payloads([tick_payload]))
 
                     if out_lines:
                         for line in out_lines:
@@ -396,7 +397,8 @@ class InterpretationRoomCaptions(View):
                     await asyncio.sleep(CAPTION_POLL_INTERVAL)
             finally:
                 state["done"] = True
-                flushed = caption_coalesce_flush(coalesce_state, build_payload)
+                trailing = caption_coalesce_tick(coalesce_state, build_payload)
+                flushed = trailing or caption_coalesce_flush(coalesce_state, build_payload)
                 if flushed:
                     forwarded += 1
                     yield f"data: {json.dumps(flushed)}\n\n"
