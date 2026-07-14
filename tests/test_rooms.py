@@ -2,7 +2,13 @@
 
 import pytest
 
-from interpretation.services import caption_payload_for_language, start_stream_session
+from interpretation.services import (
+    caption_coalesce_flush,
+    caption_coalesce_ingest_frame,
+    caption_coalesce_tick,
+    caption_payload_for_language,
+    start_stream_session,
+)
 from interpretation.utils import (
     SUSI_STREAM_TYPE,
     clear_module_interpretation,
@@ -301,8 +307,87 @@ def test_caption_payload_target_lagging_translation_is_held():
     assert out is None
 
 
+def test_caption_payload_finalize_falls_back_to_transcript():
+    out = caption_payload_for_language(
+        {"chunk_id": "4", "transcript": "world", "translation": ""},
+        target_requested=True,
+        seen_translation=True,
+        finalize=True,
+    )
+    assert out["translation"] == "world"
+
+
 def test_caption_payload_empty_when_no_text():
     out = caption_payload_for_language(
         {"chunk_id": "3"}, target_requested=False, seen_translation=False
     )
     assert out is None
+
+
+# -- caption partial coalesce ------------------------------------------
+
+
+def _source_payload(data):
+    return caption_payload_for_language(
+        data, target_requested=False, seen_translation=False, finalize=True
+    )
+
+
+def test_caption_coalesce_emits_on_chunk_change_with_full_text():
+    state: dict = {}
+    partial = {"chunk_id": "1", "transcript": "hello", "translation": "hello"}
+    final = {"chunk_id": "1", "transcript": "hello world", "translation": "hello world"}
+    nxt = {"chunk_id": "2", "transcript": "next", "translation": "next"}
+    assert caption_coalesce_ingest_frame(state, partial, _source_payload, now=0.0) == []
+    assert caption_coalesce_ingest_frame(state, final, _source_payload, now=0.1) == []
+    assert caption_coalesce_tick(state, _source_payload, now=0.2) is None
+    out = caption_coalesce_ingest_frame(state, nxt, _source_payload, now=0.3)
+    assert out == [final]
+
+
+def test_caption_coalesce_emits_skipped_chunk_ids():
+    state: dict = {}
+    caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": 2, "transcript": "two", "translation": "two"},
+        _source_payload,
+        now=0.0,
+    )
+    out = caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": 5, "transcript": "five", "translation": "five"},
+        _source_payload,
+        now=0.1,
+    )
+    assert [item["chunk_id"] for item in out] == [2]
+
+
+def test_caption_coalesce_tick_emits_trailing_chunk():
+    state: dict = {}
+    caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": "1", "transcript": "last line", "translation": "last line"},
+        _source_payload,
+        now=0.0,
+    )
+    assert caption_coalesce_tick(state, _source_payload, now=0.2) is None
+    out = caption_coalesce_tick(state, _source_payload, now=0.7)
+    assert out["transcript"] == "last line"
+    assert caption_coalesce_tick(state, _source_payload, now=1.2) is None
+
+
+def test_caption_coalesce_normalizes_chunk_id_types():
+    state: dict = {}
+    caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": 1, "transcript": "one", "translation": "one"},
+        _source_payload,
+        now=0.0,
+    )
+    out = caption_coalesce_ingest_frame(
+        state,
+        {"chunk_id": "2", "transcript": "two", "translation": "two"},
+        _source_payload,
+        now=0.1,
+    )
+    assert out[0]["chunk_id"] == 1

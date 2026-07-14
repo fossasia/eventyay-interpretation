@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import time
+
 from .utils import SUSI_STREAM_TYPE
+
+# ponytail: emit on chunk rollover; tick only for trailing phrase
+CAPTION_QUIET_FLUSH_SECONDS = 0.6
 
 
 def _provider_config(provider_name: str):
@@ -10,7 +15,7 @@ def _provider_config(provider_name: str):
 
 
 def caption_payload_for_language(
-    data: dict, target_requested: bool, seen_translation: bool
+    data: dict, target_requested: bool, seen_translation: bool, *, finalize: bool = False
 ):
     """Build the SSE caption payload for one event, or ``None`` to skip it.
 
@@ -53,8 +58,98 @@ def caption_payload_for_language(
             "translation": transcript,
         }
 
-    # Translation is expected but lagging for this chunk: hold the last caption.
+    # Translation is expected but lagging for this chunk: hold while streaming.
+    if finalize and transcript:
+        return {
+            "chunk_id": chunk_id,
+            "transcript": transcript,
+            "translation": transcript,
+        }
     return None
+
+
+def _normalize_chunk_id(value) -> int | str | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _emit_chunk(state: dict, chunk_id, build_payload) -> dict | None:
+    emitted_chunks = state.setdefault("emitted_chunks", set())
+    if chunk_id in emitted_chunks:
+        return None
+    data = state.get("frames", {}).get(chunk_id)
+    if not data:
+        return None
+    payload = build_payload(data)
+    if not payload:
+        return None
+    emitted_chunks.add(chunk_id)
+    return payload
+
+
+def caption_coalesce_flush(state: dict, build_payload) -> dict | None:
+    """Force-emit the active chunk (stream end)."""
+    chunk_id = state.get("chunk_id")
+    if chunk_id is None:
+        return None
+    return _emit_chunk(state, chunk_id, build_payload)
+
+
+def caption_coalesce_ingest_frame(
+    state: dict,
+    data: dict,
+    build_payload,
+    *,
+    now: float | None = None,
+) -> list[dict]:
+    """Track every upstream frame; emit a chunk only once it is finished."""
+    now = time.monotonic() if now is None else now
+    chunk_id = _normalize_chunk_id(data.get("chunk_id"))
+    if chunk_id is None:
+        return []
+
+    frames = state.setdefault("frames", {})
+    frames[chunk_id] = data
+
+    out: list[dict] = []
+    prev_chunk = state.get("chunk_id")
+
+    if prev_chunk is not None and chunk_id != prev_chunk:
+        if isinstance(prev_chunk, int) and isinstance(chunk_id, int) and chunk_id > prev_chunk:
+            for cid in range(prev_chunk, chunk_id):
+                flushed = _emit_chunk(state, cid, build_payload)
+                if flushed:
+                    out.append(flushed)
+        else:
+            flushed = _emit_chunk(state, prev_chunk, build_payload)
+            if flushed:
+                out.append(flushed)
+
+    state["chunk_id"] = chunk_id
+    state["last_partial_monotonic"] = now
+    return out
+
+
+def caption_coalesce_tick(
+    state: dict,
+    build_payload,
+    *,
+    now: float | None = None,
+    quiet_flush_seconds: float = CAPTION_QUIET_FLUSH_SECONDS,
+) -> dict | None:
+    """Emit the last open chunk after the speaker pauses."""
+    chunk_id = state.get("chunk_id")
+    if chunk_id is None or chunk_id in state.get("emitted_chunks", set()):
+        return None
+    now = time.monotonic() if now is None else now
+    last_partial = state.get("last_partial_monotonic", 0.0)
+    if now - last_partial < quiet_flush_seconds:
+        return None
+    return _emit_chunk(state, chunk_id, build_payload)
 
 
 def start_stream_session(

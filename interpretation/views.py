@@ -22,7 +22,12 @@ from .forms import (
 )
 from .models import RoomInterpretation
 from .room_control import serialize_room_interpretation
-from .services import caption_payload_for_language
+from .services import (
+    caption_coalesce_flush,
+    caption_coalesce_ingest_frame,
+    caption_coalesce_tick,
+    caption_payload_for_language,
+)
 from .settings import (
     get_auth_token,
     get_base_url,
@@ -281,7 +286,9 @@ class InterpretationRoomCaptions(View):
                         continue
                     if not isinstance(data, dict) or data.get("status") == "connected":
                         continue
-                    state["latest"] = data
+                    with state["lock"]:
+                        state["events"].append(data)
+                        state["latest"] = data
                     events += 1
             except requests.RequestException as exc:
                 logger.warning(
@@ -305,35 +312,81 @@ class InterpretationRoomCaptions(View):
 
         async def event_stream():
             yield 'data: {"status": "connected"}\n\n'
-            state = {"latest": None, "done": False}
+            state = {
+                "latest": None,
+                "events": [],
+                "lock": threading.Lock(),
+                "done": False,
+            }
             threading.Thread(target=consume, args=(state,), daemon=True).start()
             poll = sync_to_async(client.latest_transcript, thread_sensitive=False)
             target_requested = bool(target_lang)
             seen_translation = False
-            last_serialized = None
+            coalesce_state: dict = {}
             forwarded = 0
             loops = int(CAPTION_STREAM_MAX_SECONDS / CAPTION_POLL_INTERVAL)
+
+            def build_payload(data):
+                return caption_payload_for_language(
+                    data,
+                    target_requested,
+                    seen_translation,
+                    finalize=True,
+                )
+
+            def emit_payloads(payloads):
+                nonlocal forwarded
+                lines = []
+                for payload in payloads:
+                    forwarded += 1
+                    lines.append(f"data: {json.dumps(payload)}\n\n")
+                return lines
+
             try:
                 for _i in range(loops):
-                    data = state["latest"]
-                    if data is None:
+                    with state["lock"]:
+                        pending_events = state["events"]
+                        state["events"] = []
+
+                    out_lines = []
+                    for data in pending_events:
+                        if data.get("translation"):
+                            seen_translation = True
+                        out_lines.extend(
+                            emit_payloads(
+                                caption_coalesce_ingest_frame(
+                                    coalesce_state, data, build_payload
+                                )
+                            )
+                        )
+
+                    tick_payload = caption_coalesce_tick(
+                        coalesce_state, build_payload
+                    )
+                    if tick_payload:
+                        out_lines.extend(emit_payloads([tick_payload]))
+
+                    if out_lines:
+                        for line in out_lines:
+                            yield line
+                    elif state["done"]:
+                        data = None
                         try:
                             result = await poll(tenant_id)
                             data = result.data or None
                         except SusiError:
                             data = None
-                    if data:
-                        if data.get("translation"):
-                            seen_translation = True
-                        payload = caption_payload_for_language(
-                            data, target_requested, seen_translation
-                        )
-                        if payload:
-                            serialized = json.dumps(payload)
-                            if serialized != last_serialized:
-                                last_serialized = serialized
-                                forwarded += 1
-                                yield f"data: {serialized}\n\n"
+                        if data:
+                            if data.get("translation"):
+                                seen_translation = True
+                            emitted = emit_payloads(
+                                caption_coalesce_ingest_frame(
+                                    coalesce_state, data, build_payload
+                                )
+                            )
+                            if emitted:
+                                for line in emitted:
+                                    yield line
                             else:
                                 yield ": keepalive\n\n"
                         else:
@@ -343,6 +396,10 @@ class InterpretationRoomCaptions(View):
                     await asyncio.sleep(CAPTION_POLL_INTERVAL)
             finally:
                 state["done"] = True
+                flushed = caption_coalesce_flush(coalesce_state, build_payload)
+                if flushed:
+                    forwarded += 1
+                    yield f"data: {json.dumps(flushed)}\n\n"
                 logger.info(
                     "Caption SSE client disconnected event=%s room=%s tenant_id=%s "
                     "captions_forwarded=%s",
