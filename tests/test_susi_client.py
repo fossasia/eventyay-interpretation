@@ -98,13 +98,16 @@ def test_login_returns_token_from_cookie(monkeypatch):
         assert url.endswith("/auth/api/login")
         assert kwargs["json"] == {"email": "a@b.c", "password": "secret"}
         return FakeResponse(
-            200, {"status": "success"}, cookies={"access_token_cookie": "jwt-xyz"}
+            200,
+            {"status": "success", "email": "a@b.c", "name": "Jane"},
+            cookies={"access_token_cookie": "jwt-xyz"},
         )
 
     monkeypatch.setattr(requests, "post", fake_post)
     client = SusiClient("https://example.com")
-    token = client.login("a@b.c", "secret")
-    assert token == "jwt-xyz"
+    result = client.login("a@b.c", "secret")
+    assert result.token == "jwt-xyz"
+    assert result.email == "a@b.c"
     assert client.auth_token == "jwt-xyz"
 
 

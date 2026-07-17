@@ -1,19 +1,24 @@
 from django.contrib import messages
-from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from eventyay.base.models import Event
-from eventyay.control.views.event import EventSettingsFormView, EventSettingsViewMixin
+from django.views.generic import FormView
+from eventyay.control.permissions import EventPermissionRequiredMixin
+from eventyay.control.views.event import EventSettingsViewMixin
 
-from .forms import InterpretationSettingsForm
-from .settings import (
-    SETTING_AUTH_TOKEN,
-    SETTING_BASE_URL,
-    is_interpretation_enabled,
-    get_base_url,
+from .forms import (
+    CONNECT_POST_KEY,
+    DISCONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    TEST_POST_KEY,
 )
-from .susi import SusiClient, SusiError
+from .settings import (
+    get_base_url,
+    get_susi_email,
+    get_susi_name,
+    is_interpretation_enabled,
+    is_susi_configured,
+)
 
 PLUGIN_MODULE = "interpretation"
 
@@ -32,14 +37,20 @@ class InterpretationEnabledMixin:
 class InterpretationDashboard(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
-    EventSettingsFormView,
+    EventPermissionRequiredMixin,
+    FormView,
 ):
-    """Configure the per-event SUSI connection and test connectivity."""
+    """Interpretation overview and SUSI connection settings for organizers."""
 
-    model = Event
+    form_class = InterpretationSettingsForm
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
-    form_class = InterpretationSettingsForm
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["obj"] = self.request.event
+        kwargs["prefix"] = "interpretation"
+        return kwargs
 
     def get_success_url(self):
         return reverse(
@@ -54,59 +65,56 @@ class InterpretationDashboard(
         ctx = super().get_context_data(**kwargs)
         event = self.request.event
         ctx["event"] = event
-        ctx["plugin_module"] = PLUGIN_MODULE
         ctx["plugin_enabled"] = PLUGIN_MODULE in event.get_plugins()
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
+        ctx["susi_configured"] = is_susi_configured(event)
+        ctx["susi_server_host"] = _susi_host(get_base_url(event))
+        ctx["susi_account"] = _susi_account_label(event)
         return ctx
 
-    @transaction.atomic
     def post(self, request, *args, **kwargs):
         form = self.get_form()
+        if DISCONNECT_POST_KEY in request.POST:
+            form.run_disconnect_action(request)
+            return redirect(self.get_success_url())
+        if CONNECT_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_connect_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
+        if TEST_POST_KEY in request.POST:
+            if form.is_valid():
+                if form.has_changed():
+                    form.save()
+                form.run_test_action(request)
+            else:
+                return self.form_invalid(form)
+            return redirect(self.get_success_url())
         if form.is_valid():
             form.save()
-            self._save_decoupled(form)
-            if form.has_changed():
-                request.event.log_action(
-                    "eventyay.event.settings",
-                    user=request.user,
-                    data={
-                        k: form.cleaned_data.get(k)
-                        for k in form.changed_data
-                        if k != "interpretation_auth_token"
-                    },
-                )
-            if "test" in request.POST:
-                self._test_connection(form)
-            else:
-                messages.success(request, _("Connection settings saved."))
+            messages.success(request, _("Your changes have been saved."))
             return redirect(self.get_success_url())
-
         messages.error(
             request,
-            _("Please correct the errors below before saving."),
+            _("We could not save your changes. See below for details."),
         )
-        return self.render_to_response(self.get_context_data(form=form))
+        return self.form_invalid(form)
 
-    def _test_connection(self, form):
-        base_url = form.cleaned_data.get(SETTING_BASE_URL) or get_base_url(
-            self.request.event
-        )
-        token = form.cleaned_data.get(SETTING_AUTH_TOKEN, "")
-        client = SusiClient(base_url, token)
-        try:
-            result = client.verify()
-        except SusiError as exc:
-            messages.error(
-                self.request, _("Connection failed: %(error)s") % {"error": str(exc)}
-            )
-            return
-        if result.ok:
-            messages.success(
-                self.request,
-                _("Connection successful: %(message)s") % {"message": result.message},
-            )
-        else:
-            messages.warning(
-                self.request,
-                _("Connection issue: %(message)s") % {"message": result.message},
-            )
+
+def _susi_account_label(event) -> str:
+    name = get_susi_name(event)
+    email = get_susi_email(event)
+    if name and email:
+        return f"{name} ({email})"
+    return email or name
+
+
+def _susi_host(base_url: str) -> str:
+    if not base_url:
+        return ""
+    from urllib.parse import urlparse
+
+    return urlparse(base_url).netloc or base_url

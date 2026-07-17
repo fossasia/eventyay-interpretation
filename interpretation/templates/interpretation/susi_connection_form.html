@@ -1,0 +1,91 @@
+{% load i18n bootstrap3 %}
+<div class="interpretation-susi-connection">
+    <p class="text-muted interpretation-susi-intro">
+        {% blocktrans trimmed %}
+            Sign in with a SUSI Translator service account for this event.
+        {% endblocktrans %}
+    </p>
+
+    {% bootstrap_field form.interpretation_base_url layout="horizontal" %}
+
+    {% if form.is_connected %}
+        <div class="form-group">
+            <div class="col-md-offset-3 col-md-9">
+                <div class="alert alert-success interpretation-susi-alert">
+                    {% blocktrans trimmed with account=form.connected_label %}
+                        Connected to SUSI as {{ account }}.
+                    {% endblocktrans %}
+                </div>
+                <div class="interpretation-susi-actions">
+                    <button type="submit" name="interpretation_disconnect" value="1" class="btn btn-warning">
+                        {% trans "Disconnect" %}
+                    </button>
+                    <button type="submit" name="interpretation_test_connection" value="1" class="btn btn-default">
+                        {% trans "Test connection" %}
+                    </button>
+                </div>
+                <p class="text-muted interpretation-susi-hint">
+                    {% trans "Sign in again to replace the stored session (for example after token expiry)." %}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    {% bootstrap_field form.susi_connect_email layout="horizontal" show_help=False %}
+    {% bootstrap_field form.susi_connect_password layout="horizontal" show_help=False %}
+
+    <div class="form-group">
+        <div class="col-md-offset-3 col-md-9">
+            <button type="submit" name="interpretation_connect" value="1" class="btn btn-primary">
+                {% if form.is_connected %}
+                    {% trans "Reconnect" %}
+                {% else %}
+                    {% trans "Connect to SUSI" %}
+                {% endif %}
+            </button>
+        </div>
+    </div>
+
+    <hr class="interpretation-susi-divider">
+
+    {% bootstrap_field form.interpretation_is_enabled layout="horizontal" %}
+
+    <div class="form-group submit-group">
+        <div class="col-md-offset-3 col-md-9">
+            <button type="submit" class="btn btn-primary btn-save">
+                {% trans "Save" %}
+            </button>
+        </div>
+    </div>
+</div>
+<style>
+    .interpretation-susi-connection .interpretation-susi-intro {
+        margin: 0 0 1.25rem 0;
+        padding-left: 25%;
+    }
+    @media (max-width: 991px) {
+        .interpretation-susi-connection .interpretation-susi-intro {
+            padding-left: 0;
+        }
+    }
+    .interpretation-susi-connection .interpretation-susi-alert {
+        margin-bottom: 0.75rem;
+    }
+    .interpretation-susi-connection .interpretation-susi-actions .btn {
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .interpretation-susi-connection .interpretation-susi-hint {
+        margin: 0.75rem 0 0;
+    }
+    .interpretation-susi-connection .interpretation-susi-divider {
+        margin: 1.5rem 0 1.25rem;
+        border-color: #e5e5e5;
+    }
+    .interpretation-susi-connection .form-group {
+        margin-bottom: 1rem;
+    }
+    .interpretation-susi-connection .help-block {
+        margin-bottom: 0;
+    }
+</style>

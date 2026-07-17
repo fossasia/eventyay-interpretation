@@ -8,6 +8,7 @@ from interpretation.settings import (
     get_base_url,
     get_susi_client,
     is_interpretation_enabled,
+    is_susi_configured,
 )
 
 
@@ -52,3 +53,24 @@ def test_get_susi_client_uses_event_settings():
     client = get_susi_client(event)
     assert client.base_url == "https://example.com/"
     assert client.auth_token == "tok"
+
+
+def test_is_susi_configured_requires_url_and_token():
+    assert is_susi_configured(_FakeEvent()) is False
+    assert (
+        is_susi_configured(
+            _FakeEvent({SETTING_BASE_URL: "https://example.com"})
+        )
+        is False
+    )
+    assert (
+        is_susi_configured(
+            _FakeEvent(
+                {
+                    SETTING_BASE_URL: "https://example.com",
+                    SETTING_AUTH_TOKEN: "tok",
+                }
+            )
+        )
+        is True
+    )
