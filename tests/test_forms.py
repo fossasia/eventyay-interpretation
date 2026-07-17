@@ -142,3 +142,4 @@ def test_connect_with_credentials_is_valid(monkeypatch):
     form.run_connect_action(request=type("R", (), {})())
     assert form.obj.settings.get(SETTING_AUTH_TOKEN) == "jwt"
     assert form.obj.settings.get(SETTING_SUSI_EMAIL) == "bot@example.com"
+    assert form.obj.settings.get(SETTING_IS_ENABLED, as_type=bool) is True

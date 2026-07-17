@@ -1,0 +1,10 @@
+{% load i18n bootstrap3 %}
+<div class="interpretation-fields">
+    {% bootstrap_field form.interpretation_base_url layout="vertical" show_help=False %}
+    {% bootstrap_field form.susi_connect_email layout="vertical" show_help=False %}
+    {% bootstrap_field form.susi_connect_password layout="vertical" show_help=False %}
+</div>
+<button type="submit" name="interpretation_connect" value="1" class="btn btn-primary btn-save interpretation-signin-btn">
+    <span class="fa fa-sign-in"></span>
+    {% trans "Sign in" %}
+</button>
