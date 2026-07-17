@@ -3,7 +3,6 @@ from eventyay.common.urls import OrganizerSlugConverter  # noqa: F401
 
 from .views import InterpretationDashboard
 
-
 urlpatterns = [
     path(
         "common/event/<orgslug:organizer>/<slug:event>/interpretation/",

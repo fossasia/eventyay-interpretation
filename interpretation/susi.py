@@ -16,9 +16,10 @@ Relevant SUSI endpoints used here:
 
 from __future__ import annotations
 
-import requests
 from dataclasses import dataclass
 from urllib.parse import urljoin
+
+import requests
 
 DEFAULT_TIMEOUT = 10
 

@@ -47,10 +47,6 @@ class _FakeSettings:
     def _cache(self):
         return self._data.keys()
 
-    def freeze(self):
-        return self._data.copy()
-
-
 class _FakeEvent:
     def __init__(self, settings=None):
         self.settings = _FakeSettings(settings)

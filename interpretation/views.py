@@ -9,8 +9,8 @@ from eventyay.control.views.event import EventSettingsViewMixin
 from .forms import (
     CONNECT_POST_KEY,
     DISCONNECT_POST_KEY,
-    InterpretationSettingsForm,
     TEST_POST_KEY,
+    InterpretationSettingsForm,
 )
 from .settings import (
     get_base_url,
