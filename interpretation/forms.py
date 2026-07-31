@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
 from eventyay.base.forms import SettingsForm
 
+from .models import RoomInterpretation
 from .settings import (
     SETTING_BASE_URL,
     SETTING_IS_ENABLED,
@@ -205,3 +206,54 @@ class InterpretationSettingsForm(SettingsForm):
                 request,
                 _("Connection issue: %(message)s") % {"message": result.message},
             )
+
+
+class RoomInterpretationForm(forms.ModelForm):
+    """Per-room interpretation configuration.
+
+    ``target_languages`` is stored as a JSON list but edited as a
+    comma-separated string for convenience.
+    """
+
+    target_languages = forms.CharField(
+        required=False,
+        label=_("Caption languages"),
+        help_text=_(
+            "Comma-separated language codes attendees can read captions in, e.g. de, fr."
+        ),
+        widget=forms.TextInput(attrs={"placeholder": "de, fr, es"}),
+    )
+
+    class Meta:
+        model = RoomInterpretation
+        fields = [
+            "stream_url",
+            "target_languages",
+            "transcription_provider",
+            "translation_provider",
+        ]
+        widgets = {
+            "stream_url": forms.URLInput(
+                attrs={
+                    "placeholder": (
+                        "https://www.youtube.com/watch?v=… or https://…/stream.m3u8"
+                    )
+                }
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and isinstance(self.instance.target_languages, list):
+            self.initial["target_languages"] = ", ".join(self.instance.target_languages)
+
+    def clean_target_languages(self):
+        raw = self.cleaned_data.get("target_languages") or ""
+        codes = [c.strip() for c in raw.split(",") if c.strip()]
+        seen = set()
+        result = []
+        for code in codes:
+            if code not in seen:
+                seen.add(code)
+                result.append(code)
+        return result

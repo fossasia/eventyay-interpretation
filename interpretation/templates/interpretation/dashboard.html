@@ -95,6 +95,10 @@
                                 </div>
                             </div>
                             <div class="interpretation-account-actions">
+                                <a class="btn btn-default"
+                                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                                    {% trans "View rooms" %}
+                                </a>
                                 <button type="submit" name="interpretation_test_connection" value="1" class="btn btn-default">
                                     {% trans "Test connection" %}
                                 </button>

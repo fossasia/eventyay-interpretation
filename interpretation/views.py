@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import FormView
+from django.views.generic import FormView, TemplateView
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
@@ -12,13 +12,19 @@ from .forms import (
     TEST_POST_KEY,
     InterpretationSettingsForm,
 )
+from .models import RoomInterpretation
+from .room_control import serialize_room_interpretation
 from .settings import (
+    INTERPRETER_NONE,
+    INTERPRETER_SUSI,
     get_base_url,
     get_susi_email,
     get_susi_name,
     is_interpretation_enabled,
     is_susi_configured,
+    is_susi_connected,
 )
+from .utils import room_settings_url
 
 PLUGIN_MODULE = "interpretation"
 
@@ -66,21 +72,22 @@ class InterpretationDashboard(
         event = self.request.event
         ctx["event"] = event
         ctx["interpretation_enabled"] = is_interpretation_enabled(event)
-        ctx["susi_configured"] = is_susi_configured(event)
+        ctx["susi_configured"] = is_susi_connected(event)
+        ctx["susi_ready"] = is_susi_configured(event)
         ctx["susi_server_host"] = _susi_host(get_base_url(event))
         ctx["susi_account"] = _susi_account_label(event)
         ctx["susi_welcome_name"] = _susi_welcome_name(event)
         ctx["interpretation_providers"] = [
-            {"id": "none", "label": _("None")},
-            {"id": "susi", "label": _("SUSI Translator")},
+            {"id": INTERPRETER_NONE, "label": _("None")},
+            {"id": INTERPRETER_SUSI, "label": _("SUSI Translator")},
         ]
-        ctx["selected_provider"] = "none"
+        ctx["selected_provider"] = INTERPRETER_NONE
         if not ctx["susi_configured"]:
             form = ctx.get("form")
             if form and form.errors:
-                ctx["selected_provider"] = "susi"
-            elif self.request.POST.get("interpretation_provider") == "susi":
-                ctx["selected_provider"] = "susi"
+                ctx["selected_provider"] = INTERPRETER_SUSI
+            elif self.request.POST.get("interpretation_provider") == INTERPRETER_SUSI:
+                ctx["selected_provider"] = INTERPRETER_SUSI
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -134,3 +141,38 @@ def _susi_host(base_url: str) -> str:
     from urllib.parse import urlparse
 
     return urlparse(base_url).netloc or base_url
+
+
+class InterpretationRoomList(
+    InterpretationEnabledMixin, EventPermissionRequiredMixin, TemplateView
+):
+    """List the event's rooms with their interpretation status."""
+
+    template_name = "interpretation/rooms.html"
+    permission = "can_change_event_settings"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        event = self.request.event
+        existing = {
+            ri.room_id: ri
+            for ri in RoomInterpretation.objects.filter(room__event=event)
+        }
+        rooms = []
+        for room in event.rooms.filter(deleted=False):
+            interpretation = existing.get(room.pk)
+            data = serialize_room_interpretation(room, event, interpretation)
+            rooms.append(
+                {
+                    "room": room,
+                    "status": data["status"],
+                    "caption_languages": data["target_languages"],
+                    "room_settings_url": room_settings_url(
+                        event.organizer.slug, event.slug, room.pk
+                    ),
+                }
+            )
+        ctx["event"] = event
+        ctx["interpretation_ready"] = is_susi_configured(event)
+        ctx["rooms"] = rooms
+        return ctx

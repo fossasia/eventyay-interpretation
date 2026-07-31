@@ -1,6 +1,10 @@
 """Tests for InterpretationSettingsForm validation and connect flow."""
 
-from interpretation.forms import CONNECT_POST_KEY, InterpretationSettingsForm
+from interpretation.forms import (
+    CONNECT_POST_KEY,
+    InterpretationSettingsForm,
+    RoomInterpretationForm,
+)
 from interpretation.settings import (
     SETTING_AUTH_TOKEN,
     SETTING_BASE_URL,
@@ -214,3 +218,42 @@ def test_save_does_not_persist_connect_credentials():
     assert "susi_connect_password" not in stored
     assert "susi_connect_email" not in stored
     assert stored.get(SETTING_BASE_URL) == PUBLIC_URL
+
+
+def test_room_form_parses_comma_separated_languages():
+    form = RoomInterpretationForm(
+        data={
+            "stream_url": "https://stream.example.com/r.m3u8",
+            "target_languages": "de, fr ,es",
+            "transcription_provider": "",
+            "translation_provider": "",
+        }
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["target_languages"] == ["de", "fr", "es"]
+
+
+def test_room_form_deduplicates_languages():
+    form = RoomInterpretationForm(
+        data={
+            "stream_url": "",
+            "target_languages": "de, de, fr",
+            "transcription_provider": "",
+            "translation_provider": "",
+        }
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["target_languages"] == ["de", "fr"]
+
+
+def test_room_form_empty_languages_is_empty_list():
+    form = RoomInterpretationForm(
+        data={
+            "stream_url": "",
+            "target_languages": "",
+            "transcription_provider": "",
+            "translation_provider": "",
+        }
+    )
+    assert form.is_valid(), form.errors
+    assert form.cleaned_data["target_languages"] == []
