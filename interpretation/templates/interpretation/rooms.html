@@ -14,15 +14,15 @@
     </p>
 
     <p class="text-muted interpretation-rooms-lead">
-        {% trans "Live interpretation activity per room. Use Room settings to configure caption languages and sessions." %}
+        {% trans "Each room can use a different interpreter. Configure interpreters and sessions in room settings." %}
     </p>
 
-    {% if not interpretation_ready %}
+    {% if not any_interpreter_configured %}
         <div class="alert alert-warning">
             {% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug as dashboard_url %}
             {% blocktrans trimmed with url=dashboard_url %}
-                Interpretation is not ready yet. Connect and enable SUSI on the
-                <a href="{{ url }}">interpretation dashboard</a> first.
+                Connect at least one interpreter on the
+                <a href="{{ url }}">interpretation dashboard</a> before starting rooms.
             {% endblocktrans %}
         </div>
     {% endif %}
@@ -32,6 +32,7 @@
             <thead>
                 <tr>
                     <th>{% trans "Room" %}</th>
+                    <th>{% trans "Interpreter" %}</th>
                     <th>{% trans "Session" %}</th>
                     <th>{% trans "Caption languages" %}</th>
                     <th class="text-right">{% trans "Actions" %}</th>
@@ -41,6 +42,13 @@
                 {% for entry in rooms %}
                     <tr>
                         <td class="interpretation-room-name">{{ entry.room.name }}</td>
+                        <td>
+                            {% if entry.room_enabled %}
+                                {{ entry.interpreter_label }}
+                            {% else %}
+                                <span class="text-muted">{% trans "Off" %}</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if entry.status == "running" %}
                                 <span class="interpretation-badge interpretation-badge--success">{% trans "Running" %}</span>
@@ -66,7 +74,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="4" class="text-muted">{% trans "This event has no rooms yet." %}</td>
+                        <td colspan="5" class="text-muted">{% trans "This event has no rooms yet." %}</td>
                     </tr>
                 {% endfor %}
             </tbody>

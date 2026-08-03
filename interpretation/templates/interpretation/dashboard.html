@@ -13,78 +13,50 @@
                 <span class="fa fa-language"></span>
             </div>
             <div class="interpretation-hero-text">
-                {% if susi_configured %}
-                    <h2 class="interpretation-hero-title">
-                        {% blocktrans trimmed with name=susi_welcome_name %}
-                            Welcome, {{ name }}
-                        {% endblocktrans %}
-                    </h2>
-                    <p class="interpretation-hero-lead">
-                        {% trans "SUSI Translator is now active in eventyay videos!" %}
-                    </p>
-                {% else %}
-                    <h2 class="interpretation-hero-title">{% trans "Welcome to the interpretation dashboard" %}</h2>
-                    <p class="interpretation-hero-lead">
-                        {% trans "Connect an interpretation provider to offer live translation and captions in eventyay video." %}
-                    </p>
-                {% endif %}
+                <h2 class="interpretation-hero-title">{% trans "Interpretation credentials" %}</h2>
+                <p class="interpretation-hero-lead">
+                    {% trans "Connect interpreter accounts for this event. Each room chooses its own interpreter in room settings." %}
+                </p>
             </div>
         </header>
 
-        {% if not susi_configured %}
-            <div class="interpretation-content interpretation-content--setup">
-                <div class="interpretation-provider-row">
-                    <label class="interpretation-provider-label" for="interpretation-provider">
-                        {% trans "Choose your interpreter" %}
-                    </label>
-                    <select id="interpretation-provider" name="interpretation_provider" class="form-control interpretation-provider-select">
-                        {% for provider in interpretation_providers %}
-                            <option value="{{ provider.id }}"{% if provider.id == selected_provider %} selected{% endif %}>
-                                {{ provider.label }}
-                            </option>
-                        {% endfor %}
-                    </select>
+        <div class="interpretation-content">
+            <div class="interpretation-status-grid">
+                <div class="interpretation-stat">
+                    <span class="interpretation-stat-label">{% trans "Event" %}</span>
+                    <span class="interpretation-stat-value">{{ event.name }}</span>
                 </div>
-
-                <div class="interpretation-provider-panel interpretation-signin-section" data-provider-panel="susi"{% if selected_provider != "susi" %} hidden{% endif %}>
-                    <h3 class="interpretation-section-title interpretation-section-title--signin">{% trans "Sign in to SUSI Translator" %}</h3>
-                    <p class="interpretation-section-hint interpretation-section-hint--signin text-muted">
-                        {% trans "Enter your SUSI account details to link interpretation to this event." %}
-                    </p>
-                    {% include "interpretation/susi_login_form.html" with form=form %}
+                <div class="interpretation-stat">
+                    <span class="interpretation-stat-label">{% trans "Event code" %}</span>
+                    <span class="interpretation-stat-value">{{ event.slug }}</span>
                 </div>
             </div>
-        {% else %}
-            <div class="interpretation-content">
-                <div class="interpretation-status-grid">
-                    <div class="interpretation-stat">
-                        <span class="interpretation-stat-label">{% trans "Interpreter" %}</span>
-                        <span class="interpretation-stat-value">
-                            <span class="interpretation-badge interpretation-badge--primary">{% trans "SUSI Translator" %}</span>
-                        </span>
-                    </div>
-                    <div class="interpretation-stat">
-                        <span class="interpretation-stat-label">{% trans "Event" %}</span>
-                        <span class="interpretation-stat-value">{{ event.name }}</span>
-                    </div>
-                    <div class="interpretation-stat">
-                        <span class="interpretation-stat-label">{% trans "Event code" %}</span>
-                        <span class="interpretation-stat-value">{{ event.slug }}</span>
-                    </div>
-                    <div class="interpretation-stat">
-                        <span class="interpretation-stat-label">{% trans "Live interpretation" %}</span>
-                        <span class="interpretation-stat-value">
-                            {% if interpretation_enabled %}
-                                <span class="interpretation-badge interpretation-badge--success">{% trans "On" %}</span>
-                            {% else %}
-                                <span class="interpretation-badge">{% trans "Off" %}</span>
-                            {% endif %}
-                        </span>
-                    </div>
-                </div>
 
+            <div class="panel panel-default interpretation-panel">
+                <div class="panel-heading">{% trans "Available interpreters" %}</div>
+                <div class="panel-body">
+                    <ul class="list-unstyled interpretation-credential-list">
+                        {% for interpreter in available_interpreters %}
+                            {% if interpreter.id != "none" %}
+                                <li class="interpretation-credential-item">
+                                    <div class="interpretation-credential-main">
+                                        <strong>{{ interpreter.label }}</strong>
+                                        {% if interpreter.configured %}
+                                            <span class="interpretation-badge interpretation-badge--success">{% trans "Connected" %}</span>
+                                        {% else %}
+                                            <span class="interpretation-badge">{% trans "Not connected" %}</span>
+                                        {% endif %}
+                                    </div>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            {% if susi_connected %}
                 <div class="panel panel-default interpretation-panel">
-                    <div class="panel-heading">{% trans "Connected account" %}</div>
+                    <div class="panel-heading">{% trans "SUSI Translator account" %}</div>
                     <div class="panel-body">
                         <div class="interpretation-account-card">
                             <div class="interpretation-account-main">
@@ -110,38 +82,20 @@
                     </div>
                 </div>
 
-                <div class="panel panel-default interpretation-panel">
-                    <div class="panel-heading">{% trans "Settings" %}</div>
-                    <div class="panel-body">
-                        <div class="interpretation-enable-card">
-                            {% bootstrap_field form.interpretation_is_enabled show_label=True show_help=False %}
-                            <button type="submit" class="btn btn-primary btn-save">{% trans "Save" %}</button>
-                        </div>
-                    </div>
-                </div>
-
                 <div class="interpretation-content-footer">
                     {% include "interpretation/susi_connected_panel.html" with form=form %}
                 </div>
-            </div>
-        {% endif %}
+            {% else %}
+                <div class="panel panel-default interpretation-panel">
+                    <div class="panel-heading">{% trans "Connect SUSI Translator" %}</div>
+                    <div class="panel-body interpretation-signin-section">
+                        <p class="interpretation-section-hint text-muted">
+                            {% trans "Sign in once here. Rooms that select SUSI will use this account." %}
+                        </p>
+                        {% include "interpretation/susi_login_form.html" with form=form %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
     </form>
-
-    {% if not susi_configured %}
-        <script>
-            (function () {
-                var select = document.getElementById("interpretation-provider");
-                if (!select) return;
-                var panels = document.querySelectorAll("[data-provider-panel]");
-                function sync() {
-                    var value = select.value;
-                    panels.forEach(function (panel) {
-                        panel.hidden = panel.getAttribute("data-provider-panel") !== value;
-                    });
-                }
-                select.addEventListener("change", sync);
-                sync();
-            })();
-        </script>
-    {% endif %}
 {% endblock %}
