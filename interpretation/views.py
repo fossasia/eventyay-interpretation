@@ -1,8 +1,8 @@
 from django.contrib import messages
-from django.shortcuts import redirect
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
-from django.views.generic import FormView, TemplateView
+from django.views import View
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
@@ -10,18 +10,21 @@ from .backends import list_available_interpreters
 from .forms import (
     CONNECT_POST_KEY,
     DISCONNECT_POST_KEY,
+    ROOM_ACTION_KEY,
+    ROOM_ID_KEY,
     TEST_POST_KEY,
     InterpretationSettingsForm,
+    RoomConfigureForm,
+    room_form_prefix,
 )
 from .models import RoomInterpretation
-from .room_control import serialize_room_interpretation
-from .settings import (
-    get_base_url,
-    get_susi_email,
-    get_susi_name,
-    is_susi_connected,
+from .room_control import (
+    serialize_room_interpretation,
+    start_room_session,
+    stop_room_session,
+    update_room_interpretation,
 )
-from .utils import room_settings_url
+from .settings import get_base_url, get_susi_email, get_susi_name, is_susi_connected
 
 PLUGIN_MODULE = "interpretation"
 
@@ -41,42 +44,64 @@ class InterpretationDashboard(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
     EventPermissionRequiredMixin,
-    FormView,
+    View,
 ):
-    """Interpreter credential management for organizers."""
+    """Per-room interpretation configuration for organizers."""
 
-    form_class = InterpretationSettingsForm
     template_name = "interpretation/dashboard.html"
     permission = "can_change_event_settings"
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["obj"] = self.request.event
-        kwargs["prefix"] = "interpretation"
-        return kwargs
-
-    def get_success_url(self):
-        return reverse(
+    def get_success_url(self, room_id=None):
+        url = reverse(
             "plugins:interpretation:dashboard",
             kwargs={
                 "organizer": self.request.event.organizer.slug,
                 "event": self.request.event.slug,
             },
         )
+        if room_id:
+            return f"{url}?room={room_id}#room-{room_id}"
+        return url
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        event = self.request.event
-        ctx["event"] = event
-        ctx["susi_connected"] = is_susi_connected(event)
-        ctx["susi_server_host"] = _susi_host(get_base_url(event))
-        ctx["susi_account"] = _susi_account_label(event)
-        ctx["susi_welcome_name"] = _susi_welcome_name(event)
-        ctx["available_interpreters"] = list_available_interpreters(event)
-        return ctx
+    def get(self, request, *args, **kwargs):
+        from django.shortcuts import render
+
+        return render(request, self.template_name, self.get_context_data())
 
     def post(self, request, *args, **kwargs):
-        form = self.get_form()
+        event = request.event
+        room_id = request.POST.get(ROOM_ID_KEY)
+        action = request.POST.get(ROOM_ACTION_KEY)
+
+        if room_id:
+            room = get_object_or_404(
+                event.rooms.filter(deleted=False),
+                pk=room_id,
+            )
+            prefix = room_form_prefix(room.pk)
+            redirect_url = self.get_success_url(room.pk)
+
+            if action == "save":
+                return self._handle_room_save(request, room, event, prefix, redirect_url)
+            if action == "connect":
+                return self._handle_room_connect(request, room, event, prefix, redirect_url)
+            if action == "test":
+                return self._handle_room_test(request, room, event, prefix, redirect_url)
+            if action == "disconnect":
+                return self._handle_room_disconnect(request, room, event, prefix, redirect_url)
+            if action == "start":
+                return self._handle_room_start(request, room, event, prefix, redirect_url)
+            if action == "stop":
+                return self._handle_room_stop(request, room, event, redirect_url)
+
+            messages.error(request, _("Unknown room action."))
+            return redirect(redirect_url)
+
+        form = InterpretationSettingsForm(
+            obj=event,
+            data=request.POST,
+            prefix="interpretation",
+        )
         if DISCONNECT_POST_KEY in request.POST:
             form.run_disconnect_action(request)
             return redirect(self.get_success_url())
@@ -85,7 +110,7 @@ class InterpretationDashboard(
                 form.save_pending_connect()
                 form.run_connect_action(request)
             else:
-                return self.form_invalid(form)
+                messages.error(request, _("Could not connect to SUSI."))
             return redirect(self.get_success_url())
         if TEST_POST_KEY in request.POST:
             if form.is_valid():
@@ -93,23 +118,193 @@ class InterpretationDashboard(
                     form.save()
                 form.run_test_action(request)
             else:
-                return self.form_invalid(form)
+                messages.error(request, _("Could not test the connection."))
             return redirect(self.get_success_url())
         if form.is_valid():
             form.save()
             messages.success(request, _("Your changes have been saved."))
-            return redirect(self.get_success_url())
-        messages.error(
-            request,
-            _("We could not save your changes. See below for details."),
+        else:
+            messages.error(
+                request,
+                _("We could not save your changes. See below for details."),
+            )
+        return redirect(self.get_success_url())
+
+    def _apply_room_configure_form(self, request, room, event, prefix):
+        form = RoomConfigureForm(request.POST, prefix=prefix, event=event)
+        if not form.is_valid():
+            return None, form
+        try:
+            interpretation = update_room_interpretation(
+                room,
+                event,
+                {
+                    "interpreter": form.cleaned_data["interpreter"],
+                    "room_enabled": form.cleaned_data.get("room_enabled"),
+                    "target_languages": form.cleaned_target_language_list(),
+                },
+            )
+            interpretation.stream_url = (
+                form.cleaned_data.get("stream_url") or ""
+            ).strip()
+            interpretation.save(update_fields=["stream_url"])
+        except ValueError as exc:
+            return None, str(exc)
+        return interpretation, None
+
+    def _handle_room_save(self, request, room, event, prefix, redirect_url):
+        interpretation, error = self._apply_room_configure_form(
+            request, room, event, prefix
         )
-        return self.form_invalid(form)
+        if error is not None:
+            if isinstance(error, str):
+                messages.error(request, error)
+            else:
+                messages.error(
+                    request,
+                    _("Could not save room settings. See below for details."),
+                )
+            return redirect(redirect_url)
+        messages.success(
+            request,
+            _("Saved interpretation settings for %(room)s.")
+            % {"room": room.name},
+        )
+        return redirect(redirect_url)
 
+    def _handle_room_connect(self, request, room, event, prefix, redirect_url):
+        interpretation, error = self._apply_room_configure_form(
+            request, room, event, prefix
+        )
+        if error is not None:
+            if isinstance(error, str):
+                messages.error(request, error)
+            else:
+                messages.error(
+                    request,
+                    _("Save the interpreter selection before signing in."),
+                )
+            return redirect(redirect_url)
+        post = request.POST.copy()
+        post[CONNECT_POST_KEY] = "1"
+        form = InterpretationSettingsForm(
+            obj=event, data=post, prefix=prefix
+        )
+        if not form.is_valid():
+            messages.error(
+                request,
+                _("Could not connect. Check the sign-in details below."),
+            )
+            return redirect(redirect_url)
+        form.save_pending_connect()
+        form.run_connect_action(request)
+        return redirect(redirect_url)
 
-def _susi_welcome_name(event) -> str:
-    name = get_susi_name(event)
-    email = get_susi_email(event)
-    return name or email or ""
+    def _handle_room_test(self, request, room, event, prefix, redirect_url):
+        post = request.POST.copy()
+        post[TEST_POST_KEY] = "1"
+        form = InterpretationSettingsForm(
+            obj=event, data=post, prefix=prefix
+        )
+        if form.is_valid():
+            if form.has_changed():
+                form.save()
+            form.run_test_action(request)
+        else:
+            messages.error(request, _("Could not test the connection."))
+        return redirect(redirect_url)
+
+    def _handle_room_disconnect(self, request, room, event, prefix, redirect_url):
+        form = InterpretationSettingsForm(obj=event, prefix=prefix)
+        form.run_disconnect_action(request)
+        return redirect(redirect_url)
+
+    def _handle_room_start(self, request, room, event, prefix, redirect_url):
+        interpretation, error = self._apply_room_configure_form(
+            request, room, event, prefix
+        )
+        if error is not None:
+            if isinstance(error, str):
+                messages.error(request, error)
+            else:
+                messages.error(
+                    request,
+                    _("Could not start the session. Check the room settings below."),
+                )
+            return redirect(redirect_url)
+
+        result = start_room_session(room, event)
+        if result.ok:
+            messages.success(
+                request,
+                _("Started interpretation for %(room)s.") % {"room": room.name},
+            )
+        else:
+            messages.error(request, result.error)
+        return redirect(redirect_url)
+
+    def _handle_room_stop(self, request, room, event, redirect_url):
+        result = stop_room_session(room, event)
+        if result.ok:
+            messages.success(
+                request,
+                _("Stopped interpretation for %(room)s.") % {"room": room.name},
+            )
+        else:
+            messages.error(request, result.error)
+        return redirect(redirect_url)
+
+    def get_context_data(self, **kwargs):
+        event = self.request.event
+        expanded_room = self.request.GET.get("room")
+        existing = {
+            ri.room_id: ri
+            for ri in RoomInterpretation.objects.filter(room__event=event)
+        }
+        rooms = []
+        for room in event.rooms.filter(deleted=False).order_by("name"):
+            interpretation = existing.get(room.pk)
+            data = serialize_room_interpretation(room, event, interpretation)
+            prefix = room_form_prefix(room.pk)
+            saved_stream_url = ""
+            if interpretation and interpretation.stream_url:
+                saved_stream_url = interpretation.stream_url
+            rooms.append(
+                {
+                    "room": room,
+                    "data": data,
+                    "configure_form": RoomConfigureForm(
+                        prefix=prefix,
+                        event=event,
+                        initial={
+                            "interpreter": data["interpreter"],
+                            "room_enabled": data["room_enabled"],
+                            "target_languages": ", ".join(data["target_languages"]),
+                            "stream_url": saved_stream_url,
+                        },
+                    ),
+                    "susi_form": InterpretationSettingsForm(
+                        obj=event,
+                        prefix=prefix,
+                        initial={
+                            "interpretation_base_url": get_base_url(event),
+                            "susi_connect_email": get_susi_email(event) or "",
+                        },
+                    ),
+                    "expanded": str(room.pk) == str(expanded_room),
+                    "detected_stream_url": data["detected_stream_url"],
+                }
+            )
+        return {
+            "event": event,
+            "rooms": rooms,
+            "available_interpreters": list_available_interpreters(event),
+            "susi_connected": is_susi_connected(event),
+            "susi_server_host": _susi_host(get_base_url(event)),
+            "susi_account": _susi_account_label(event),
+            "is_event_settings": True,
+            **kwargs,
+        }
 
 
 def _susi_account_label(event) -> str:
@@ -128,43 +323,18 @@ def _susi_host(base_url: str) -> str:
     return urlparse(base_url).netloc or base_url
 
 
-class InterpretationRoomList(
-    InterpretationEnabledMixin, EventPermissionRequiredMixin, TemplateView
-):
-    """List the event's rooms with their interpretation status."""
+class InterpretationRoomList(InterpretationEnabledMixin, EventPermissionRequiredMixin, View):
+    """Legacy URL — redirect to the unified dashboard."""
 
-    template_name = "interpretation/rooms.html"
     permission = "can_change_event_settings"
 
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        event = self.request.event
-        existing = {
-            ri.room_id: ri
-            for ri in RoomInterpretation.objects.filter(room__event=event)
-        }
-        rooms = []
-        for room in event.rooms.filter(deleted=False):
-            interpretation = existing.get(room.pk)
-            data = serialize_room_interpretation(room, event, interpretation)
-            rooms.append(
-                {
-                    "room": room,
-                    "interpreter_label": data["interpreter_label"],
-                    "room_enabled": data["room_enabled"],
-                    "status": data["status"],
-                    "caption_languages": data["target_languages"],
-                    "room_settings_url": room_settings_url(
-                        event.organizer.slug, event.slug, room.pk
-                    ),
-                }
+    def get(self, request, *args, **kwargs):
+        return redirect(
+            reverse(
+                "plugins:interpretation:dashboard",
+                kwargs={
+                    "organizer": request.event.organizer.slug,
+                    "event": request.event.slug,
+                },
             )
-        ctx["event"] = event
-        ctx["available_interpreters"] = list_available_interpreters(event)
-        ctx["any_interpreter_configured"] = any(
-            item["configured"]
-            for item in ctx["available_interpreters"]
-            if item["id"] != RoomInterpretation.INTERPRETER_NONE
         )
-        ctx["rooms"] = rooms
-        return ctx

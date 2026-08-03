@@ -356,3 +356,55 @@
         width: 100%;
     }
 }
+/* Per-room configure panels */
+.interpretation-rooms-table {
+    margin-bottom: 0;
+}
+.interpretation-room-panel-row > td {
+    border-top: none !important;
+    padding-top: 0;
+}
+.interpretation-room-panel-cell {
+    background: #f8fafc;
+    padding-bottom: 1.25rem !important;
+}
+.interpretation-room-panel {
+    padding: 1.25rem 1rem 0.5rem;
+    border: 1px solid var(--interp-border);
+    border-radius: 6px;
+    background: #fff;
+}
+.interpretation-room-panel-grid {
+    display: grid;
+    gap: 1rem;
+    max-width: 40rem;
+}
+.interpretation-interpreter-panels {
+    margin: 0.25rem 0 0.5rem;
+}
+.interpretation-interpreter-panel {
+    padding: 1rem;
+    border: 1px dashed var(--interp-border);
+    border-radius: 6px;
+    background: var(--interp-blue-soft);
+}
+.interpretation-interpreter-panel[hidden] {
+    display: none !important;
+}
+.interpretation-account-card--inline {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+.interpretation-room-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #eef2f6;
+}
+.interpretation-room-name {
+    font-weight: 600;
+}

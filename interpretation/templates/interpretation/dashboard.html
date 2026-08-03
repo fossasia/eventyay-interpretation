@@ -1,101 +1,106 @@
 {% extends "eventyay_common/event/base.html" %}
-{% load i18n bootstrap3 %}
+{% load i18n %}
 {% block title %}{% trans "Interpretation" %}{% endblock %}
 {% block content %}
     <style>{% include "interpretation/dashboard.css" %}</style>
 
-    <form action="" method="post" class="interpretation-form">
-        {% csrf_token %}
-        {% bootstrap_form_errors form %}
-
-        <header class="interpretation-hero interpretation-hero--welcome">
-            <div class="interpretation-hero-icon" aria-hidden="true">
-                <span class="fa fa-language"></span>
-            </div>
-            <div class="interpretation-hero-text">
-                <h2 class="interpretation-hero-title">{% trans "Interpretation credentials" %}</h2>
-                <p class="interpretation-hero-lead">
-                    {% trans "Connect interpreter accounts for this event. Each room chooses its own interpreter in room settings." %}
-                </p>
-            </div>
-        </header>
-
-        <div class="interpretation-content">
-            <div class="interpretation-status-grid">
-                <div class="interpretation-stat">
-                    <span class="interpretation-stat-label">{% trans "Event" %}</span>
-                    <span class="interpretation-stat-value">{{ event.name }}</span>
-                </div>
-                <div class="interpretation-stat">
-                    <span class="interpretation-stat-label">{% trans "Event code" %}</span>
-                    <span class="interpretation-stat-value">{{ event.slug }}</span>
-                </div>
-            </div>
-
-            <div class="panel panel-default interpretation-panel">
-                <div class="panel-heading">{% trans "Available interpreters" %}</div>
-                <div class="panel-body">
-                    <ul class="list-unstyled interpretation-credential-list">
-                        {% for interpreter in available_interpreters %}
-                            {% if interpreter.id != "none" %}
-                                <li class="interpretation-credential-item">
-                                    <div class="interpretation-credential-main">
-                                        <strong>{{ interpreter.label }}</strong>
-                                        {% if interpreter.configured %}
-                                            <span class="interpretation-badge interpretation-badge--success">{% trans "Connected" %}</span>
-                                        {% else %}
-                                            <span class="interpretation-badge">{% trans "Not connected" %}</span>
-                                        {% endif %}
-                                    </div>
-                                </li>
-                            {% endif %}
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
-
-            {% if susi_connected %}
-                <div class="panel panel-default interpretation-panel">
-                    <div class="panel-heading">{% trans "SUSI Translator account" %}</div>
-                    <div class="panel-body">
-                        <div class="interpretation-account-card">
-                            <div class="interpretation-account-main">
-                                <span class="interpretation-status-dot" aria-hidden="true"></span>
-                                <div>
-                                    <div class="interpretation-account-name">{{ susi_account }}</div>
-                                    <div class="interpretation-account-server">{{ susi_server_host }}</div>
-                                </div>
-                            </div>
-                            <div class="interpretation-account-actions">
-                                <a class="btn btn-default"
-                                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
-                                    {% trans "View rooms" %}
-                                </a>
-                                <button type="submit" name="interpretation_test_connection" value="1" class="btn btn-default">
-                                    {% trans "Test connection" %}
-                                </button>
-                                <button type="submit" name="interpretation_disconnect" value="1" class="btn btn-link">
-                                    {% trans "Sign out" %}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="interpretation-content-footer">
-                    {% include "interpretation/susi_connected_panel.html" with form=form %}
-                </div>
-            {% else %}
-                <div class="panel panel-default interpretation-panel">
-                    <div class="panel-heading">{% trans "Connect SUSI Translator" %}</div>
-                    <div class="panel-body interpretation-signin-section">
-                        <p class="interpretation-section-hint text-muted">
-                            {% trans "Sign in once here. Rooms that select SUSI will use this account." %}
-                        </p>
-                        {% include "interpretation/susi_login_form.html" with form=form %}
-                    </div>
-                </div>
-            {% endif %}
+    <header class="interpretation-hero">
+        <div class="interpretation-hero-icon" aria-hidden="true">
+            <span class="fa fa-language"></span>
         </div>
-    </form>
+        <div class="interpretation-hero-text">
+            <h2 class="interpretation-hero-title">{% trans "Interpretation" %}</h2>
+            <p class="interpretation-hero-lead">
+                {% trans "Configure interpretation independently for each room. Choose an interpreter, sign in when prompted, then start a session." %}
+            </p>
+        </div>
+    </header>
+
+    <div class="interpretation-content">
+        {% if not rooms %}
+            <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-hover interpretation-rooms-table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Room" %}</th>
+                            <th>{% trans "Interpreter" %}</th>
+                            <th>{% trans "Session" %}</th>
+                            <th>{% trans "Caption languages" %}</th>
+                            <th class="text-right">{% trans "Configure" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in rooms %}
+                            <tr class="interpretation-room-summary">
+                                <td class="interpretation-room-name">{{ entry.room.name }}</td>
+                                <td>
+                                    {% if entry.data.room_enabled and entry.data.interpreter != "none" %}
+                                        {{ entry.data.interpreter_label }}
+                                    {% else %}
+                                        <span class="text-muted">{% trans "Off" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if entry.data.status == "running" %}
+                                        <span class="interpretation-badge interpretation-badge--success">{% trans "Running" %}</span>
+                                    {% else %}
+                                        <span class="interpretation-badge">{% trans "Idle" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if entry.data.target_languages %}
+                                        {{ entry.data.target_languages|join:", " }}
+                                    {% else %}
+                                        <span class="text-muted">{% trans "Not set" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <button type="button"
+                                            class="btn btn-default btn-sm interpretation-room-toggle"
+                                            data-toggle="collapse"
+                                            data-target="#room-panel-{{ entry.room.pk }}"
+                                            aria-expanded="{% if entry.expanded %}true{% else %}false{% endif %}"
+                                            aria-controls="room-panel-{{ entry.room.pk }}">
+                                        {% trans "Configure" %}
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr class="interpretation-room-panel-row">
+                                <td colspan="5" class="interpretation-room-panel-cell">
+                                    <div id="room-panel-{{ entry.room.pk }}"
+                                         class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
+                                        {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        (function () {
+            function syncInterpreterPanels(form) {
+                var select = form.querySelector('select[name$="-interpreter"]');
+                if (!select) return;
+                var value = select.value;
+                form.querySelectorAll("[data-interpreter-panel]").forEach(function (panel) {
+                    panel.hidden = panel.getAttribute("data-interpreter-panel") !== value;
+                });
+            }
+
+            document.querySelectorAll(".interpretation-room-form").forEach(function (form) {
+                var select = form.querySelector('select[name$="-interpreter"]');
+                if (!select) return;
+                select.addEventListener("change", function () {
+                    syncInterpreterPanels(form);
+                });
+                syncInterpreterPanels(form);
+            });
+        })();
+    </script>
 {% endblock %}

@@ -20,6 +20,64 @@ from .susi import SusiClient, SusiError
 CONNECT_POST_KEY = "interpretation_connect"
 DISCONNECT_POST_KEY = "interpretation_disconnect"
 TEST_POST_KEY = "interpretation_test_connection"
+ROOM_ID_KEY = "interpretation_room_id"
+ROOM_ACTION_KEY = "interpretation_room_action"
+
+
+def room_form_prefix(room_id: int) -> str:
+    return f"room-{room_id}"
+
+
+class RoomConfigureForm(forms.Form):
+    """Per-room interpreter and caption settings on the dashboard."""
+
+    interpreter = forms.ChoiceField(
+        label=_("Interpreter"),
+        required=True,
+    )
+    room_enabled = forms.BooleanField(
+        label=_("Enable interpretation for this room"),
+        required=False,
+    )
+    target_languages = forms.CharField(
+        required=False,
+        label=_("Caption languages"),
+        help_text=_("Comma-separated language codes, e.g. de, fr."),
+        widget=forms.TextInput(attrs={"placeholder": "de, fr, es"}),
+    )
+    stream_url = forms.URLField(
+        required=False,
+        label=_("Stream URL override"),
+        help_text=_("Leave blank to use the URL detected from the room configuration."),
+        widget=forms.URLInput(
+            attrs={
+                "placeholder": "https://www.youtube.com/watch?v=… or https://…/stream.m3u8"
+            }
+        ),
+    )
+
+    def __init__(self, *args, event=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .backends import list_available_interpreters
+
+        interpreters = list_available_interpreters(event) if event else []
+        self.fields["interpreter"].choices = [
+            (item["id"], item["label"]) for item in interpreters
+        ]
+        for name, field in self.fields.items():
+            if name != "room_enabled":
+                field.widget.attrs.setdefault("class", "form-control")
+
+    def cleaned_target_language_list(self):
+        raw = self.cleaned_data.get("target_languages") or ""
+        codes = [c.strip() for c in raw.split(",") if c.strip()]
+        seen = set()
+        result = []
+        for code in codes:
+            if code not in seen:
+                seen.add(code)
+                result.append(code)
+        return result
 
 
 class InterpretationSettingsForm(SettingsForm):
