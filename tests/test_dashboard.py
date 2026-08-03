@@ -94,9 +94,10 @@ def test_save_and_test_warns_when_verify_rejects_token(
 
 @override_settings(SITE_URL="https://testserver")
 def test_test_connection_without_url_shows_error(
-    monkeypatch, organizer_client, connected_event, dashboard_url
+    monkeypatch, organizer_client, event, dashboard_url
 ):
     calls = []
+    event.settings.set("interpretation_auth_token", "jwt-test-token")
 
     class FakeSusiClient:
         def __init__(self, *args, **kwargs):

@@ -85,6 +85,7 @@ def dashboard_url(event):
 
 @pytest.fixture
 def connected_event(event):
+    event.settings.set("interpretation_base_url", "https://susi.example.com")
     event.settings.set("interpretation_auth_token", "jwt-test-token")
     event.settings.set("interpretation_susi_email", "susi@example.com")
     return event

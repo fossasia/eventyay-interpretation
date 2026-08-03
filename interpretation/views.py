@@ -15,7 +15,9 @@ from .forms import (
     TEST_POST_KEY,
     InterpretationSettingsForm,
     RoomConfigureForm,
+    disconnect_susi_account,
     room_form_prefix,
+    verify_susi_connection,
 )
 from .models import RoomInterpretation
 from .room_control import (
@@ -113,12 +115,7 @@ class InterpretationDashboard(
                 messages.error(request, _("Could not connect to SUSI."))
             return redirect(self.get_success_url())
         if TEST_POST_KEY in request.POST:
-            if form.is_valid():
-                if form.has_changed():
-                    form.save()
-                form.run_test_action(request)
-            else:
-                messages.error(request, _("Could not test the connection."))
+            verify_susi_connection(event, request)
             return redirect(self.get_success_url())
         if form.is_valid():
             form.save()
@@ -141,13 +138,8 @@ class InterpretationDashboard(
                 {
                     "interpreter": form.cleaned_data["interpreter"],
                     "room_enabled": form.cleaned_data.get("room_enabled"),
-                    "target_languages": form.cleaned_target_language_list(),
                 },
             )
-            interpretation.stream_url = (
-                form.cleaned_data.get("stream_url") or ""
-            ).strip()
-            interpretation.save(update_fields=["stream_url"])
         except ValueError as exc:
             return None, str(exc)
         return interpretation, None
@@ -201,22 +193,11 @@ class InterpretationDashboard(
         return redirect(redirect_url)
 
     def _handle_room_test(self, request, room, event, prefix, redirect_url):
-        post = request.POST.copy()
-        post[TEST_POST_KEY] = "1"
-        form = InterpretationSettingsForm(
-            obj=event, data=post, prefix=prefix
-        )
-        if form.is_valid():
-            if form.has_changed():
-                form.save()
-            form.run_test_action(request)
-        else:
-            messages.error(request, _("Could not test the connection."))
+        verify_susi_connection(event, request)
         return redirect(redirect_url)
 
     def _handle_room_disconnect(self, request, room, event, prefix, redirect_url):
-        form = InterpretationSettingsForm(obj=event, prefix=prefix)
-        form.run_disconnect_action(request)
+        disconnect_susi_account(event, request)
         return redirect(redirect_url)
 
     def _handle_room_start(self, request, room, event, prefix, redirect_url):
@@ -266,9 +247,6 @@ class InterpretationDashboard(
             interpretation = existing.get(room.pk)
             data = serialize_room_interpretation(room, event, interpretation)
             prefix = room_form_prefix(room.pk)
-            saved_stream_url = ""
-            if interpretation and interpretation.stream_url:
-                saved_stream_url = interpretation.stream_url
             rooms.append(
                 {
                     "room": room,
@@ -279,8 +257,6 @@ class InterpretationDashboard(
                         initial={
                             "interpreter": data["interpreter"],
                             "room_enabled": data["room_enabled"],
-                            "target_languages": ", ".join(data["target_languages"]),
-                            "stream_url": saved_stream_url,
                         },
                     ),
                     "susi_form": InterpretationSettingsForm(
@@ -292,7 +268,6 @@ class InterpretationDashboard(
                         },
                     ),
                     "expanded": str(room.pk) == str(expanded_room),
-                    "detected_stream_url": data["detected_stream_url"],
                 }
             )
         return {

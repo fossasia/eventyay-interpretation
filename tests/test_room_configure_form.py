@@ -21,15 +21,14 @@ def test_room_configure_form_lists_interpreters():
     assert RoomInterpretation.INTERPRETER_SUSI in ids
 
 
-def test_room_configure_form_parses_languages():
+def test_room_configure_form_accepts_interpreter_and_enabled():
     form = RoomConfigureForm(
         event=_FakeEvent(),
         data={
             "interpreter": RoomInterpretation.INTERPRETER_SUSI,
             "room_enabled": True,
-            "target_languages": "de, fr",
-            "stream_url": "",
         },
     )
     assert form.is_valid(), form.errors
-    assert form.cleaned_target_language_list() == ["de", "fr"]
+    assert form.cleaned_data["interpreter"] == RoomInterpretation.INTERPRETER_SUSI
+    assert form.cleaned_data["room_enabled"] is True

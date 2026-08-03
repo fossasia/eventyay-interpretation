@@ -126,16 +126,6 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
             RoomInterpretation.INTERPRETER_SUSI,
         }:
             raise ValueError(_("Unknown interpreter."))
-        if interpreter != RoomInterpretation.INTERPRETER_NONE:
-            backend = get_backend(interpreter)
-            if not backend.is_configured(event):
-                raise ValueError(
-                    _(
-                        "Connect %(name)s on the interpretation dashboard before "
-                        "selecting it for this room."
-                    )
-                    % {"name": backend.label}
-                )
         interpretation.interpreter = interpreter
 
     if "room_enabled" in data:
@@ -199,8 +189,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
             ok=False,
             error=str(
                 _(
-                    "Connect %(name)s on the interpretation dashboard before "
-                    "starting this room."
+                    "Sign in to %(name)s in this room's panel before starting."
                 )
                 % {"name": backend.label}
             ),

@@ -1,12 +1,16 @@
 /* eventyay interpretation dashboard — full-width commons layout */
-.interpretation-form {
-    --interp-blue: #2185d0;
+.interpretation-hero,
+.interpretation-form,
+.interpretation-content {
+    --interp-blue: var(--color-primary, #2185d0);
     --interp-blue-dark: #1a6fb3;
     --interp-blue-soft: #e8f4fc;
     --interp-border: #dce6ef;
     --interp-text: #2c3e50;
     --interp-muted: #6c7a89;
     --interp-success: #3c9d6e;
+}
+.interpretation-form {
     width: 100%;
     margin: 0 0 2rem;
 }
@@ -39,7 +43,7 @@
     font-size: 1.5rem;
     font-weight: 600;
     line-height: 1.3;
-    color: var(--interp-text);
+    color: var(--interp-blue);
 }
 .interpretation-hero-lead {
     margin: 0;
@@ -57,10 +61,12 @@
     width: 5rem;
     height: 5rem;
     font-size: 2.35rem;
+    color: var(--interp-blue);
 }
 .interpretation-hero--welcome .interpretation-hero-title {
     font-size: 2.5rem;
     line-height: 1.15;
+    color: var(--interp-blue);
 }
 .interpretation-hero--welcome .interpretation-hero-lead {
     font-size: 1.65rem;
@@ -359,6 +365,12 @@
 /* Per-room configure panels */
 .interpretation-rooms-table {
     margin-bottom: 0;
+}
+.interpretation-rooms-table thead th {
+    background: var(--interp-blue);
+    color: #fff;
+    border-color: var(--interp-blue-dark);
+    font-weight: 600;
 }
 .interpretation-room-panel-row > td {
     border-top: none !important;

@@ -24,6 +24,47 @@ ROOM_ID_KEY = "interpretation_room_id"
 ROOM_ACTION_KEY = "interpretation_room_action"
 
 
+def verify_susi_connection(event, request) -> None:
+    """Verify stored SUSI credentials for ``event``."""
+    base_url = get_base_url(event)
+    if not base_url:
+        messages.error(
+            request,
+            _("Sign in to SUSI with a server URL before testing the connection."),
+        )
+        return
+    token = get_auth_token(event)
+    if not token:
+        messages.error(
+            request,
+            _("Sign in to SUSI before testing the connection."),
+        )
+        return
+    client = SusiClient(base_url, token)
+    try:
+        result = client.verify()
+    except SusiError as exc:
+        messages.error(
+            request, _("Connection failed: %(error)s") % {"error": str(exc)}
+        )
+        return
+    if result.ok:
+        messages.success(
+            request,
+            _("Connection successful: %(message)s") % {"message": result.message},
+        )
+    else:
+        messages.warning(
+            request,
+            _("Connection issue: %(message)s") % {"message": result.message},
+        )
+
+
+def disconnect_susi_account(event, request) -> None:
+    disconnect_susi(event)
+    messages.success(request, _("Disconnected from SUSI."))
+
+
 def room_form_prefix(room_id: int) -> str:
     return f"room-{room_id}"
 
@@ -39,22 +80,6 @@ class RoomConfigureForm(forms.Form):
         label=_("Enable interpretation for this room"),
         required=False,
     )
-    target_languages = forms.CharField(
-        required=False,
-        label=_("Caption languages"),
-        help_text=_("Comma-separated language codes, e.g. de, fr."),
-        widget=forms.TextInput(attrs={"placeholder": "de, fr, es"}),
-    )
-    stream_url = forms.URLField(
-        required=False,
-        label=_("Stream URL override"),
-        help_text=_("Leave blank to use the URL detected from the room configuration."),
-        widget=forms.URLInput(
-            attrs={
-                "placeholder": "https://www.youtube.com/watch?v=… or https://…/stream.m3u8"
-            }
-        ),
-    )
 
     def __init__(self, *args, event=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -67,17 +92,6 @@ class RoomConfigureForm(forms.Form):
         for name, field in self.fields.items():
             if name != "room_enabled":
                 field.widget.attrs.setdefault("class", "form-control")
-
-    def cleaned_target_language_list(self):
-        raw = self.cleaned_data.get("target_languages") or ""
-        codes = [c.strip() for c in raw.split(",") if c.strip()]
-        seen = set()
-        result = []
-        for code in codes:
-            if code not in seen:
-                seen.add(code)
-                result.append(code)
-        return result
 
 
 class InterpretationSettingsForm(SettingsForm):
@@ -193,7 +207,12 @@ class InterpretationSettingsForm(SettingsForm):
     def save(self):
         # ponytail: login fields are POST-only; never write them to event.settings.
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True
-        result = self._save_excluding_fields(self._TRANSIENT_FIELDS)
+        # ponytail: empty POST must not wipe a stored SUSI URL (e.g. Test button).
+        url = (self.cleaned_data.get(SETTING_BASE_URL) or "").strip()
+        excluded = set(self._TRANSIENT_FIELDS)
+        if not url and get_base_url(self.obj):
+            excluded.add(SETTING_BASE_URL)
+        result = self._save_excluding_fields(frozenset(excluded))
         enable_key = (
             f"{self.prefix}-{SETTING_IS_ENABLED}" if self.prefix else SETTING_IS_ENABLED
         )
@@ -244,42 +263,10 @@ class InterpretationSettingsForm(SettingsForm):
         )
 
     def run_disconnect_action(self, request):
-        disconnect_susi(self.obj)
-        messages.success(request, _("Disconnected from SUSI."))
+        disconnect_susi_account(self.obj, request)
 
     def run_test_action(self, request):
-        base_url = self.cleaned_data.get(SETTING_BASE_URL) or get_base_url(self.obj)
-        if not base_url:
-            messages.error(
-                request,
-                _("A SUSI server URL is required to test the connection."),
-            )
-            return
-        token = get_auth_token(self.obj)
-        if not token:
-            messages.error(
-                request,
-                _("Connect to SUSI before testing the connection."),
-            )
-            return
-        client = SusiClient(base_url, token)
-        try:
-            result = client.verify()
-        except SusiError as exc:
-            messages.error(
-                request, _("Connection failed: %(error)s") % {"error": str(exc)}
-            )
-            return
-        if result.ok:
-            messages.success(
-                request,
-                _("Connection successful: %(message)s") % {"message": result.message},
-            )
-        else:
-            messages.warning(
-                request,
-                _("Connection issue: %(message)s") % {"message": result.message},
-            )
+        verify_susi_connection(self.obj, request)
 
 
 class RoomInterpretationForm(forms.ModelForm):

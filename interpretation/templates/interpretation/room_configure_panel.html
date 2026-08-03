@@ -73,21 +73,6 @@
                 </label>
             </div>
         </div>
-
-        <div class="form-group">
-            {% bootstrap_field entry.configure_form.target_languages layout="vertical" show_help=True %}
-        </div>
-
-        <div class="form-group">
-            {% bootstrap_field entry.configure_form.stream_url layout="vertical" show_help=True %}
-            {% if entry.detected_stream_url %}
-                <p class="help-block">
-                    {% blocktrans trimmed with url=entry.detected_stream_url %}
-                        Detected from room configuration: {{ url }}
-                    {% endblocktrans %}
-                </p>
-            {% endif %}
-        </div>
     </div>
 
     <div class="interpretation-room-form-actions">

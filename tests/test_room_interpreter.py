@@ -365,7 +365,7 @@ def test_update_room_interpretation_raises_when_auto_stop_fails(monkeypatch):
         )
 
 
-def test_update_room_interpretation_rejects_unconfigured_interpreter(monkeypatch):
+def test_update_room_interpretation_allows_unconfigured_interpreter(monkeypatch):
     event = _FakeEvent()
     interpretation = _FakeInterpretation()
 
@@ -374,7 +374,7 @@ def test_update_room_interpretation_rejects_unconfigured_interpreter(monkeypatch
         lambda room: (interpretation, True),
     )
 
-    with pytest.raises(ValueError, match="Connect"):
-        update_room_interpretation(
-            _FakeRoom(), event, {"interpreter": INTERPRETER_SUSI}
-        )
+    result = update_room_interpretation(
+        _FakeRoom(), event, {"interpreter": INTERPRETER_SUSI}
+    )
+    assert result.interpreter == INTERPRETER_SUSI
