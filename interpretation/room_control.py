@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from django.utils.translation import gettext_lazy as _
 
 from .backends import get_backend, list_available_interpreters
-from .backend_credentials import SUSI_AUTH_TOKEN, is_susi_configured
+from .backend_credentials import SUSI_AUTH_TOKEN, SUSI_CREDENTIAL_KEYS, is_susi_configured
 from .models import RoomInterpretation
 from .settings import is_interpretation_enabled
 from .susi import SusiError
@@ -106,9 +106,24 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     }
 
 
+def _merge_public_backend_config(
+    interpretation: RoomInterpretation, incoming: dict
+) -> dict:
+    """Merge non-credential backend_config keys; credentials are sign-in only."""
+    config = dict(interpretation.backend_config or {})
+    for key, value in validate_backend_config(incoming).items():
+        if key in SUSI_CREDENTIAL_KEYS:
+            continue
+        config[key] = value
+    return config
+
+
 def _apply_backend_config(interpretation: RoomInterpretation, data: dict) -> None:
     if "backend_config" in data:
-        interpretation.backend_config = validate_backend_config(data["backend_config"])
+        interpretation.backend_config = _merge_public_backend_config(
+            interpretation,
+            data["backend_config"],
+        )
     if "transcription_provider" in data:
         interpretation.transcription_provider = (
             data.get("transcription_provider") or ""
@@ -192,7 +207,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
         )
 
     backend = get_backend(interpretation.interpreter)
-    if not backend.is_configured(event):
+    if not backend.is_configured(interpretation):
         return SessionResult(
             ok=False,
             error=str(

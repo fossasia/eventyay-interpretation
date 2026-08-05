@@ -58,6 +58,8 @@ def test_api_config_get(organizer_client, connected_event, room):
     assert payload["target_languages"] == ["de"]
     assert payload["susi_connected"] is True
     assert payload["session_id"] == ""
+    assert "susi_auth_token" not in payload["backend_config"]
+    assert payload["backend_config"].get("susi_account_email") == "susi@example.com"
 
 
 def test_api_config_patch(organizer_client, connected_event, room):
@@ -80,6 +82,37 @@ def test_api_config_patch(organizer_client, connected_event, room):
     payload = response.json()
     assert payload["target_languages"] == ["fr", "de"]
     assert payload["transcription_provider"] == "whisper_local"
+
+
+def test_api_config_patch_ignores_credential_keys(organizer_client, connected_event, room):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        backend_config=dict(SUSI_BACKEND_CONFIG),
+    )
+
+    response = _api_request(
+        organizer_client,
+        connected_event,
+        room,
+        "config",
+        method="patch",
+        data={
+            "backend_config": {
+                "susi_auth_token": "injected-token",
+                "susi_base_url": "https://evil.example.com",
+                "custom_flag": True,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    interpretation = RoomInterpretation.objects.get(room=room)
+    assert interpretation.backend_config["susi_auth_token"] == "jwt-test-token"
+    assert interpretation.backend_config["susi_base_url"] == "https://susi.example.com"
+    assert interpretation.backend_config["custom_flag"] is True
+    assert "susi_auth_token" not in response.json()["backend_config"]
 
 
 def test_api_start_and_stop(organizer_client, connected_event, room, monkeypatch):
