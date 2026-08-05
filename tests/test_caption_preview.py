@@ -53,7 +53,8 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "Temporary" in content
     assert "Start" in content
     assert "Stop" in content
-    assert "Language" not in content
+    assert "interpretation-preview-page" in content
+    assert "Caption languages" not in content
     assert "Session ID" not in content
 
 
