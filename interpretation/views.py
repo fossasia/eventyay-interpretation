@@ -13,17 +13,23 @@ from .forms import (
     CONNECT_POST_KEY,
     DISCONNECT_POST_KEY,
     EVENT_SETTINGS_SAVE_KEY,
+    PREVIEW_ACTION_KEY,
+    PREVIEW_SAVE,
+    PREVIEW_START,
+    PREVIEW_STOP,
     ROOM_ACTION_KEY,
     ROOM_ID_KEY,
     TEST_POST_KEY,
+    CaptionPreviewSettingsForm,
     InterpretationSettingsForm,
     RoomConfigureForm,
-    disconnect_susi_account,
+    preview_settings_payload,
     room_form_prefix,
     verify_susi_connection,
 )
 from .models import RoomInterpretation
 from .room_control import (
+    clear_room_interpretation_setup,
     get_interpretation,
     normalize_session_status,
     serialize_room_interpretation,
@@ -41,8 +47,6 @@ from .settings import (
 from .susi import SusiError
 
 PLUGIN_MODULE = "interpretation"
-PREVIEW_START = "start"
-PREVIEW_STOP = "stop"
 
 
 def _dashboard_url(event):
@@ -265,7 +269,19 @@ class InterpretationRoomSettings(
         return redirect(redirect_url)
 
     def _handle_room_disconnect(self, request, room, event, prefix, redirect_url):
-        disconnect_susi_account(event, request)
+        try:
+            clear_room_interpretation_setup(room, event)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(redirect_url)
+        messages.success(
+            request,
+            _(
+                "Cleared interpretation for %(room)s. "
+                "SUSI stays connected for other rooms."
+            )
+            % {"room": room.name},
+        )
         return redirect(redirect_url)
 
     def _handle_room_start(self, request, room, event, prefix, redirect_url):
@@ -385,6 +401,25 @@ def _preview_session(room, event):
     return interpretation, is_running
 
 
+def _preview_settings_form(room, event, data=None):
+    interpretation = get_interpretation(room)
+    return CaptionPreviewSettingsForm(
+        data=data,
+        interpretation=interpretation,
+    )
+
+
+def _apply_preview_settings(request, room, event):
+    form = _preview_settings_form(room, event, data=request.POST)
+    if not form.is_valid():
+        return None, form
+    try:
+        update_room_interpretation(room, event, preview_settings_payload(form))
+    except ValueError as exc:
+        return None, str(exc)
+    return form, None
+
+
 class InterpretationCaptionPreview(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
@@ -417,10 +452,32 @@ class InterpretationCaptionPreview(
     def post(self, request, pk, *args, **kwargs):
         event = request.event
         room = self._room(event, pk)
-        action = request.POST.get("preview_action")
+        action = request.POST.get(PREVIEW_ACTION_KEY)
         redirect_url = self._preview_url(room)
 
-        if action == PREVIEW_START:
+        if action == PREVIEW_SAVE:
+            _settings, error = _apply_preview_settings(request, room, event)
+            if error is not None:
+                if isinstance(error, str):
+                    messages.error(request, error)
+                else:
+                    messages.error(
+                        request,
+                        _("Could not save preview settings. Check the fields below."),
+                    )
+            else:
+                messages.success(request, _("Saved preview settings."))
+        elif action == PREVIEW_START:
+            _settings, error = _apply_preview_settings(request, room, event)
+            if error is not None:
+                if isinstance(error, str):
+                    messages.error(request, error)
+                else:
+                    messages.error(
+                        request,
+                        _("Could not start the session. Check the settings below."),
+                    )
+                return redirect(redirect_url)
             result = start_room_session(room, event)
             if result.ok:
                 messages.success(
@@ -452,6 +509,8 @@ class InterpretationCaptionPreview(
             "event": event,
             "room": room,
             "data": data,
+            "preview_form": _preview_settings_form(room, event),
+            "preview_action_key": PREVIEW_ACTION_KEY,
             "is_running": is_running,
             "preview_supported": data.get("interpreter")
             == RoomInterpretation.INTERPRETER_SUSI,

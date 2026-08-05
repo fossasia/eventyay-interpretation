@@ -29,30 +29,60 @@
             <p class="interpretation-preview-empty">{% trans "Caption preview only works for rooms using SUSI." %}</p>
             <a class="interpretation-preview-back" href="{{ rooms_url }}">{% trans "Back" %}</a>
         {% else %}
-            <div class="interpretation-preview-toolbar">
-                <span class="interpretation-preview-session{% if is_running %} interpretation-preview-session--live{% endif %}">
-                    {% if is_running %}
-                        {% trans "Running" %}
-                    {% else %}
-                        {% trans "Stopped" %}
-                    {% endif %}
-                </span>
-                <form method="post" class="interpretation-preview-action-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="preview_action" value="start">
-                    <button type="submit" class="btn btn-primary"{% if is_running %} disabled{% endif %}>
+            <form method="post" class="interpretation-preview-settings-form">
+                {% csrf_token %}
+                <div class="interpretation-preview-settings-grid">
+                    <div class="form-group">
+                        <label for="{{ preview_form.transcription_provider.id_for_label }}">
+                            {{ preview_form.transcription_provider.label }}
+                        </label>
+                        {{ preview_form.transcription_provider }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ preview_form.translation_provider.id_for_label }}">
+                            {{ preview_form.translation_provider.label }}
+                        </label>
+                        {{ preview_form.translation_provider }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ preview_form.target_language.id_for_label }}">
+                            {{ preview_form.target_language.label }}
+                        </label>
+                        {{ preview_form.target_language }}
+                    </div>
+                </div>
+
+                <div class="interpretation-preview-toolbar">
+                    <span class="interpretation-preview-session{% if is_running %} interpretation-preview-session--live{% endif %}">
+                        {% if is_running %}
+                            {% trans "Running" %}
+                        {% else %}
+                            {% trans "Stopped" %}
+                        {% endif %}
+                    </span>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="save_settings"
+                            class="btn btn-default">
+                        {% trans "Save settings" %}
+                    </button>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="start"
+                            class="btn btn-primary"
+                            {% if is_running %}disabled{% endif %}>
                         {% trans "Start" %}
                     </button>
-                </form>
-                <form method="post" class="interpretation-preview-action-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="preview_action" value="stop">
-                    <button type="submit" class="btn btn-default"{% if not is_running %} disabled{% endif %}>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="stop"
+                            class="btn btn-default"
+                            {% if not is_running %}disabled{% endif %}>
                         {% trans "Stop" %}
                     </button>
-                </form>
-                <a class="interpretation-preview-back" href="{{ rooms_url }}">{% trans "Back" %}</a>
-            </div>
+                    <a class="interpretation-preview-back" href="{{ rooms_url }}">{% trans "Back" %}</a>
+                </div>
+            </form>
 
             <p id="preview-status-line" class="interpretation-preview-stream-status">
                 {% if is_running %}

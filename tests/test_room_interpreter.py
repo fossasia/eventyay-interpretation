@@ -378,3 +378,31 @@ def test_update_room_interpretation_allows_unconfigured_interpreter(monkeypatch)
         _FakeRoom(), event, {"interpreter": INTERPRETER_SUSI}
     )
     assert result.interpreter == INTERPRETER_SUSI
+
+
+def test_clear_room_interpretation_setup_resets_room_only(monkeypatch):
+    from interpretation.room_control import clear_room_interpretation_setup
+
+    calls = []
+
+    def fake_update(room, event, data):
+        calls.append(data)
+        interpretation = _FakeInterpretation()
+        interpretation.interpreter = data["interpreter"]
+        interpretation.room_enabled = data["room_enabled"]
+        return interpretation
+
+    monkeypatch.setattr(
+        "interpretation.room_control.update_room_interpretation",
+        fake_update,
+    )
+
+    result = clear_room_interpretation_setup(_FakeRoom(), _FakeEvent())
+    assert calls == [
+        {
+            "interpreter": INTERPRETER_NONE,
+            "room_enabled": False,
+        }
+    ]
+    assert result.interpreter == INTERPRETER_NONE
+    assert result.room_enabled is False

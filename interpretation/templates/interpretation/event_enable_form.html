@@ -1,4 +1,4 @@
-{% load i18n bootstrap3 %}
+{% load i18n %}
 <form method="post" class="interpretation-event-settings-form">
     {% csrf_token %}
     {% if form.interpretation_base_url.value %}
@@ -6,15 +6,18 @@
                name="{{ form.interpretation_base_url.html_name }}"
                value="{{ form.interpretation_base_url.value|escape }}">
     {% endif %}
-    {% bootstrap_field form.interpretation_is_enabled layout="horizontal" %}
-    <div class="form-group submit-group">
-        <div class="col-md-offset-3 col-md-9">
-            <button type="submit"
-                    name="{{ event_settings_save_key }}"
-                    value="1"
-                    class="btn btn-primary btn-save">
-                {% trans "Save" %}
-            </button>
+    <div class="interpretation-event-settings-row">
+        <div class="checkbox interpretation-event-settings-toggle">
+            <label>
+                {{ form.interpretation_is_enabled }}
+                {{ form.interpretation_is_enabled.label }}
+            </label>
         </div>
+        <button type="submit"
+                name="{{ event_settings_save_key }}"
+                value="1"
+                class="btn btn-primary btn-save">
+            {% trans "Save" %}
+        </button>
     </div>
 </form>

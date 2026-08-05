@@ -16,6 +16,11 @@ from .settings import (
     save_susi_connection,
 )
 from .susi import SusiClient, SusiError
+from .susi_providers import (
+    CAPTION_LANGUAGE_CHOICES,
+    SUSI_TRANSCRIPTION_PROVIDERS,
+    SUSI_TRANSLATION_PROVIDERS,
+)
 
 CONNECT_POST_KEY = "interpretation_connect"
 DISCONNECT_POST_KEY = "interpretation_disconnect"
@@ -23,6 +28,10 @@ TEST_POST_KEY = "interpretation_test_connection"
 EVENT_SETTINGS_SAVE_KEY = "interpretation_event_settings_save"
 ROOM_ID_KEY = "interpretation_room_id"
 ROOM_ACTION_KEY = "interpretation_room_action"
+PREVIEW_ACTION_KEY = "preview_action"
+PREVIEW_SAVE = "save_settings"
+PREVIEW_START = "start"
+PREVIEW_STOP = "stop"
 
 
 def verify_susi_connection(event, request) -> None:
@@ -267,6 +276,52 @@ class InterpretationSettingsForm(SettingsForm):
 
     def run_test_action(self, request):
         verify_susi_connection(self.obj, request)
+
+
+class CaptionPreviewSettingsForm(forms.Form):
+    """SUSI session settings for the temporary caption preview page."""
+
+    transcription_provider = forms.ChoiceField(
+        label=_("Transcription provider"),
+        choices=[("", _("— Select —"))] + list(SUSI_TRANSCRIPTION_PROVIDERS),
+        required=True,
+    )
+    translation_provider = forms.ChoiceField(
+        label=_("Translation provider"),
+        choices=[("", _("— Select —"))] + list(SUSI_TRANSLATION_PROVIDERS),
+        required=True,
+    )
+    target_language = forms.ChoiceField(
+        label=_("Caption language"),
+        choices=[("", _("— Select —"))] + list(CAPTION_LANGUAGE_CHOICES),
+        required=True,
+    )
+
+    def __init__(self, *args, interpretation=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+        if interpretation:
+            if interpretation.transcription_provider:
+                self.fields[
+                    "transcription_provider"
+                ].initial = interpretation.transcription_provider
+            if interpretation.translation_provider:
+                self.fields[
+                    "translation_provider"
+                ].initial = interpretation.translation_provider
+            targets = list(interpretation.target_languages or [])
+            if targets:
+                self.fields["target_language"].initial = targets[0]
+
+
+def preview_settings_payload(form: CaptionPreviewSettingsForm) -> dict:
+    language = (form.cleaned_data.get("target_language") or "").strip()
+    return {
+        "transcription_provider": form.cleaned_data["transcription_provider"],
+        "translation_provider": form.cleaned_data["translation_provider"],
+        "target_languages": [language] if language else [],
+    }
 
 
 class RoomInterpretationForm(forms.ModelForm):

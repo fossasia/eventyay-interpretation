@@ -54,7 +54,9 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "Start" in content
     assert "Stop" in content
     assert "interpretation-preview-page" in content
-    assert "Caption languages" not in content
+    assert "Transcription provider" in content
+    assert "Translation provider" in content
+    assert "Caption language" in content
     assert "Session ID" not in content
 
 
@@ -124,6 +126,39 @@ def test_preview_poll_returns_transcript(
     }
 
 
+def _preview_settings_post():
+    return {
+        "preview_action": "start",
+        "transcription_provider": "whisper_local",
+        "translation_provider": "nllb_local",
+        "target_language": "en",
+    }
+
+
+def test_preview_save_settings(organizer_client, connected_event, room):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+    )
+
+    response = organizer_client.post(
+        preview_url(connected_event, room),
+        {
+            "preview_action": "save_settings",
+            "transcription_provider": "whisper_local",
+            "translation_provider": "nllb_local",
+            "target_language": "de",
+        },
+    )
+
+    assert response.status_code == 302
+    interpretation = RoomInterpretation.objects.get(room=room)
+    assert interpretation.transcription_provider == "whisper_local"
+    assert interpretation.translation_provider == "nllb_local"
+    assert interpretation.target_languages == ["de"]
+
+
 def test_preview_start_action(organizer_client, connected_event, room, monkeypatch):
     interpretation = RoomInterpretation.objects.create(
         room=room,
@@ -131,17 +166,19 @@ def test_preview_start_action(organizer_client, connected_event, room, monkeypat
         room_enabled=True,
     )
 
-    def fake_start(room_arg, event):
+    def fake_start(room_arg, event, *, stream_url_override=""):
         return SessionResult(ok=True, interpretation=interpretation)
 
     monkeypatch.setattr("interpretation.views.start_room_session", fake_start)
 
     response = organizer_client.post(
         preview_url(connected_event, room),
-        {"preview_action": "start"},
+        _preview_settings_post(),
     )
 
     assert response.status_code == 302
+    interpretation.refresh_from_db()
+    assert interpretation.transcription_provider == "whisper_local"
 
 
 def test_preview_caption_text_uses_transcript():

@@ -235,6 +235,18 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
     return SessionResult(ok=True, interpretation=interpretation)
 
 
+def clear_room_interpretation_setup(room, event) -> RoomInterpretation:
+    """Stop this room's session and reset its interpreter without event SUSI logout."""
+    return update_room_interpretation(
+        room,
+        event,
+        {
+            "interpreter": RoomInterpretation.INTERPRETER_NONE,
+            "room_enabled": False,
+        },
+    )
+
+
 def _clear_local_session(
     interpretation: RoomInterpretation, *, session_id: str = ""
 ) -> None:

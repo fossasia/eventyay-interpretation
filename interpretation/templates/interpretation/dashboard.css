@@ -158,6 +158,47 @@
 .interpretation-overview-section {
     margin-bottom: 2rem;
 }
+.interpretation-event-settings-form {
+    max-width: 40rem;
+}
+.interpretation-event-settings-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.5rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--interp-border);
+    border-radius: 8px;
+    background: #fff;
+}
+.interpretation-event-settings-toggle {
+    margin: 0;
+    flex: 1 1 16rem;
+}
+.interpretation-event-settings-form .checkbox label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding-left: 0;
+    font-weight: 500;
+    color: var(--interp-text);
+}
+/* ponytail: commons checkbox skin uses absolute ::before; breaks in flex row */
+.interpretation-event-settings-form .checkbox label::before,
+.interpretation-event-settings-form .checkbox label::after {
+    content: none !important;
+    display: none !important;
+}
+.interpretation-event-settings-form .checkbox input[type="checkbox"] {
+    position: static;
+    float: none;
+    margin: 0;
+    opacity: 1;
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+}
 .interpretation-section-head {
     display: flex;
     align-items: baseline;
@@ -228,10 +269,20 @@
     font-weight: 600;
 }
 /* Temporary caption preview — full-width like other dashboard pages */
-.interpretation-preview-page {
-    width: 100%;
-}
-.interpretation-preview-banner {
+    .interpretation-preview-page {
+        width: 100%;
+    }
+    .interpretation-preview-settings-form {
+        margin-bottom: 1rem;
+    }
+    .interpretation-preview-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+        gap: 1rem;
+        max-width: 48rem;
+        margin-bottom: 1rem;
+    }
+    .interpretation-preview-banner {
     margin-bottom: 1.25rem;
     padding: 1.1rem 1.25rem;
     border: 1px solid #e6c200;
