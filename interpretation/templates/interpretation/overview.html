@@ -25,6 +25,11 @@
     </header>
 
     <div class="interpretation-content">
+        <section class="interpretation-overview-section">
+            <h3 class="interpretation-section-title">{% trans "Event settings" %}</h3>
+            {% include "interpretation/event_enable_form.html" with form=event_settings_form %}
+        </section>
+
         <div class="interpretation-stat-grid">
             <a class="interpretation-stat-card interpretation-stat-card--link"
                href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">

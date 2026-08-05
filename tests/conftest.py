@@ -11,6 +11,12 @@ os.environ.setdefault("EVY_RUNNING_ENVIRONMENT", "testing")
 User = get_user_model()
 
 
+@pytest.fixture(autouse=True)
+def align_site_url_with_test_client(settings):
+    # ponytail: Django test client uses testserver; organizer middleware redirects otherwise.
+    settings.SITE_URL = "https://testserver"
+
+
 @pytest.fixture
 def user(db):
     return User.objects.create_user(

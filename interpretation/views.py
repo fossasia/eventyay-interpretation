@@ -12,6 +12,7 @@ from .dashboard_stats import build_overview_context
 from .forms import (
     CONNECT_POST_KEY,
     DISCONNECT_POST_KEY,
+    EVENT_SETTINGS_SAVE_KEY,
     ROOM_ACTION_KEY,
     ROOM_ID_KEY,
     TEST_POST_KEY,
@@ -24,6 +25,7 @@ from .forms import (
 from .models import RoomInterpretation
 from .room_control import (
     get_interpretation,
+    normalize_session_status,
     serialize_room_interpretation,
     start_room_session,
     stop_room_session,
@@ -41,6 +43,51 @@ from .susi import SusiError
 PLUGIN_MODULE = "interpretation"
 PREVIEW_START = "start"
 PREVIEW_STOP = "stop"
+
+
+def _dashboard_url(event):
+    return reverse(
+        "plugins:interpretation:dashboard",
+        kwargs={"organizer": event.organizer.slug, "event": event.slug},
+    )
+
+
+def _event_settings_form(event, data=None):
+    return InterpretationSettingsForm(
+        obj=event,
+        data=data,
+        prefix="interpretation",
+        initial={
+            "interpretation_base_url": get_base_url(event),
+            "susi_connect_email": get_susi_email(event) or "",
+        },
+    )
+
+
+def _process_event_settings_post(request, event, redirect_url):
+    form = _event_settings_form(event, data=request.POST)
+    if DISCONNECT_POST_KEY in request.POST:
+        form.run_disconnect_action(request)
+        return redirect(redirect_url)
+    if CONNECT_POST_KEY in request.POST:
+        if form.is_valid():
+            form.save_pending_connect()
+            form.run_connect_action(request)
+        else:
+            messages.error(request, _("Could not connect to SUSI."))
+        return redirect(redirect_url)
+    if TEST_POST_KEY in request.POST:
+        verify_susi_connection(event, request)
+        return redirect(redirect_url)
+    if form.is_valid():
+        form.save()
+        messages.success(request, _("Your changes have been saved."))
+    else:
+        messages.error(
+            request,
+            _("We could not save your changes. See below for details."),
+        )
+    return redirect(redirect_url)
 
 
 class InterpretationEnabledMixin:
@@ -70,9 +117,16 @@ class InterpretationOverview(
         context = {
             "event": event,
             "is_event_settings": True,
+            "event_settings_form": _event_settings_form(event),
+            "event_settings_save_key": EVENT_SETTINGS_SAVE_KEY,
             **build_overview_context(event),
         }
         return render(request, self.template_name, context)
+
+    def post(self, request, *args, **kwargs):
+        return _process_event_settings_post(
+            request, request.event, redirect_url=_dashboard_url(request.event)
+        )
 
 
 class InterpretationRoomSettings(
@@ -140,33 +194,9 @@ class InterpretationRoomSettings(
             messages.error(request, _("Unknown room action."))
             return redirect(redirect_url)
 
-        form = InterpretationSettingsForm(
-            obj=event,
-            data=request.POST,
-            prefix="interpretation",
+        return _process_event_settings_post(
+            request, event, redirect_url=self.get_success_url()
         )
-        if DISCONNECT_POST_KEY in request.POST:
-            form.run_disconnect_action(request)
-            return redirect(self.get_success_url())
-        if CONNECT_POST_KEY in request.POST:
-            if form.is_valid():
-                form.save_pending_connect()
-                form.run_connect_action(request)
-            else:
-                messages.error(request, _("Could not connect to SUSI."))
-            return redirect(self.get_success_url())
-        if TEST_POST_KEY in request.POST:
-            verify_susi_connection(event, request)
-            return redirect(self.get_success_url())
-        if form.is_valid():
-            form.save()
-            messages.success(request, _("Your changes have been saved."))
-        else:
-            messages.error(
-                request,
-                _("We could not save your changes. See below for details."),
-            )
-        return redirect(self.get_success_url())
 
     def _apply_room_configure_form(self, request, room, event, prefix):
         form = RoomConfigureForm(request.POST, prefix=prefix, event=event)
@@ -348,7 +378,8 @@ def _preview_session(room, event):
         return None, False
     is_running = (
         interpretation.interpreter == RoomInterpretation.INTERPRETER_SUSI
-        and interpretation.status == RoomInterpretation.STATUS_RUNNING
+        and normalize_session_status(interpretation.status)
+        == RoomInterpretation.STATUS_RUNNING
         and bool(interpretation.backend_session_id)
     )
     return interpretation, is_running

@@ -71,6 +71,23 @@ def test_preview_poll_requires_running_session(organizer_client, connected_event
     assert response.json() == {"running": False, "text": "", "error": ""}
 
 
+def test_preview_treats_legacy_stopped_status_as_not_running(
+    organizer_client, connected_event, room
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_STOPPED,
+        backend_session_id="stale-tenant",
+    )
+
+    response = organizer_client.get(preview_poll_url(connected_event, room))
+
+    assert response.status_code == 200
+    assert response.json() == {"running": False, "text": "", "error": ""}
+
+
 def test_preview_poll_returns_transcript(
     organizer_client, connected_event, room, monkeypatch
 ):

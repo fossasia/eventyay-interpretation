@@ -20,6 +20,7 @@ from .susi import SusiClient, SusiError
 CONNECT_POST_KEY = "interpretation_connect"
 DISCONNECT_POST_KEY = "interpretation_disconnect"
 TEST_POST_KEY = "interpretation_test_connection"
+EVENT_SETTINGS_SAVE_KEY = "interpretation_event_settings_save"
 ROOM_ID_KEY = "interpretation_room_id"
 ROOM_ACTION_KEY = "interpretation_room_action"
 
@@ -214,11 +215,12 @@ class InterpretationSettingsForm(SettingsForm):
         enable_key = (
             f"{self.prefix}-{SETTING_IS_ENABLED}" if self.prefix else SETTING_IS_ENABLED
         )
+        settings_saved = enable_key in self.data or EVENT_SETTINGS_SAVE_KEY in self.data
         if (
             self.obj
             and was_enabled
             and not is_interpretation_enabled(self.obj)
-            and enable_key in self.data
+            and settings_saved
         ):
             from .room_control import stop_all_event_sessions
 
