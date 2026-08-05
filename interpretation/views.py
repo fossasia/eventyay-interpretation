@@ -181,10 +181,6 @@ class InterpretationRoomSettings(
                 return self._handle_room_disconnect(
                     request, room, event, prefix, redirect_url
                 )
-            if action == "start":
-                return self._handle_room_start(
-                    request, room, event, prefix, redirect_url
-                )
             if action == "stop":
                 return self._handle_room_stop(request, room, event, redirect_url)
 
@@ -281,30 +277,6 @@ class InterpretationRoomSettings(
             request,
             _("Cleared interpretation for %(room)s.") % {"room": room.name},
         )
-        return redirect(redirect_url)
-
-    def _handle_room_start(self, request, room, event, prefix, redirect_url):
-        interpretation, error = self._apply_room_configure_form(
-            request, room, event, prefix
-        )
-        if error is not None:
-            if isinstance(error, str):
-                messages.error(request, error)
-            else:
-                messages.error(
-                    request,
-                    _("Could not start the session. Check the room settings below."),
-                )
-            return redirect(redirect_url)
-
-        result = start_room_session(room, event)
-        if result.ok:
-            messages.success(
-                request,
-                _("Started interpretation for %(room)s.") % {"room": room.name},
-            )
-        else:
-            messages.error(request, result.error)
         return redirect(redirect_url)
 
     def _handle_room_stop(self, request, room, event, redirect_url):

@@ -10,10 +10,8 @@ from interpretation.backend_credentials import (
 from interpretation.forms import (
     CONNECT_POST_KEY,
     InterpretationSettingsForm,
-    RoomInterpretationForm,
     RoomSusiCredentialsForm,
 )
-from interpretation.models import RoomInterpretation
 from interpretation.settings import SETTING_IS_ENABLED
 
 PUBLIC_URL = "https://example.com"
@@ -158,51 +156,6 @@ def test_room_connect_stores_credentials_on_interpretation(monkeypatch):
     form.run_connect_action(request=type("R", (), {})(), interpretation=interpretation)
     assert get_susi_auth_token(interpretation) == "jwt"
     assert interpretation.backend_config[SUSI_BASE_URL] == PUBLIC_URL
-
-
-def test_room_form_parses_comma_separated_languages():
-    form = RoomInterpretationForm(
-        data={
-            "interpreter": RoomInterpretation.INTERPRETER_NONE,
-            "room_enabled": False,
-            "stream_url": "https://stream.example.com/r.m3u8",
-            "target_languages": "de, fr ,es",
-            "transcription_provider": "",
-            "translation_provider": "",
-        }
-    )
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data["target_languages"] == ["de", "fr", "es"]
-
-
-def test_room_form_deduplicates_languages():
-    form = RoomInterpretationForm(
-        data={
-            "interpreter": RoomInterpretation.INTERPRETER_NONE,
-            "room_enabled": False,
-            "stream_url": "",
-            "target_languages": "de, de, fr",
-            "transcription_provider": "",
-            "translation_provider": "",
-        }
-    )
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data["target_languages"] == ["de", "fr"]
-
-
-def test_room_form_empty_languages_is_empty_list():
-    form = RoomInterpretationForm(
-        data={
-            "interpreter": RoomInterpretation.INTERPRETER_NONE,
-            "room_enabled": False,
-            "stream_url": "",
-            "target_languages": "",
-            "transcription_provider": "",
-            "translation_provider": "",
-        }
-    )
-    assert form.is_valid(), form.errors
-    assert form.cleaned_data["target_languages"] == []
 
 
 def test_is_susi_configured_reads_room_backend_config():

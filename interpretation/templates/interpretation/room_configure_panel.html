@@ -83,14 +83,6 @@
             <button type="submit" name="{{ room_action_key }}" value="stop" class="btn btn-warning">
                 {% trans "Stop session" %}
             </button>
-        {% else %}
-            <button type="submit"
-                    name="{{ room_action_key }}"
-                    value="start"
-                    class="btn btn-primary"
-                    {% if not entry.data.interpreter_ready %}disabled{% endif %}>
-                {% trans "Start session" %}
-            </button>
         {% endif %}
     </div>
 </form>

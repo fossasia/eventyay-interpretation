@@ -12,7 +12,6 @@ from .backend_credentials import (
     save_susi_credentials,
     susi_account_label,
 )
-from .models import RoomInterpretation
 from .settings import SETTING_IS_ENABLED, is_interpretation_enabled
 from .susi import SusiClient, SusiError
 from .susi_providers import (
@@ -21,7 +20,6 @@ from .susi_providers import (
 )
 
 CONNECT_POST_KEY = "interpretation_connect"
-DISCONNECT_POST_KEY = "interpretation_disconnect"
 TEST_POST_KEY = "interpretation_test_connection"
 EVENT_SETTINGS_SAVE_KEY = "interpretation_event_settings_save"
 ROOM_ID_KEY = "interpretation_room_id"
@@ -272,57 +270,3 @@ def preview_settings_payload(form: CaptionPreviewSettingsForm) -> dict:
         "transcription_provider": form.cleaned_data["transcription_provider"],
         "translation_provider": form.cleaned_data["translation_provider"],
     }
-
-
-class RoomInterpretationForm(forms.ModelForm):
-    """Per-room interpretation configuration.
-
-    ``target_languages`` is stored as a JSON list but edited as a
-    comma-separated string for convenience.
-    """
-
-    target_languages = forms.CharField(
-        required=False,
-        label=_("Caption languages"),
-        help_text=_(
-            "Comma-separated language codes attendees can read captions in, "
-            "e.g. de, fr."
-        ),
-        widget=forms.TextInput(attrs={"placeholder": "de, fr, es"}),
-    )
-
-    class Meta:
-        model = RoomInterpretation
-        fields = [
-            "interpreter",
-            "room_enabled",
-            "stream_url",
-            "target_languages",
-            "transcription_provider",
-            "translation_provider",
-        ]
-        widgets = {
-            "stream_url": forms.URLInput(
-                attrs={
-                    "placeholder": (
-                        "https://www.youtube.com/watch?v=… or https://…/stream.m3u8"
-                    )
-                }
-            ),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance and isinstance(self.instance.target_languages, list):
-            self.initial["target_languages"] = ", ".join(self.instance.target_languages)
-
-    def clean_target_languages(self):
-        raw = self.cleaned_data.get("target_languages") or ""
-        codes = [c.strip() for c in raw.split(",") if c.strip()]
-        seen = set()
-        result = []
-        for code in codes:
-            if code not in seen:
-                seen.add(code)
-                result.append(code)
-        return result
