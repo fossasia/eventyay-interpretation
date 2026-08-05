@@ -1,5 +1,6 @@
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, redirect
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views import View
@@ -7,6 +8,7 @@ from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
 from .backends import list_available_interpreters
+from .dashboard_stats import build_overview_context
 from .forms import (
     CONNECT_POST_KEY,
     DISCONNECT_POST_KEY,
@@ -21,14 +23,24 @@ from .forms import (
 )
 from .models import RoomInterpretation
 from .room_control import (
+    get_interpretation,
     serialize_room_interpretation,
     start_room_session,
     stop_room_session,
     update_room_interpretation,
 )
-from .settings import get_base_url, get_susi_email, get_susi_name, is_susi_connected
+from .settings import (
+    get_base_url,
+    get_susi_client,
+    get_susi_email,
+    get_susi_name,
+    is_susi_connected,
+)
+from .susi import SusiError
 
 PLUGIN_MODULE = "interpretation"
+PREVIEW_START = "start"
+PREVIEW_STOP = "stop"
 
 
 class InterpretationEnabledMixin:
@@ -42,20 +54,41 @@ class InterpretationEnabledMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
-class InterpretationDashboard(
+class InterpretationOverview(
     InterpretationEnabledMixin,
     EventSettingsViewMixin,
     EventPermissionRequiredMixin,
     View,
 ):
-    """Per-room interpretation configuration for organizers."""
+    """Plugin home: event-level status and quick navigation."""
 
-    template_name = "interpretation/dashboard.html"
+    template_name = "interpretation/overview.html"
+    permission = "can_change_event_settings"
+
+    def get(self, request, *args, **kwargs):
+        event = request.event
+        context = {
+            "event": event,
+            "is_event_settings": True,
+            **build_overview_context(event),
+        }
+        return render(request, self.template_name, context)
+
+
+class InterpretationRoomSettings(
+    InterpretationEnabledMixin,
+    EventSettingsViewMixin,
+    EventPermissionRequiredMixin,
+    View,
+):
+    """Per-room interpreter configuration and session control."""
+
+    template_name = "interpretation/room_settings.html"
     permission = "can_change_event_settings"
 
     def get_success_url(self, room_id=None):
         url = reverse(
-            "plugins:interpretation:dashboard",
+            "plugins:interpretation:rooms",
             kwargs={
                 "organizer": self.request.event.organizer.slug,
                 "event": self.request.event.slug,
@@ -66,8 +99,6 @@ class InterpretationDashboard(
         return url
 
     def get(self, request, *args, **kwargs):
-        from django.shortcuts import render
-
         return render(request, self.template_name, self.get_context_data())
 
     def post(self, request, *args, **kwargs):
@@ -298,18 +329,137 @@ def _susi_host(base_url: str) -> str:
     return urlparse(base_url).netloc or base_url
 
 
-class InterpretationRoomList(InterpretationEnabledMixin, EventPermissionRequiredMixin, View):
-    """Legacy URL — redirect to the unified dashboard."""
+def _preview_caption_text(data: dict | None) -> str:
+    if not data:
+        return ""
+    return (data.get("transcript") or data.get("translation") or "").strip()
 
+
+def _preview_session(room, event):
+    interpretation = get_interpretation(room)
+    if interpretation is None:
+        return None, False
+    data = serialize_room_interpretation(room, event, interpretation)
+    is_running = (
+        interpretation.interpreter == RoomInterpretation.INTERPRETER_SUSI
+        and interpretation.status == RoomInterpretation.STATUS_RUNNING
+        and bool(interpretation.backend_session_id)
+    )
+    return interpretation, is_running
+
+
+class InterpretationCaptionPreview(
+    InterpretationEnabledMixin,
+    EventSettingsViewMixin,
+    EventPermissionRequiredMixin,
+    View,
+):
+    """Temporary organizer page to verify SUSI captions reach Eventyay."""
+
+    template_name = "interpretation/caption_preview.html"
     permission = "can_change_event_settings"
 
-    def get(self, request, *args, **kwargs):
-        return redirect(
-            reverse(
-                "plugins:interpretation:dashboard",
-                kwargs={
-                    "organizer": request.event.organizer.slug,
-                    "event": request.event.slug,
-                },
-            )
+    def _room(self, event, pk):
+        return get_object_or_404(event.rooms.filter(deleted=False), pk=pk)
+
+    def _preview_url(self, room):
+        return reverse(
+            "plugins:interpretation:room.preview",
+            kwargs={
+                "organizer": self.request.event.organizer.slug,
+                "event": self.request.event.slug,
+                "pk": room.pk,
+            },
         )
+
+    def get(self, request, pk, *args, **kwargs):
+        event = request.event
+        room = self._room(event, pk)
+        return render(request, self.template_name, self._context(event, room))
+
+    def post(self, request, pk, *args, **kwargs):
+        event = request.event
+        room = self._room(event, pk)
+        action = request.POST.get("preview_action")
+        redirect_url = self._preview_url(room)
+
+        if action == PREVIEW_START:
+            result = start_room_session(room, event)
+            if result.ok:
+                messages.success(
+                    request,
+                    _("Started interpretation session for %(room)s.")
+                    % {"room": room.name},
+                )
+            else:
+                messages.error(request, result.error)
+        elif action == PREVIEW_STOP:
+            result = stop_room_session(room, event)
+            if result.ok:
+                messages.success(
+                    request,
+                    _("Stopped interpretation session for %(room)s.")
+                    % {"room": room.name},
+                )
+            else:
+                messages.error(request, result.error)
+        else:
+            messages.error(request, _("Unknown preview action."))
+
+        return redirect(redirect_url)
+
+    def _context(self, event, room):
+        interpretation, is_running = _preview_session(room, event)
+        data = serialize_room_interpretation(room, event, interpretation)
+        return {
+            "event": event,
+            "room": room,
+            "data": data,
+            "is_running": is_running,
+            "preview_supported": data.get("interpreter")
+            == RoomInterpretation.INTERPRETER_SUSI,
+            "poll_url": reverse(
+                "plugins:interpretation:room.preview.poll",
+                kwargs={
+                    "organizer": event.organizer.slug,
+                    "event": event.slug,
+                    "pk": room.pk,
+                },
+            ),
+            "rooms_url": reverse(
+                "plugins:interpretation:rooms",
+                kwargs={
+                    "organizer": event.organizer.slug,
+                    "event": event.slug,
+                },
+            ),
+            "is_event_settings": True,
+        }
+
+
+class InterpretationCaptionPreviewPoll(
+    InterpretationEnabledMixin,
+    EventPermissionRequiredMixin,
+    View,
+):
+    """Temporary JSON poll endpoint for the caption preview page."""
+
+    permission = "can_change_event_settings"
+    http_method_names = ["get"]
+
+    def get(self, request, pk, *args, **kwargs):
+        room = get_object_or_404(
+            request.event.rooms.filter(deleted=False),
+            pk=pk,
+        )
+        interpretation, is_running = _preview_session(room, request.event)
+        if interpretation is None or not is_running:
+            return JsonResponse({"running": False, "text": "", "error": ""})
+
+        client = get_susi_client(request.event)
+        try:
+            result = client.latest_transcript(interpretation.backend_session_id)
+            text = _preview_caption_text(result.data if result.ok else None)
+            return JsonResponse({"running": True, "text": text, "error": ""})
+        except SusiError as exc:
+            return JsonResponse({"running": True, "text": "", "error": str(exc)})

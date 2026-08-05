@@ -1,17 +1,21 @@
 {% extends "eventyay_common/event/base.html" %}
 {% load i18n %}
-{% block title %}{% trans "Interpretation" %}{% endblock %}
+{% block title %}{% trans "Room settings" %} — {% trans "Interpretation" %}{% endblock %}
 {% block content %}
     <style>{% include "interpretation/dashboard.css" %}</style>
 
-    <header class="interpretation-hero interpretation-hero--welcome">
-        <div class="interpretation-hero-icon" aria-hidden="true">
-            <span class="fa fa-language"></span>
-        </div>
+    <header class="interpretation-hero interpretation-hero--subpage">
         <div class="interpretation-hero-text">
-            <h2 class="interpretation-hero-title">{% trans "Interpretation" %}</h2>
+            <p class="interpretation-breadcrumb">
+                <a href="{% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Interpretation" %}
+                </a>
+                <span aria-hidden="true"> / </span>
+                <span>{% trans "Room settings" %}</span>
+            </p>
+            <h2 class="interpretation-hero-title">{% trans "Room settings" %}</h2>
             <p class="interpretation-hero-lead">
-                {% trans "Configure interpretation independently for each room. Choose an interpreter, sign in when prompted, then start a session." %}
+                {% trans "Configure an interpreter, sign in when prompted, and start or stop sessions for each room." %}
             </p>
         </div>
     </header>
@@ -28,12 +32,13 @@
                             <th>{% trans "Interpreter" %}</th>
                             <th>{% trans "Session" %}</th>
                             <th>{% trans "Caption languages" %}</th>
+                            <th class="text-right">{% trans "Preview" %}</th>
                             <th class="text-right">{% trans "Configure" %}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for entry in rooms %}
-                            <tr class="interpretation-room-summary">
+                            <tr class="interpretation-room-summary" id="room-{{ entry.room.pk }}">
                                 <td class="interpretation-room-name">{{ entry.room.name }}</td>
                                 <td>
                                     {% if entry.data.room_enabled and entry.data.interpreter != "none" %}
@@ -57,6 +62,12 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-right">
+                                    <a class="btn btn-default btn-sm"
+                                       href="{% url 'plugins:interpretation:room.preview' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
+                                        {% trans "Captions" %}
+                                    </a>
+                                </td>
+                                <td class="text-right">
                                     <button type="button"
                                             class="btn btn-default btn-sm interpretation-room-toggle"
                                             data-toggle="collapse"
@@ -68,7 +79,7 @@
                                 </td>
                             </tr>
                             <tr class="interpretation-room-panel-row">
-                                <td colspan="5" class="interpretation-room-panel-cell">
+                                <td colspan="6" class="interpretation-room-panel-cell">
                                     <div id="room-panel-{{ entry.room.pk }}"
                                          class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
                                         {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" %}

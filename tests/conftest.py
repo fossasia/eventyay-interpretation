@@ -84,6 +84,16 @@ def dashboard_url(event):
 
 
 @pytest.fixture
+def rooms_url(event):
+    from django.urls import reverse
+
+    return reverse(
+        "plugins:interpretation:rooms",
+        kwargs={"organizer": event.organizer.slug, "event": event.slug},
+    )
+
+
+@pytest.fixture
 def connected_event(event):
     event.settings.set("interpretation_base_url", "https://susi.example.com")
     event.settings.set("interpretation_auth_token", "jwt-test-token")

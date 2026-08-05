@@ -16,9 +16,9 @@ pytestmark = pytest.mark.django_db
 
 @override_settings(SITE_URL="https://testserver")
 def test_save_persists_connection(
-    organizer_client, connected_event, dashboard_url, connection_payload
+    organizer_client, connected_event, rooms_url, connection_payload
 ):
-    response = organizer_client.post(dashboard_url, connection_payload)
+    response = organizer_client.post(rooms_url, connection_payload)
 
     assert response.status_code == 302
     connected_event.refresh_from_db()
@@ -32,7 +32,7 @@ def test_save_persists_connection(
 
 @override_settings(SITE_URL="https://testserver")
 def test_save_and_test_calls_verify_with_saved_token(
-    monkeypatch, organizer_client, connected_event, dashboard_url, connection_payload
+    monkeypatch, organizer_client, connected_event, rooms_url, connection_payload
 ):
     calls = []
 
@@ -51,7 +51,7 @@ def test_save_and_test_calls_verify_with_saved_token(
     monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
 
     payload = {**connection_payload, TEST_POST_KEY: "1"}
-    response = organizer_client.post(dashboard_url, payload)
+    response = organizer_client.post(rooms_url, payload)
 
     assert response.status_code == 302
     assert calls == [("https://susi.example.com", "jwt-test-token")]
@@ -62,7 +62,7 @@ def test_save_and_test_calls_verify_with_saved_token(
 
 @override_settings(SITE_URL="https://testserver")
 def test_save_and_test_warns_when_verify_rejects_token(
-    monkeypatch, organizer_client, connected_event, dashboard_url, connection_payload
+    monkeypatch, organizer_client, connected_event, rooms_url, connection_payload
 ):
     class FakeSusiClient:
         def __init__(self, base_url, auth_token="", timeout=10):
@@ -80,7 +80,7 @@ def test_save_and_test_warns_when_verify_rejects_token(
     monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
 
     payload = {**connection_payload, TEST_POST_KEY: "1"}
-    response = organizer_client.post(dashboard_url, payload)
+    response = organizer_client.post(rooms_url, payload)
 
     assert response.status_code == 302
     connected_event.refresh_from_db()
@@ -94,7 +94,7 @@ def test_save_and_test_warns_when_verify_rejects_token(
 
 @override_settings(SITE_URL="https://testserver")
 def test_test_connection_without_url_shows_error(
-    monkeypatch, organizer_client, event, dashboard_url
+    monkeypatch, organizer_client, event, rooms_url
 ):
     calls = []
     event.settings.set("interpretation_auth_token", "jwt-test-token")
@@ -105,7 +105,7 @@ def test_test_connection_without_url_shows_error(
 
     monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
 
-    response = organizer_client.post(dashboard_url, {TEST_POST_KEY: "1"})
+    response = organizer_client.post(rooms_url, {TEST_POST_KEY: "1"})
 
     assert response.status_code == 302
     assert calls == []
