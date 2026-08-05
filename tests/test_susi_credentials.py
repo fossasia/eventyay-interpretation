@@ -33,7 +33,7 @@ def test_test_susi_connection_uses_room_credentials(monkeypatch):
                 message="Connected and authenticated.",
             )
 
-    monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
+    monkeypatch.setattr("interpretation.backend_credentials.SusiClient", FakeSusiClient)
     monkeypatch.setattr(
         "interpretation.forms.messages.success",
         lambda request, message: logged.append(message),

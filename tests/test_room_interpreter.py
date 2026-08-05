@@ -126,7 +126,7 @@ def test_is_room_interpretation_ready_requires_enabled_interpreter_and_credentia
     assert is_room_interpretation_ready(_FakeRoom(), event, ready) is True
 
     no_creds = _FakeInterpretation(room_enabled=True, interpreter=INTERPRETER_SUSI)
-    assert is_room_interpretation_ready(_FakeRoom(), no_creds) is False
+    assert is_room_interpretation_ready(_FakeRoom(), event, no_creds) is False
 
 
 def test_start_room_session_rejects_disabled_event(monkeypatch):

@@ -106,6 +106,13 @@ def rooms_url(event):
 
 
 @pytest.fixture
+def room(event):
+    from eventyay.base.models import Room
+
+    return Room.objects.create(event=event, name="Main Stage")
+
+
+@pytest.fixture
 def connected_event(event):
     return event
 

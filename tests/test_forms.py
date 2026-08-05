@@ -17,10 +17,18 @@ from interpretation.settings import SETTING_IS_ENABLED
 PUBLIC_URL = "https://example.com"
 
 
+class _FakeHierarkey:
+    defaults = {}
+
+    def get_declared_type(self, key):
+        return bool if key == SETTING_IS_ENABLED else str
+
+
 class _FakeSettings:
     def __init__(self, data=None):
         self._data = dict(data or {})
         self._parent = None
+        self._h = _FakeHierarkey()
 
     def get(self, key, default=None, as_type=str):
         if key not in self._data:
@@ -38,14 +46,6 @@ class _FakeSettings:
 
     def _cache(self):
         return self._data.keys()
-
-    class _h:
-        defaults = {SETTING_IS_ENABLED: True}
-
-        def get_declared_type(self, key):
-            return bool if key == SETTING_IS_ENABLED else str
-
-    _h = _h()
 
 
 class _FakeEvent:
