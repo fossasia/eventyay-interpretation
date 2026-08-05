@@ -13,7 +13,7 @@ User = get_user_model()
 
 @pytest.fixture(autouse=True)
 def align_site_url_with_test_client(settings):
-    # ponytail: Django test client uses testserver; organizer middleware redirects otherwise.
+    # ponytail: test client host is testserver; middleware redirects otherwise.
     settings.SITE_URL = "https://testserver"
 
 
