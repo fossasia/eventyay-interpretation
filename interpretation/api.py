@@ -1,12 +1,11 @@
 from django.shortcuts import get_object_or_404
+from eventyay.api.auth.permission import EventPermission
+from eventyay.api.mixins import PretalxViewSetMixin
+from eventyay.base.models.room import Room
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
-
-from eventyay.api.auth.permission import EventPermission
-from eventyay.api.mixins import PretalxViewSetMixin
-from eventyay.base.models.room import Room
 
 from .models import RoomInterpretation
 from .room_control import (
@@ -72,7 +71,8 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         )
         if not result.ok:
             return Response({"detail": result.error}, status=400)
-        return Response(serialize_room_interpretation(room, self.event, result.interpretation))
+        payload = serialize_room_interpretation(room, self.event, result.interpretation)
+        return Response(payload)
 
     @action(detail=False, methods=["post"], url_path="stop")
     def stop(self, request, room_pk=None, **kwargs):
@@ -80,4 +80,5 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         result = stop_room_session(room, self.event)
         if not result.ok:
             return Response({"detail": result.error}, status=400)
-        return Response(serialize_room_interpretation(room, self.event, result.interpretation))
+        payload = serialize_room_interpretation(room, self.event, result.interpretation)
+        return Response(payload)

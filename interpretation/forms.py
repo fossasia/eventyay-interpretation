@@ -44,9 +44,7 @@ def verify_susi_connection(event, request) -> None:
     try:
         result = client.verify()
     except SusiError as exc:
-        messages.error(
-            request, _("Connection failed: %(error)s") % {"error": str(exc)}
-        )
+        messages.error(request, _("Connection failed: %(error)s") % {"error": str(exc)})
         return
     if result.ok:
         messages.success(

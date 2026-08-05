@@ -188,9 +188,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
         return SessionResult(
             ok=False,
             error=str(
-                _(
-                    "Sign in to %(name)s in this room's panel before starting."
-                )
+                _("Sign in to %(name)s in this room's panel before starting.")
                 % {"name": backend.label}
             ),
             interpretation=interpretation,

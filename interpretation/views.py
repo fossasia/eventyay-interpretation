@@ -115,15 +115,25 @@ class InterpretationRoomSettings(
             redirect_url = self.get_success_url(room.pk)
 
             if action == "save":
-                return self._handle_room_save(request, room, event, prefix, redirect_url)
+                return self._handle_room_save(
+                    request, room, event, prefix, redirect_url
+                )
             if action == "connect":
-                return self._handle_room_connect(request, room, event, prefix, redirect_url)
+                return self._handle_room_connect(
+                    request, room, event, prefix, redirect_url
+                )
             if action == "test":
-                return self._handle_room_test(request, room, event, prefix, redirect_url)
+                return self._handle_room_test(
+                    request, room, event, prefix, redirect_url
+                )
             if action == "disconnect":
-                return self._handle_room_disconnect(request, room, event, prefix, redirect_url)
+                return self._handle_room_disconnect(
+                    request, room, event, prefix, redirect_url
+                )
             if action == "start":
-                return self._handle_room_start(request, room, event, prefix, redirect_url)
+                return self._handle_room_start(
+                    request, room, event, prefix, redirect_url
+                )
             if action == "stop":
                 return self._handle_room_stop(request, room, event, redirect_url)
 
@@ -190,8 +200,7 @@ class InterpretationRoomSettings(
             return redirect(redirect_url)
         messages.success(
             request,
-            _("Saved interpretation settings for %(room)s.")
-            % {"room": room.name},
+            _("Saved interpretation settings for %(room)s.") % {"room": room.name},
         )
         return redirect(redirect_url)
 
@@ -210,9 +219,7 @@ class InterpretationRoomSettings(
             return redirect(redirect_url)
         post = request.POST.copy()
         post[CONNECT_POST_KEY] = "1"
-        form = InterpretationSettingsForm(
-            obj=event, data=post, prefix=prefix
-        )
+        form = InterpretationSettingsForm(obj=event, data=post, prefix=prefix)
         if not form.is_valid():
             messages.error(
                 request,
@@ -339,7 +346,6 @@ def _preview_session(room, event):
     interpretation = get_interpretation(room)
     if interpretation is None:
         return None, False
-    data = serialize_room_interpretation(room, event, interpretation)
     is_running = (
         interpretation.interpreter == RoomInterpretation.INTERPRETER_SUSI
         and interpretation.status == RoomInterpretation.STATUS_RUNNING

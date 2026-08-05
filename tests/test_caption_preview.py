@@ -57,9 +57,7 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "Session ID" not in content
 
 
-def test_preview_poll_requires_running_session(
-    organizer_client, connected_event, room
-):
+def test_preview_poll_requires_running_session(organizer_client, connected_event, room):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
