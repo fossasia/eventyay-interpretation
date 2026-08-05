@@ -56,7 +56,7 @@ def test_room_test_calls_verify_with_room_token(
                 message="Connected and authenticated.",
             )
 
-    monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
+    monkeypatch.setattr("interpretation.backend_credentials.SusiClient", FakeSusiClient)
 
     prefix = f"room-{room.pk}"
     payload = {
@@ -93,7 +93,7 @@ def test_room_test_warns_when_verify_rejects_token(
                 message="Server reachable but token is invalid or expired.",
             )
 
-    monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
+    monkeypatch.setattr("interpretation.backend_credentials.SusiClient", FakeSusiClient)
 
     prefix = f"room-{room.pk}"
     payload = {
@@ -117,13 +117,19 @@ def test_room_test_warns_when_verify_rejects_token(
 def test_room_test_without_credentials_shows_error(
     monkeypatch, organizer_client, room, rooms_url
 ):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        backend_config={},
+    )
     calls = []
 
     class FakeSusiClient:
         def __init__(self, *args, **kwargs):
             calls.append(True)
 
-    monkeypatch.setattr("interpretation.forms.SusiClient", FakeSusiClient)
+    monkeypatch.setattr("interpretation.backend_credentials.SusiClient", FakeSusiClient)
 
     prefix = f"room-{room.pk}"
     payload = {

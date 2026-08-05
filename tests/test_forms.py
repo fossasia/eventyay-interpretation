@@ -81,7 +81,11 @@ def _room_credentials_form(data, interpretation=None, prefix="room-1"):
     )
 
 
-def test_event_enable_toggle_can_be_saved():
+def test_event_enable_toggle_can_be_saved(monkeypatch):
+    monkeypatch.setattr(
+        "interpretation.room_control.stop_all_event_sessions",
+        lambda event: None,
+    )
     form = _event_form({SETTING_IS_ENABLED: False})
     assert form.is_valid(), form.errors
     form.save()
