@@ -1,11 +1,6 @@
 {% load i18n %}
 <form method="post" class="interpretation-event-settings-form">
     {% csrf_token %}
-    {% if form.interpretation_base_url.value %}
-        <input type="hidden"
-               name="{{ form.interpretation_base_url.html_name }}"
-               value="{{ form.interpretation_base_url.value|escape }}">
-    {% endif %}
     <div class="interpretation-event-settings-row">
         <div class="checkbox interpretation-event-settings-toggle">
             <label>

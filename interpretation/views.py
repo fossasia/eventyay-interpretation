@@ -9,9 +9,14 @@ from eventyay.control.views.event import EventSettingsViewMixin
 
 from .backends import list_available_interpreters
 from .dashboard_stats import build_overview_context
+from .backend_credentials import (
+    get_susi_client,
+    is_susi_configured,
+    susi_account_label,
+    susi_server_host,
+)
 from .forms import (
     CONNECT_POST_KEY,
-    DISCONNECT_POST_KEY,
     EVENT_SETTINGS_SAVE_KEY,
     PREVIEW_ACTION_KEY,
     PREVIEW_SAVE,
@@ -19,10 +24,10 @@ from .forms import (
     PREVIEW_STOP,
     ROOM_ACTION_KEY,
     ROOM_ID_KEY,
-    TEST_POST_KEY,
     CaptionPreviewSettingsForm,
     InterpretationSettingsForm,
     RoomConfigureForm,
+    RoomSusiCredentialsForm,
     preview_settings_payload,
     room_form_prefix,
     verify_susi_connection,
@@ -37,16 +42,21 @@ from .room_control import (
     stop_room_session,
     update_room_interpretation,
 )
-from .settings import (
-    get_base_url,
-    get_susi_client,
-    get_susi_email,
-    get_susi_name,
-    is_susi_connected,
-)
 from .susi import SusiError
 
 PLUGIN_MODULE = "interpretation"
+
+
+def _notify_stop_result(request, room, result) -> None:
+    if not result.ok:
+        messages.error(request, result.error)
+        return
+    messages.success(
+        request,
+        _("Stopped interpretation for %(room)s.") % {"room": room.name},
+    )
+    if result.warning:
+        messages.warning(request, result.warning)
 
 
 def _dashboard_url(event):
@@ -61,28 +71,11 @@ def _event_settings_form(event, data=None):
         obj=event,
         data=data,
         prefix="interpretation",
-        initial={
-            "interpretation_base_url": get_base_url(event),
-            "susi_connect_email": get_susi_email(event) or "",
-        },
     )
 
 
 def _process_event_settings_post(request, event, redirect_url):
     form = _event_settings_form(event, data=request.POST)
-    if DISCONNECT_POST_KEY in request.POST:
-        form.run_disconnect_action(request)
-        return redirect(redirect_url)
-    if CONNECT_POST_KEY in request.POST:
-        if form.is_valid():
-            form.save_pending_connect()
-            form.run_connect_action(request)
-        else:
-            messages.error(request, _("Could not connect to SUSI."))
-        return redirect(redirect_url)
-    if TEST_POST_KEY in request.POST:
-        verify_susi_connection(event, request)
-        return redirect(redirect_url)
     if form.is_valid():
         form.save()
         messages.success(request, _("Your changes have been saved."))
@@ -253,19 +246,29 @@ class InterpretationRoomSettings(
             return redirect(redirect_url)
         post = request.POST.copy()
         post[CONNECT_POST_KEY] = "1"
-        form = InterpretationSettingsForm(obj=event, data=post, prefix=prefix)
+        form = RoomSusiCredentialsForm(
+            data=post,
+            prefix=prefix,
+            interpretation=interpretation,
+        )
         if not form.is_valid():
             messages.error(
                 request,
                 _("Could not connect. Check the sign-in details below."),
             )
             return redirect(redirect_url)
-        form.save_pending_connect()
-        form.run_connect_action(request)
+        form.run_connect_action(request, interpretation)
         return redirect(redirect_url)
 
     def _handle_room_test(self, request, room, event, prefix, redirect_url):
-        verify_susi_connection(event, request)
+        interpretation = get_interpretation(room)
+        if interpretation is None:
+            messages.error(
+                request,
+                _("Configure this room before testing the connection."),
+            )
+            return redirect(redirect_url)
+        verify_susi_connection(interpretation, request)
         return redirect(redirect_url)
 
     def _handle_room_disconnect(self, request, room, event, prefix, redirect_url):
@@ -276,11 +279,7 @@ class InterpretationRoomSettings(
             return redirect(redirect_url)
         messages.success(
             request,
-            _(
-                "Cleared interpretation for %(room)s. "
-                "SUSI stays connected for other rooms."
-            )
-            % {"room": room.name},
+            _("Cleared interpretation for %(room)s.") % {"room": room.name},
         )
         return redirect(redirect_url)
 
@@ -310,13 +309,7 @@ class InterpretationRoomSettings(
 
     def _handle_room_stop(self, request, room, event, redirect_url):
         result = stop_room_session(room, event)
-        if result.ok:
-            messages.success(
-                request,
-                _("Stopped interpretation for %(room)s.") % {"room": room.name},
-            )
-        else:
-            messages.error(request, result.error)
+        _notify_stop_result(request, room, result)
         return redirect(redirect_url)
 
     def get_context_data(self, **kwargs):
@@ -343,43 +336,23 @@ class InterpretationRoomSettings(
                             "room_enabled": data["room_enabled"],
                         },
                     ),
-                    "susi_form": InterpretationSettingsForm(
-                        obj=event,
+                    "susi_form": RoomSusiCredentialsForm(
                         prefix=prefix,
-                        initial={
-                            "interpretation_base_url": get_base_url(event),
-                            "susi_connect_email": get_susi_email(event) or "",
-                        },
+                        interpretation=interpretation,
                     ),
+                    "susi_connected": is_susi_configured(interpretation),
+                    "susi_server_host": susi_server_host(interpretation),
+                    "susi_account": susi_account_label(interpretation),
                     "expanded": str(room.pk) == str(expanded_room),
                 }
             )
         return {
             "event": event,
             "rooms": rooms,
-            "available_interpreters": list_available_interpreters(event),
-            "susi_connected": is_susi_connected(event),
-            "susi_server_host": _susi_host(get_base_url(event)),
-            "susi_account": _susi_account_label(event),
+            "available_interpreters": list_available_interpreters(),
             "is_event_settings": True,
             **kwargs,
         }
-
-
-def _susi_account_label(event) -> str:
-    name = get_susi_name(event)
-    email = get_susi_email(event)
-    if name and email:
-        return f"{name} ({email})"
-    return email or name
-
-
-def _susi_host(base_url: str) -> str:
-    if not base_url:
-        return ""
-    from urllib.parse import urlparse
-
-    return urlparse(base_url).netloc or base_url
 
 
 def _preview_caption_text(data: dict | None) -> str:
@@ -489,14 +462,7 @@ class InterpretationCaptionPreview(
                 messages.error(request, result.error)
         elif action == PREVIEW_STOP:
             result = stop_room_session(room, event)
-            if result.ok:
-                messages.success(
-                    request,
-                    _("Stopped interpretation session for %(room)s.")
-                    % {"room": room.name},
-                )
-            else:
-                messages.error(request, result.error)
+            _notify_stop_result(request, room, result)
         else:
             messages.error(request, _("Unknown preview action."))
 
@@ -552,7 +518,7 @@ class InterpretationCaptionPreviewPoll(
         if interpretation is None or not is_running:
             return JsonResponse({"running": False, "text": "", "error": ""})
 
-        client = get_susi_client(request.event)
+        client = get_susi_client(interpretation)
         try:
             result = client.latest_transcript(interpretation.backend_session_id)
             text = _preview_caption_text(result.data if result.ok else None)

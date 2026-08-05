@@ -3,6 +3,7 @@
 import pytest
 
 from interpretation.models import RoomInterpretation
+from tests.conftest import SUSI_BACKEND_CONFIG
 
 pytestmark = pytest.mark.django_db
 
@@ -44,6 +45,7 @@ def test_api_config_get(organizer_client, connected_event, room):
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
         target_languages=["de"],
+        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     response = _api_request(
@@ -54,6 +56,7 @@ def test_api_config_get(organizer_client, connected_event, room):
     payload = response.json()
     assert payload["interpreter"] == RoomInterpretation.INTERPRETER_SUSI
     assert payload["target_languages"] == ["de"]
+    assert payload["susi_connected"] is True
     assert payload["session_id"] == ""
 
 
@@ -87,6 +90,7 @@ def test_api_start_and_stop(organizer_client, connected_event, room, monkeypatch
         transcription_provider="whisper_local",
         translation_provider="nllb_local",
         target_languages=["en"],
+        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     def fake_start(room_arg, event, *, stream_url_override=""):
@@ -124,6 +128,37 @@ def test_api_start_and_stop(organizer_client, connected_event, room, monkeypatch
     stop = _api_request(organizer_client, connected_event, room, "stop", method="post")
     assert stop.status_code == 200
     assert stop.json()["session_id"] == ""
+
+
+def test_api_stop_returns_warning_when_remote_stop_fails(
+    monkeypatch, organizer_client, connected_event, room
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_RUNNING,
+        backend_session_id="sess-1",
+        backend_config=dict(SUSI_BACKEND_CONFIG),
+    )
+
+    def fake_stop(room_arg, event):
+        interpretation = RoomInterpretation.objects.get(room=room)
+        from interpretation.room_control import SessionResult
+
+        return SessionResult(
+            ok=True,
+            warning="Stopped locally, but SUSI reported: timeout",
+            interpretation=interpretation,
+        )
+
+    monkeypatch.setattr("interpretation.api.stop_room_session", fake_stop)
+
+    response = _api_request(
+        organizer_client, connected_event, room, "stop", method="post"
+    )
+    assert response.status_code == 200
+    assert response.json()["warning"] == "Stopped locally, but SUSI reported: timeout"
 
 
 def test_api_rejects_unknown_interpreter(organizer_client, connected_event, room):

@@ -20,7 +20,7 @@ PLUGIN_MODULE = "interpretation"
 
 
 class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
-    """Video-admin API for per-room SUSI interpretation settings."""
+    """Video-admin API for per-room interpretation settings."""
 
     queryset = RoomInterpretation.objects.none()
     permission_classes = [EventPermission]
@@ -81,4 +81,6 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if not result.ok:
             return Response({"detail": result.error}, status=400)
         payload = serialize_room_interpretation(room, self.event, result.interpretation)
+        if result.warning:
+            payload["warning"] = result.warning
         return Response(payload)

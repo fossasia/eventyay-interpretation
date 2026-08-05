@@ -1,50 +1,23 @@
 """Tests for SUSI credential helpers used by the dashboard."""
 
-from interpretation.forms import (
-    InterpretationSettingsForm,
-    verify_susi_connection,
+from interpretation.backend_credentials import (
+    SUSI_AUTH_TOKEN,
+    SUSI_BASE_URL,
 )
-from interpretation.settings import SETTING_AUTH_TOKEN, SETTING_BASE_URL
+from interpretation.forms import RoomSusiCredentialsForm, verify_susi_connection
 from interpretation.susi import SusiResult
 
 
-class _FakeSettings:
-    def __init__(self, data=None):
-        self._data = dict(data or {})
-        self._parent = None
+class _FakeInterpretation:
+    def __init__(self, config=None):
+        self.backend_config = dict(config or {})
+        self.saved = False
 
-    def get(self, key, default=None, as_type=str):
-        if key not in self._data:
-            return default
-        value = self._data[key]
-        if as_type is bool:
-            return bool(value)
-        return as_type(value)
-
-    def set(self, key, value):
-        self._data[key] = value
-
-    def freeze(self):
-        return self._data.copy()
-
-    def _cache(self):
-        return self._data.keys()
-
-    class _h:
-        defaults = {}
-
-        def get_declared_type(self, key):
-            return str
-
-    _h = _h()
+    def save(self, update_fields=None):
+        self.saved = True
 
 
-class _FakeEvent:
-    def __init__(self, settings=None):
-        self.settings = _FakeSettings(settings)
-
-
-def test_test_susi_connection_uses_stored_credentials(monkeypatch):
+def test_test_susi_connection_uses_room_credentials(monkeypatch):
     calls = []
     logged = []
 
@@ -67,24 +40,23 @@ def test_test_susi_connection_uses_stored_credentials(monkeypatch):
     )
     monkeypatch.setattr("interpretation.forms.messages.error", lambda *a, **k: None)
 
-    event = _FakeEvent(
+    interpretation = _FakeInterpretation(
         {
-            SETTING_BASE_URL: "https://susi.example.com",
-            SETTING_AUTH_TOKEN: "jwt-test-token",
+            SUSI_BASE_URL: "https://susi.example.com",
+            SUSI_AUTH_TOKEN: "jwt-test-token",
         }
     )
-    verify_susi_connection(event, request=type("R", (), {})())
+    verify_susi_connection(interpretation, request=type("R", (), {})())
     assert calls == [("https://susi.example.com", "jwt-test-token")]
     assert logged
 
 
-def test_save_does_not_wipe_stored_base_url_on_empty_post():
-    event = _FakeEvent({SETTING_BASE_URL: "https://susi.example.com"})
-    form = InterpretationSettingsForm(
-        obj=event,
-        data={"interpretation-interpretation_base_url": ""},
-        prefix="interpretation",
+def test_room_credentials_form_keeps_stored_base_url_when_post_empty():
+    interpretation = _FakeInterpretation({SUSI_BASE_URL: "https://susi.example.com"})
+    form = RoomSusiCredentialsForm(
+        data={"room-1-interpretation_base_url": ""},
+        prefix="room-1",
+        interpretation=interpretation,
     )
     assert form.is_valid(), form.errors
-    form.save()
-    assert event.settings.get(SETTING_BASE_URL) == "https://susi.example.com"
+    assert form.resolved_base_url() == "https://susi.example.com"

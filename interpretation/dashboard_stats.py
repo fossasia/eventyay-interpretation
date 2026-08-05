@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from .backend_credentials import is_susi_configured
 from .backends import get_backend, list_available_interpreters
 from .models import RoomInterpretation
 from .room_control import is_room_interpretation_ready, normalize_session_status
 
 
 def build_overview_context(event) -> dict:
-    """Return template context for the interpretation overview home page."""
+    """Return template context for the interpretation overview landing page."""
     rooms_qs = event.rooms.filter(deleted=False).order_by("name")
     interpretations = {
         ri.room_id: ri
@@ -22,6 +23,7 @@ def build_overview_context(event) -> dict:
     room_running = 0
     room_needs_setup = 0
     interpreters_in_use: dict[str, int] = {}
+    configured_room_counts: dict[str, int] = {}
     running_sessions = []
     room_snapshots = []
 
@@ -43,6 +45,10 @@ def build_overview_context(event) -> dict:
             interpreter_ready = is_room_interpretation_ready(
                 room, event, interpretation
             )
+            if get_backend(interpretation.interpreter).is_configured(interpretation):
+                configured_room_counts[data_interpreter] = (
+                    configured_room_counts.get(data_interpreter, 0) + 1
+                )
 
         if room_on:
             room_enabled += 1
@@ -94,8 +100,16 @@ def build_overview_context(event) -> dict:
             }
         )
 
-    backends = list_available_interpreters(event)
-    susi_in_use = RoomInterpretation.INTERPRETER_SUSI in interpreters_in_use
+    backends = []
+    for backend in list_available_interpreters():
+        if backend["id"] == RoomInterpretation.INTERPRETER_NONE:
+            continue
+        backends.append(
+            {
+                **backend,
+                "configured_room_count": configured_room_counts.get(backend["id"], 0),
+            }
+        )
 
     return {
         "stats": {
@@ -108,16 +122,7 @@ def build_overview_context(event) -> dict:
         "backends": backends,
         "running_sessions": running_sessions,
         "room_snapshots": room_snapshots,
-        "susi_in_use": susi_in_use,
         "setup_complete": room_total > 0
         and room_enabled > 0
-        and room_needs_setup == 0
-        and (not susi_in_use or _susi_backend_ready(backends)),
+        and room_needs_setup == 0,
     }
-
-
-def _susi_backend_ready(backends: list[dict]) -> bool:
-    for backend in backends:
-        if backend.get("id") == RoomInterpretation.INTERPRETER_SUSI:
-            return bool(backend.get("configured"))
-    return True

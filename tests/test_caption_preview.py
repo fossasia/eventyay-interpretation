@@ -6,6 +6,7 @@ from django.urls import reverse
 from interpretation.models import RoomInterpretation
 from interpretation.room_control import SessionResult
 from interpretation.susi import SusiResult
+from tests.conftest import SUSI_BACKEND_CONFIG
 
 pytestmark = pytest.mark.django_db
 
@@ -56,7 +57,7 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "interpretation-preview-page" in content
     assert "Transcription provider" in content
     assert "Translation provider" in content
-    assert "Caption language" in content
+    assert "Caption language" not in content
     assert "Session ID" not in content
 
 
@@ -100,6 +101,7 @@ def test_preview_poll_returns_transcript(
         room_enabled=True,
         status=RoomInterpretation.STATUS_RUNNING,
         backend_session_id="tenant-1",
+        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     class FakeClient:
@@ -113,7 +115,7 @@ def test_preview_poll_returns_transcript(
 
     monkeypatch.setattr(
         "interpretation.views.get_susi_client",
-        lambda event: FakeClient(),
+        lambda interpretation: FakeClient(),
     )
 
     response = organizer_client.get(preview_poll_url(connected_event, room))
@@ -131,7 +133,6 @@ def _preview_settings_post():
         "preview_action": "start",
         "transcription_provider": "whisper_local",
         "translation_provider": "nllb_local",
-        "target_language": "en",
     }
 
 
@@ -148,7 +149,6 @@ def test_preview_save_settings(organizer_client, connected_event, room):
             "preview_action": "save_settings",
             "transcription_provider": "whisper_local",
             "translation_provider": "nllb_local",
-            "target_language": "de",
         },
     )
 
@@ -156,7 +156,6 @@ def test_preview_save_settings(organizer_client, connected_event, room):
     interpretation = RoomInterpretation.objects.get(room=room)
     assert interpretation.transcription_provider == "whisper_local"
     assert interpretation.translation_provider == "nllb_local"
-    assert interpretation.target_languages == ["de"]
 
 
 def test_preview_start_action(organizer_client, connected_event, room, monkeypatch):

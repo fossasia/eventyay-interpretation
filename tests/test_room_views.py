@@ -3,9 +3,9 @@
 import pytest
 from django.contrib.messages import get_messages
 
+from interpretation.backend_credentials import is_susi_configured
 from interpretation.forms import ROOM_ACTION_KEY, ROOM_ID_KEY
 from interpretation.models import RoomInterpretation
-from interpretation.settings import get_auth_token
 
 pytestmark = pytest.mark.django_db
 
@@ -41,14 +41,11 @@ def test_room_save_persists_interpreter(
     assert interpretation.room_enabled is True
 
 
-def test_room_clear_keeps_event_susi_token(
-    organizer_client, connected_event, room, rooms_url
+def test_room_clear_removes_room_credentials(
+    organizer_client, connected_room, rooms_url
 ):
-    RoomInterpretation.objects.create(
-        room=room,
-        interpreter=RoomInterpretation.INTERPRETER_SUSI,
-        room_enabled=True,
-    )
+    room = connected_room
+    interpretation = RoomInterpretation.objects.get(room=room)
 
     response = organizer_client.post(
         rooms_url,
@@ -56,13 +53,12 @@ def test_room_clear_keeps_event_susi_token(
     )
 
     assert response.status_code == 302
-    connected_event.settings.flush()
-    assert get_auth_token(connected_event) == "jwt-test-token"
-    interpretation = RoomInterpretation.objects.get(room=room)
+    interpretation.refresh_from_db()
+    assert not is_susi_configured(interpretation)
     assert interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
     assert interpretation.room_enabled is False
     messages = [str(message) for message in get_messages(response.wsgi_request)]
-    assert any("susi stays connected" in message.lower() for message in messages)
+    assert any("cleared interpretation" in message.lower() for message in messages)
 
 
 def test_room_start_requires_configured_susi(organizer_client, event, room, rooms_url):
@@ -83,14 +79,14 @@ def test_room_start_requires_configured_susi(organizer_client, event, room, room
 
 
 def test_room_start_with_susi(
-    monkeypatch, organizer_client, connected_event, room, rooms_url
+    monkeypatch, organizer_client, connected_room, rooms_url
 ):
-    RoomInterpretation.objects.create(
-        room=room,
-        interpreter=RoomInterpretation.INTERPRETER_SUSI,
-        room_enabled=True,
-        transcription_provider="whisper_local",
-        translation_provider="nllb_local",
+    room = connected_room
+    interpretation = RoomInterpretation.objects.get(room=room)
+    interpretation.transcription_provider = "whisper_local"
+    interpretation.translation_provider = "nllb_local"
+    interpretation.save(
+        update_fields=["transcription_provider", "translation_provider"]
     )
 
     def fake_start(room_arg, event, *, stream_url_override=""):
@@ -109,3 +105,35 @@ def test_room_start_with_susi(
     assert response.status_code == 302
     messages = [str(message) for message in get_messages(response.wsgi_request)]
     assert any("started" in message.lower() for message in messages)
+
+
+def test_room_stop_shows_warning_when_remote_stop_fails(
+    monkeypatch, organizer_client, connected_event, room, rooms_url
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_RUNNING,
+        backend_session_id="sess-1",
+    )
+
+    def fake_stop(room_arg, event):
+        interpretation = RoomInterpretation.objects.get(room=room)
+        from interpretation.room_control import SessionResult
+
+        return SessionResult(
+            ok=True,
+            warning="Stopped interpretation for this room locally, but the interpreter backend reported: timeout",
+            interpretation=interpretation,
+        )
+
+    monkeypatch.setattr("interpretation.views.stop_room_session", fake_stop)
+
+    response = organizer_client.post(rooms_url, _room_post(room, "stop"))
+
+    assert response.status_code == 302
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("stopped interpretation for" in message.lower() for message in messages)
+    assert any("interpreter backend reported" in message.lower() for message in messages)
+    assert not any("could not stop" in message.lower() for message in messages)

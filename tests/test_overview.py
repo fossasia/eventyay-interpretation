@@ -50,7 +50,7 @@ def test_overview_disable_stops_sessions(
         dashboard_url,
         {
             "interpretation_event_settings_save": "1",
-            "interpretation-interpretation_base_url": "https://susi.example.com",
+            "interpretation-interpretation_is_enabled": "",
         },
     )
 

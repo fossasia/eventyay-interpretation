@@ -120,17 +120,16 @@
                         <div class="interpretation-backend-card">
                             <div class="interpretation-backend-head">
                                 <strong>{{ backend.label }}</strong>
-                                {% if backend.configured %}
-                                    <span class="interpretation-badge interpretation-badge--success">{% trans "Connected" %}</span>
-                                {% else %}
-                                    <span class="interpretation-badge">{% trans "Not configured" %}</span>
-                                {% endif %}
                             </div>
                             <p class="interpretation-backend-detail text-muted">
-                                {% if backend.configured %}
-                                    {% trans "Ready for rooms that use this interpreter." %}
+                                {% if backend.configured_room_count %}
+                                    {% blocktrans trimmed count counter=backend.configured_room_count %}
+                                        {{ counter }} room configured
+                                    {% plural %}
+                                        {{ counter }} rooms configured
+                                    {% endblocktrans %}
                                 {% else %}
-                                    {% trans "Connect in room settings when a room uses this interpreter." %}
+                                    {% trans "Sign in per room when that room uses this interpreter." %}
                                 {% endif %}
                             </p>
                         </div>

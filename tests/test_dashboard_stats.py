@@ -15,15 +15,8 @@ def room(event):
     return Room.objects.create(event=event, name="Workshop")
 
 
-def test_build_overview_context_counts(event, room, connected_event):
-    RoomInterpretation.objects.create(
-        room=room,
-        interpreter=RoomInterpretation.INTERPRETER_SUSI,
-        room_enabled=True,
-        status=RoomInterpretation.STATUS_IDLE,
-    )
-
-    context = build_overview_context(connected_event)
+def test_build_overview_context_counts(event, room, connected_room):
+    context = build_overview_context(event)
 
     assert context["stats"]["room_total"] == 1
     assert context["stats"]["room_enabled"] == 1
@@ -43,4 +36,3 @@ def test_build_overview_context_flags_unconfigured_susi(event, room):
     context = build_overview_context(event)
 
     assert context["stats"]["room_needs_setup"] == 1
-    assert context["susi_in_use"] is True

@@ -18,13 +18,13 @@
                          data-interpreter-panel="{{ interpreter.id }}"
                          hidden>
                         {% if interpreter.id == "susi" %}
-                            {% if susi_connected %}
+                            {% if entry.susi_connected %}
                                 <div class="interpretation-account-card interpretation-account-card--inline">
                                     <div class="interpretation-account-main">
                                         <span class="interpretation-status-dot" aria-hidden="true"></span>
                                         <div>
-                                            <div class="interpretation-account-name">{{ susi_account }}</div>
-                                            <div class="interpretation-account-server">{{ susi_server_host }}</div>
+                                            <div class="interpretation-account-name">{{ entry.susi_account }}</div>
+                                            <div class="interpretation-account-server">{{ entry.susi_server_host }}</div>
                                         </div>
                                     </div>
                                     <div class="interpretation-account-actions">

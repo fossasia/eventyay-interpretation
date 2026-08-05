@@ -107,23 +107,26 @@ def test_serialize_includes_session_id_when_running():
 
 
 def test_is_room_interpretation_ready_requires_enabled_interpreter_and_credentials():
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     off = _FakeInterpretation(room_enabled=False, interpreter=INTERPRETER_SUSI)
+    off.backend_config = {
+        "susi_base_url": "https://susi.example.com",
+        "susi_auth_token": "tok",
+    }
     assert is_room_interpretation_ready(_FakeRoom(), event, off) is False
 
     none = _FakeInterpretation(room_enabled=True, interpreter=INTERPRETER_NONE)
     assert is_room_interpretation_ready(_FakeRoom(), event, none) is False
 
     ready = _FakeInterpretation(room_enabled=True, interpreter=INTERPRETER_SUSI)
+    ready.backend_config = {
+        "susi_base_url": "https://susi.example.com",
+        "susi_auth_token": "tok",
+    }
     assert is_room_interpretation_ready(_FakeRoom(), event, ready) is True
 
-    no_creds = _FakeEvent()
-    assert is_room_interpretation_ready(_FakeRoom(), no_creds, ready) is False
+    no_creds = _FakeInterpretation(room_enabled=True, interpreter=INTERPRETER_SUSI)
+    assert is_room_interpretation_ready(_FakeRoom(), no_creds) is False
 
 
 def test_start_room_session_rejects_disabled_event(monkeypatch):
@@ -173,23 +176,22 @@ def test_start_room_session_rejects_missing_interpreter(monkeypatch):
 
 
 def test_start_room_session_uses_selected_backend(monkeypatch):
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     interpretation = _FakeInterpretation(
         room_enabled=True,
         interpreter=INTERPRETER_SUSI,
     )
+    interpretation.backend_config = {
+        "susi_base_url": "https://susi.example.com",
+        "susi_auth_token": "tok",
+    }
     calls = []
 
     class FakeBackend:
         id = INTERPRETER_SUSI
         label = "SUSI"
 
-        def is_configured(self, event):
+        def is_configured(self, interpretation):
             return True
 
         def start(self, event, interpretation, *, stream_url):
@@ -213,12 +215,7 @@ def test_start_room_session_uses_selected_backend(monkeypatch):
 
 
 def test_start_room_session_is_idempotent_when_already_running(monkeypatch):
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     interpretation = _FakeInterpretation(
         room_enabled=True,
         interpreter=INTERPRETER_SUSI,
@@ -231,7 +228,7 @@ def test_start_room_session_is_idempotent_when_already_running(monkeypatch):
         id = INTERPRETER_SUSI
         label = "SUSI"
 
-        def is_configured(self, event):
+        def is_configured(self, interpretation):
             return True
 
         def start(self, event, interpretation, *, stream_url):
@@ -254,12 +251,7 @@ def test_start_room_session_is_idempotent_when_already_running(monkeypatch):
 
 
 def test_start_room_session_clears_stale_session_id_on_failure(monkeypatch):
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     interpretation = _FakeInterpretation(
         room_enabled=True,
         interpreter=INTERPRETER_SUSI,
@@ -268,7 +260,7 @@ def test_start_room_session_clears_stale_session_id_on_failure(monkeypatch):
     )
 
     class FakeBackend:
-        def is_configured(self, event):
+        def is_configured(self, interpretation):
             return True
 
         def start(self, event, interpretation, *, stream_url):
@@ -292,12 +284,7 @@ def test_start_room_session_clears_stale_session_id_on_failure(monkeypatch):
 
 
 def test_stop_room_session_clears_local_state_when_remote_stop_fails(monkeypatch):
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     interpretation = _FakeInterpretation(
         room_enabled=True,
         interpreter=INTERPRETER_SUSI,
@@ -321,18 +308,14 @@ def test_stop_room_session_clears_local_state_when_remote_stop_fails(monkeypatch
     )
 
     result = stop_room_session(_FakeRoom(), event)
-    assert not result.ok
+    assert result.ok
+    assert "SUSI unreachable" in result.warning
     assert interpretation.status == RoomInterpretation.STATUS_IDLE
     assert interpretation.backend_session_id == ""
 
 
 def test_update_room_interpretation_raises_when_auto_stop_fails(monkeypatch):
-    event = _FakeEvent(
-        {
-            "interpretation_base_url": "https://susi.example.com",
-            "interpretation_auth_token": "tok",
-        }
-    )
+    event = _FakeEvent()
     interpretation = _FakeInterpretation(
         room_enabled=True,
         interpreter=INTERPRETER_SUSI,
@@ -383,15 +366,30 @@ def test_update_room_interpretation_allows_unconfigured_interpreter(monkeypatch)
 def test_clear_room_interpretation_setup_resets_room_only(monkeypatch):
     from interpretation.room_control import clear_room_interpretation_setup
 
+    interpretation = _FakeInterpretation(
+        interpreter=INTERPRETER_SUSI,
+        room_enabled=True,
+        backend_session_id="",
+    )
+    interpretation.backend_config = {
+        "susi_base_url": "https://susi.example.com",
+        "susi_auth_token": "tok",
+    }
     calls = []
+
+    def fake_get_or_create(room):
+        return interpretation, False
 
     def fake_update(room, event, data):
         calls.append(data)
-        interpretation = _FakeInterpretation()
         interpretation.interpreter = data["interpreter"]
         interpretation.room_enabled = data["room_enabled"]
         return interpretation
 
+    monkeypatch.setattr(
+        "interpretation.room_control.RoomInterpretation.objects.get_or_create",
+        fake_get_or_create,
+    )
     monkeypatch.setattr(
         "interpretation.room_control.update_room_interpretation",
         fake_update,
@@ -406,3 +404,4 @@ def test_clear_room_interpretation_setup_resets_room_only(monkeypatch):
     ]
     assert result.interpreter == INTERPRETER_NONE
     assert result.room_enabled is False
+    assert "susi_auth_token" not in interpretation.backend_config

@@ -9,7 +9,7 @@ class NoopBackend:
     id = RoomInterpretation.INTERPRETER_NONE
     label = _("None")
 
-    def is_configured(self, event) -> bool:
+    def is_configured(self, interpretation) -> bool:
         return True
 
     def start(self, event, interpretation, *, stream_url: str) -> str:
