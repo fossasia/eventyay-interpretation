@@ -37,7 +37,9 @@ def test_migration_copies_legacy_event_credentials_to_room(event, room):
     copy_event_credentials_to_rooms(apps, None)
 
     interpretation.refresh_from_db()
-    assert interpretation.backend_config["susi_base_url"] == "https://legacy.example.com"
+    assert (
+        interpretation.backend_config["susi_base_url"] == "https://legacy.example.com"
+    )
     assert interpretation.backend_config["susi_auth_token"] == "legacy-token"
     assert interpretation.backend_config["susi_account_email"] == "legacy@example.com"
     assert interpretation.backend_config["susi_account_name"] == "Legacy User"

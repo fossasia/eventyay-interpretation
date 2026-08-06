@@ -15,7 +15,10 @@ pytestmark = pytest.mark.django_db
 
 @override_settings(SITE_URL="https://testserver")
 def test_room_connect_stores_credentials(
-    organizer_client, room, rooms_url, monkeypatch,
+    organizer_client,
+    room,
+    rooms_url,
+    monkeypatch,
 ):
     from interpretation.susi import SusiLoginResult
 

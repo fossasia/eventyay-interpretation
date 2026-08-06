@@ -121,7 +121,5 @@ def build_overview_context(event) -> dict:
         "backends": backends,
         "running_sessions": running_sessions,
         "room_snapshots": room_snapshots,
-        "setup_complete": room_total > 0
-        and room_enabled > 0
-        and room_needs_setup == 0,
+        "setup_complete": room_total > 0 and room_enabled > 0 and room_needs_setup == 0,
     }

@@ -62,7 +62,9 @@ def test_room_clear_removes_room_credentials(
 
 
 def test_room_start_action_is_not_supported(
-    organizer_client, connected_room, rooms_url,
+    organizer_client,
+    connected_room,
+    rooms_url,
 ):
     room = connected_room
 

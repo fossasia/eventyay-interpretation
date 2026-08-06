@@ -85,7 +85,9 @@ def test_api_config_patch(organizer_client, connected_event, room):
 
 
 def test_api_config_patch_ignores_credential_keys(
-    organizer_client, connected_event, room,
+    organizer_client,
+    connected_event,
+    room,
 ):
     RoomInterpretation.objects.create(
         room=room,
