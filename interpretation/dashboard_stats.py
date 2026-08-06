@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .backend_credentials import is_susi_configured
 from .backends import get_backend, list_available_interpreters
 from .models import RoomInterpretation
 from .room_control import is_room_interpretation_ready, normalize_session_status

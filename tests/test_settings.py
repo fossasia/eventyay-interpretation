@@ -61,7 +61,10 @@ def test_get_susi_client_uses_room_credentials():
 
 def test_is_susi_configured_requires_url_and_token():
     assert is_susi_configured(None) is False
-    assert is_susi_configured(_FakeInterpretation({SUSI_BASE_URL: "https://example.com"})) is False
+    assert (
+        is_susi_configured(_FakeInterpretation({SUSI_BASE_URL: "https://example.com"}))
+        is False
+    )
     assert (
         is_susi_configured(
             _FakeInterpretation(
@@ -73,5 +76,8 @@ def test_is_susi_configured_requires_url_and_token():
         )
         is True
     )
-    assert get_susi_base_url(_FakeInterpretation({SUSI_BASE_URL: "https://example.com/"})) == "https://example.com"
+    assert (
+        get_susi_base_url(_FakeInterpretation({SUSI_BASE_URL: "https://example.com/"}))
+        == "https://example.com"
+    )
     assert get_susi_auth_token(_FakeInterpretation({SUSI_AUTH_TOKEN: "tok"})) == "tok"

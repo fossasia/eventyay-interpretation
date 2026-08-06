@@ -7,14 +7,14 @@ from django.views import View
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
-from .backends import list_available_interpreters
-from .dashboard_stats import build_overview_context
 from .backend_credentials import (
     get_susi_client,
     is_susi_configured,
     susi_account_label,
     susi_server_host,
 )
+from .backends import list_available_interpreters
+from .dashboard_stats import build_overview_context
 from .forms import (
     CONNECT_POST_KEY,
     EVENT_SETTINGS_SAVE_KEY,

@@ -84,7 +84,9 @@ def test_api_config_patch(organizer_client, connected_event, room):
     assert payload["transcription_provider"] == "whisper_local"
 
 
-def test_api_config_patch_ignores_credential_keys(organizer_client, connected_event, room):
+def test_api_config_patch_ignores_credential_keys(
+    organizer_client, connected_event, room,
+):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,

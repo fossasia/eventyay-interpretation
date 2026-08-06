@@ -61,7 +61,9 @@ def test_room_clear_removes_room_credentials(
     assert any("cleared interpretation" in message.lower() for message in messages)
 
 
-def test_room_start_action_is_not_supported(organizer_client, connected_room, rooms_url):
+def test_room_start_action_is_not_supported(
+    organizer_client, connected_room, rooms_url,
+):
     room = connected_room
 
     response = organizer_client.post(
@@ -91,7 +93,10 @@ def test_room_stop_shows_warning_when_remote_stop_fails(
 
         return SessionResult(
             ok=True,
-            warning="Stopped interpretation for this room locally, but the interpreter backend reported: timeout",
+            warning=(
+                "Stopped interpretation for this room locally, but the "
+                "interpreter backend reported: timeout"
+            ),
             interpretation=interpretation,
         )
 
@@ -102,5 +107,7 @@ def test_room_stop_shows_warning_when_remote_stop_fails(
     assert response.status_code == 302
     messages = [str(message) for message in get_messages(response.wsgi_request)]
     assert any("stopped interpretation for" in message.lower() for message in messages)
-    assert any("interpreter backend reported" in message.lower() for message in messages)
+    assert any(
+        "interpreter backend reported" in message.lower() for message in messages
+    )
     assert not any("could not stop" in message.lower() for message in messages)

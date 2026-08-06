@@ -5,8 +5,8 @@ from eventyay.base.forms import SettingsForm
 
 from .backend_credentials import (
     get_susi_account_email,
-    get_susi_base_url,
     get_susi_auth_token,
+    get_susi_base_url,
     get_susi_client,
     is_susi_configured,
     save_susi_credentials,

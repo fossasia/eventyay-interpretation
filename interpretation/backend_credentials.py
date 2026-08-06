@@ -45,7 +45,9 @@ def get_susi_account_name(interpretation: RoomInterpretation | None) -> str:
 
 
 def is_susi_configured(interpretation: RoomInterpretation | None) -> bool:
-    return bool(get_susi_base_url(interpretation) and get_susi_auth_token(interpretation))
+    return bool(
+        get_susi_base_url(interpretation) and get_susi_auth_token(interpretation)
+    )
 
 
 def save_susi_credentials(

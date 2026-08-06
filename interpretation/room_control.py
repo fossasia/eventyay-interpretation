@@ -6,8 +6,12 @@ from dataclasses import dataclass
 
 from django.utils.translation import gettext_lazy as _
 
+from .backend_credentials import (
+    SUSI_AUTH_TOKEN,
+    SUSI_CREDENTIAL_KEYS,
+    is_susi_configured,
+)
 from .backends import get_backend, list_available_interpreters
-from .backend_credentials import SUSI_AUTH_TOKEN, SUSI_CREDENTIAL_KEYS, is_susi_configured
 from .models import RoomInterpretation
 from .settings import is_interpretation_enabled
 from .susi import SusiError
