@@ -15,7 +15,7 @@
             </p>
             <h2 class="interpretation-hero-title">{% trans "Room settings" %}</h2>
             <p class="interpretation-hero-lead">
-                {% trans "Choose an interpreter per room. Sign in to interpreter services on the configure interpreters page." %}
+                {% trans "Choose an interpreter per room. Sign in on Configure interpreters. Start sessions from the caption preview page." %}
             </p>
             <div class="interpretation-hero-actions">
                 <a class="btn btn-default"
@@ -27,8 +27,6 @@
     </header>
 
     <div class="interpretation-content">
-        {% include "interpretation/event_enable_form.html" with form=event_settings_form event_settings_save_key="interpretation_event_settings_save" %}
-
         {% if not susi_connected %}
             <p class="text-muted interpretation-section-hint">
                 {% trans "SUSI is not connected for this event yet." %}
@@ -47,6 +45,7 @@
                             <th>{% trans "Interpreter" %}</th>
                             <th>{% trans "Session" %}</th>
                             <th>{% trans "Caption languages" %}</th>
+                            <th class="text-right">{% trans "Preview" %}</th>
                             <th class="text-right">{% trans "Configure" %}</th>
                         </tr>
                     </thead>
@@ -76,6 +75,12 @@
                                     {% endif %}
                                 </td>
                                 <td class="text-right">
+                                    <a class="btn btn-default btn-sm"
+                                       href="{% url 'plugins:interpretation:room.preview' organizer=event.organizer.slug event=event.slug pk=entry.room.pk %}">
+                                        {% trans "Captions" %}
+                                    </a>
+                                </td>
+                                <td class="text-right">
                                     <button type="button"
                                             class="btn btn-default btn-sm interpretation-room-toggle"
                                             data-toggle="collapse"
@@ -87,7 +92,7 @@
                                 </td>
                             </tr>
                             <tr class="interpretation-room-panel-row">
-                                <td colspan="5" class="interpretation-room-panel-cell">
+                                <td colspan="6" class="interpretation-room-panel-cell">
                                     <div id="room-panel-{{ entry.room.pk }}"
                                          class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
                                         {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" interpreters_url=interpreters_url %}

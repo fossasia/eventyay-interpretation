@@ -166,14 +166,3 @@ def normalize_target_languages(value) -> list[str]:
             seen.add(code)
             codes.append(code)
     return codes
-
-
-def room_settings_url(organizer_slug: str, event_slug: str, room_id: int) -> str:
-    """Commons link that opens the video room editor for interpretation settings."""
-    from django.urls import reverse
-
-    base = reverse(
-        "eventyay_common:event.create_access_to_video",
-        kwargs={"organizer": organizer_slug, "event": event_slug},
-    )
-    return f"{base}?resume_path={room_settings_resume_path(room_id)}"

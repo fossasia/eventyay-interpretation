@@ -1,0 +1,137 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Caption preview" %} — {{ room.name }}{% endblock %}
+{% block content %}
+    <style>{% include "interpretation/dashboard.css" %}</style>
+
+    <header class="interpretation-hero interpretation-hero--subpage">
+        <div class="interpretation-hero-text">
+            <p class="interpretation-breadcrumb">
+                <a href="{% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Interpretation" %}
+                </a>
+                <span aria-hidden="true"> / </span>
+                <a href="{{ rooms_url }}">{% trans "Room settings" %}</a>
+                <span aria-hidden="true"> / </span>
+                <span>{{ room.name }}</span>
+            </p>
+            <h2 class="interpretation-hero-title">{% trans "Caption preview" %}</h2>
+        </div>
+    </header>
+
+    <div class="interpretation-content interpretation-preview-page">
+        <div class="interpretation-preview-banner" role="note">
+            <strong>{% trans "Temporary" %}</strong>
+            <p>{% trans "Quick check that captions reach Eventyay. Will be removed when the Eventyay Videos caption bar PR lands." %}</p>
+        </div>
+
+        {% if not preview_supported %}
+            <p class="interpretation-preview-empty">{% trans "Caption preview only works for rooms using SUSI." %}</p>
+            <a class="interpretation-preview-back" href="{{ rooms_url }}">{% trans "Back" %}</a>
+        {% else %}
+            <form method="post" class="interpretation-preview-settings-form">
+                {% csrf_token %}
+                <div class="interpretation-preview-settings-grid">
+                    <div class="form-group">
+                        <label for="{{ preview_form.transcription_provider.id_for_label }}">
+                            {{ preview_form.transcription_provider.label }}
+                        </label>
+                        {{ preview_form.transcription_provider }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ preview_form.translation_provider.id_for_label }}">
+                            {{ preview_form.translation_provider.label }}
+                        </label>
+                        {{ preview_form.translation_provider }}
+                    </div>
+                </div>
+
+                <div class="interpretation-preview-toolbar">
+                    <span class="interpretation-preview-session{% if is_running %} interpretation-preview-session--live{% endif %}">
+                        {% if is_running %}
+                            {% trans "Running" %}
+                        {% else %}
+                            {% trans "Stopped" %}
+                        {% endif %}
+                    </span>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="save_settings"
+                            class="btn btn-default">
+                        {% trans "Save settings" %}
+                    </button>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="start"
+                            class="btn btn-primary"
+                            {% if is_running %}disabled{% endif %}>
+                        {% trans "Start" %}
+                    </button>
+                    <button type="submit"
+                            name="{{ preview_action_key }}"
+                            value="stop"
+                            class="btn btn-default"
+                            {% if not is_running %}disabled{% endif %}>
+                        {% trans "Stop" %}
+                    </button>
+                    <a class="interpretation-preview-back" href="{{ rooms_url }}">{% trans "Back" %}</a>
+                </div>
+            </form>
+
+            <p id="preview-status-line" class="interpretation-preview-stream-status">
+                {% if is_running %}
+                    {% trans "Waiting for captions…" %}
+                {% endif %}
+            </p>
+
+            <div id="preview-caption-box"
+                 class="interpretation-preview-caption-box{% if not is_running %} interpretation-preview-caption-box--idle{% endif %}"
+                 aria-live="polite">
+                {% if not is_running %}
+                    <span class="interpretation-preview-caption-placeholder">{% trans "Captions appear here" %}</span>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% if preview_supported and is_running %}
+        <script>
+            (function () {
+                var pollUrl = "{{ poll_url|escapejs }}";
+                var statusLine = document.getElementById("preview-status-line");
+                var captionBox = document.getElementById("preview-caption-box");
+                var lastText = "";
+
+                function poll() {
+                    fetch(pollUrl, { credentials: "same-origin", headers: { Accept: "application/json" } })
+                        .then(function (response) { return response.json(); })
+                        .then(function (data) {
+                            if (data.error) {
+                                statusLine.textContent = data.error;
+                                statusLine.classList.add("is-error");
+                                return;
+                            }
+                            if (!data.running) {
+                                statusLine.textContent = "{% trans 'Session stopped.'|escapejs %}";
+                                return;
+                            }
+                            if (data.text && data.text !== lastText) {
+                                lastText = data.text;
+                                captionBox.textContent = data.text;
+                                captionBox.classList.remove("interpretation-preview-caption-box--idle");
+                                statusLine.textContent = "{% trans 'Receiving captions.'|escapejs %}";
+                                statusLine.classList.remove("is-error");
+                            }
+                        })
+                        .catch(function () {
+                            statusLine.textContent = "{% trans 'Could not load captions.'|escapejs %}";
+                            statusLine.classList.add("is-error");
+                        });
+                }
+
+                poll();
+                window.setInterval(poll, 2000);
+            })();
+        </script>
+    {% endif %}
+{% endblock %}

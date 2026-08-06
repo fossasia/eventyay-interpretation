@@ -14,6 +14,10 @@ from .interpreter_credentials import (
 )
 from .settings import SETTING_IS_ENABLED, is_interpretation_enabled
 from .susi import SusiClient, SusiError
+from .susi_providers import (
+    SUSI_TRANSCRIPTION_PROVIDERS,
+    SUSI_TRANSLATION_PROVIDERS,
+)
 
 CONNECT_POST_KEY = "interpretation_connect"
 TEST_POST_KEY = "interpretation_test_connection"
@@ -22,6 +26,10 @@ INTERPRETER_ACTION_KEY = "interpretation_interpreter_action"
 INTERPRETER_ID_KEY = "interpretation_interpreter_id"
 ROOM_ID_KEY = "interpretation_room_id"
 ROOM_ACTION_KEY = "interpretation_room_action"
+PREVIEW_ACTION_KEY = "preview_action"
+PREVIEW_SAVE = "save_settings"
+PREVIEW_START = "start"
+PREVIEW_STOP = "stop"
 
 
 def verify_susi_connection(event, request) -> None:
@@ -224,3 +232,39 @@ class InterpretationSettingsForm(SettingsForm):
 
             stop_all_event_sessions(self.obj)
         return result
+
+
+class CaptionPreviewSettingsForm(forms.Form):
+    """SUSI session settings for the temporary caption preview page."""
+
+    transcription_provider = forms.ChoiceField(
+        label=_("Transcription provider"),
+        choices=[("", _("— Select —"))] + list(SUSI_TRANSCRIPTION_PROVIDERS),
+        required=True,
+    )
+    translation_provider = forms.ChoiceField(
+        label=_("Translation provider"),
+        choices=[("", _("— Select —"))] + list(SUSI_TRANSLATION_PROVIDERS),
+        required=True,
+    )
+
+    def __init__(self, *args, interpretation=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+        if interpretation:
+            if interpretation.transcription_provider:
+                self.fields[
+                    "transcription_provider"
+                ].initial = interpretation.transcription_provider
+            if interpretation.translation_provider:
+                self.fields[
+                    "translation_provider"
+                ].initial = interpretation.translation_provider
+
+
+def preview_settings_payload(form: CaptionPreviewSettingsForm) -> dict:
+    return {
+        "transcription_provider": form.cleaned_data["transcription_provider"],
+        "translation_provider": form.cleaned_data["translation_provider"],
+    }

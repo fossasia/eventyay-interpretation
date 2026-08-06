@@ -1,0 +1,206 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Interpretation" %}{% endblock %}
+{% block content %}
+    <style>{% include "interpretation/dashboard.css" %}</style>
+
+    <header class="interpretation-hero interpretation-hero--welcome">
+        <div class="interpretation-hero-icon" aria-hidden="true">
+            <span class="fa fa-language"></span>
+        </div>
+        <div class="interpretation-hero-text">
+            <h2 class="interpretation-hero-title">{% trans "Interpretation" %}</h2>
+            <p class="interpretation-hero-lead">
+                {% blocktrans trimmed with event_name=event.name %}
+                    Live captions, translated audio, and language channels for {{ event_name }}.
+                {% endblocktrans %}
+            </p>
+            <div class="interpretation-hero-actions">
+                <a class="btn btn-primary"
+                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Room settings" %}
+                </a>
+                <a class="btn btn-default"
+                   href="{{ interpreters_url }}">
+                    {% trans "Configure interpreters" %}
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div class="interpretation-content">
+        <section class="interpretation-overview-section">
+            <h3 class="interpretation-section-title">{% trans "Event settings" %}</h3>
+            {% include "interpretation/event_enable_form.html" with form=event_settings_form event_settings_save_key=event_settings_save_key %}
+        </section>
+
+        <div class="interpretation-stat-grid">
+            <a class="interpretation-stat-card interpretation-stat-card--link"
+               href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                <span class="interpretation-stat-label">{% trans "Rooms" %}</span>
+                <span class="interpretation-stat-value">{{ stats.room_total }}</span>
+                <span class="interpretation-stat-detail">
+                    {% blocktrans trimmed with enabled=stats.room_enabled running=stats.room_running %}
+                        {{ enabled }} enabled · {{ running }} live
+                    {% endblocktrans %}
+                </span>
+            </a>
+
+            <a class="interpretation-stat-card interpretation-stat-card--link{% if stats.room_running %} interpretation-stat-card--active{% endif %}"
+               href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                <span class="interpretation-stat-label">{% trans "Live sessions" %}</span>
+                <span class="interpretation-stat-value">{{ stats.room_running }}</span>
+                <span class="interpretation-stat-detail">
+                    {% if stats.room_running %}
+                        {% trans "Sessions running now" %}
+                    {% else %}
+                        {% trans "Nothing live right now" %}
+                    {% endif %}
+                </span>
+            </a>
+
+            <a class="interpretation-stat-card interpretation-stat-card--link{% if stats.room_needs_setup %} interpretation-stat-card--warn{% endif %}"
+               href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                <span class="interpretation-stat-label">{% trans "Needs attention" %}</span>
+                <span class="interpretation-stat-value">{{ stats.room_needs_setup }}</span>
+                <span class="interpretation-stat-detail">
+                    {% if stats.room_needs_setup %}
+                        {% trans "Enabled rooms need interpreter sign-in or setup" %}
+                    {% else %}
+                        {% trans "All enabled rooms look ready" %}
+                    {% endif %}
+                </span>
+            </a>
+
+            <div class="interpretation-stat-card">
+                <span class="interpretation-stat-label">{% trans "Interpreters in use" %}</span>
+                <span class="interpretation-stat-value">{{ interpreter_usage|length }}</span>
+                <span class="interpretation-stat-detail">
+                    {% if interpreter_usage %}
+                        {% for item in interpreter_usage %}
+                            {% blocktrans trimmed with label=item.label count counter=item.room_count %}
+                                {{ label }} ({{ counter }} room)
+                            {% plural %}
+                                {{ label }} ({{ counter }} rooms)
+                            {% endblocktrans %}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        {% trans "No rooms configured yet" %}
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        {% if running_sessions %}
+            <section class="interpretation-overview-section">
+                <h3 class="interpretation-section-title">{% trans "Live now" %}</h3>
+                <ul class="interpretation-live-list">
+                    {% for session in running_sessions %}
+                        <li class="interpretation-live-item">
+                            <div class="interpretation-live-copy">
+                                <strong>{{ session.room.name }}</strong>
+                                <span class="text-muted">
+                                    {{ session.interpreter_label }}
+                                    {% if session.target_languages %}
+                                        · {{ session.target_languages|join:", " }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <a class="btn btn-default btn-sm"
+                               href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}?room={{ session.room.pk }}">
+                                {% trans "Manage" %}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </section>
+        {% endif %}
+
+        <section class="interpretation-overview-section">
+            <h3 class="interpretation-section-title">{% trans "Interpreter services" %}</h3>
+            <div class="interpretation-backend-grid">
+                {% for backend in backends %}
+                    {% if backend.id != "none" %}
+                        <div class="interpretation-backend-card">
+                            <div class="interpretation-backend-head">
+                                <strong>{{ backend.label }}</strong>
+                            </div>
+                            <p class="interpretation-backend-detail text-muted">
+                                {% if backend.configured %}
+                                    {% if backend.rooms_using %}
+                                        {% blocktrans trimmed count counter=backend.rooms_using %}
+                                            Connected for this event · {{ counter }} room using it
+                                        {% plural %}
+                                            Connected for this event · {{ counter }} rooms using it
+                                        {% endblocktrans %}
+                                    {% else %}
+                                        {% trans "Connected for this event. No rooms use it yet." %}
+                                    {% endif %}
+                                {% else %}
+                                    {% trans "Not signed in for this event yet." %}
+                                    <a href="{{ interpreters_url }}">{% trans "Configure interpreters" %}</a>
+                                {% endif %}
+                            </p>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        {% if room_snapshots %}
+            <section class="interpretation-overview-section">
+                <div class="interpretation-section-head">
+                    <h3 class="interpretation-section-title">{% trans "Rooms at a glance" %}</h3>
+                    <a href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
+                        {% trans "View all room settings" %} →
+                    </a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover interpretation-snapshot-table">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Room" %}</th>
+                                <th>{% trans "Status" %}</th>
+                                <th>{% trans "Interpreter" %}</th>
+                                <th class="text-right">{% trans "Open" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in room_snapshots %}
+                                <tr>
+                                    <td>{{ entry.room.name }}</td>
+                                    <td>
+                                        {% if entry.status == "running" %}
+                                            <span class="interpretation-badge interpretation-badge--success">{% trans "Live" %}</span>
+                                        {% elif entry.status == "ready" %}
+                                            <span class="interpretation-badge interpretation-badge--success">{% trans "Ready" %}</span>
+                                        {% elif entry.status == "setup" %}
+                                            <span class="interpretation-badge interpretation-badge--warn">{% trans "Setup" %}</span>
+                                        {% else %}
+                                            <span class="interpretation-badge">{% trans "Off" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if entry.interpreter_label %}
+                                            {{ entry.interpreter_label }}
+                                        {% else %}
+                                            <span class="text-muted">{% trans "None" %}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-right">
+                                        <a class="btn btn-default btn-sm"
+                                           href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}?room={{ entry.room.pk }}">
+                                            {% trans "Configure" %}
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        {% else %}
+            <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
+        {% endif %}
+    </div>
+{% endblock %}
