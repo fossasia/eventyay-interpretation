@@ -14,11 +14,11 @@ from .backend_credentials import (
 from .backends import list_available_interpreters
 from .forms import (
     CONNECT_POST_KEY,
+    ROOM_ACTION_KEY,
+    ROOM_ID_KEY,
     InterpretationSettingsForm,
     RoomConfigureForm,
     RoomSusiCredentialsForm,
-    ROOM_ACTION_KEY,
-    ROOM_ID_KEY,
     room_form_prefix,
     verify_susi_connection,
 )
