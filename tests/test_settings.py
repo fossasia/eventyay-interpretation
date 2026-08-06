@@ -1,16 +1,23 @@
-"""Tests for interpretation.settings helpers."""
+"""Tests for interpretation.settings and backend credential helpers."""
 
-from interpretation.settings import (
-    SETTING_AUTH_TOKEN,
-    SETTING_BASE_URL,
-    SETTING_IS_ENABLED,
-    get_auth_token,
-    get_base_url,
+from interpretation.backend_credentials import (
+    SUSI_AUTH_TOKEN,
+    SUSI_BASE_URL,
+    get_susi_auth_token,
+    get_susi_base_url,
     get_susi_client,
-    is_interpretation_enabled,
     is_susi_configured,
-    is_susi_connected,
 )
+from interpretation.settings import SETTING_IS_ENABLED, is_interpretation_enabled
+
+
+class _FakeInterpretation:
+    def __init__(self, config=None):
+        self.backend_config = dict(config or {})
+        self.saved = False
+
+    def save(self, update_fields=None):
+        self.saved = True
 
 
 class _FakeSettings:
@@ -35,60 +42,42 @@ def test_is_interpretation_enabled_defaults_true():
     assert is_interpretation_enabled(_FakeEvent()) is True
 
 
-def test_settings_helpers_read_event_values():
-    event = _FakeEvent(
-        {
-            SETTING_BASE_URL: "https://example.com",
-            SETTING_AUTH_TOKEN: "tok",
-            SETTING_IS_ENABLED: True,
-        }
-    )
-    assert get_base_url(event) == "https://example.com"
-    assert get_auth_token(event) == "tok"
-    assert is_interpretation_enabled(event) is True
+def test_is_interpretation_enabled_reads_event_setting():
+    event = _FakeEvent({SETTING_IS_ENABLED: False})
+    assert is_interpretation_enabled(event) is False
 
 
-def test_get_susi_client_uses_event_settings():
-    event = _FakeEvent(
+def test_get_susi_client_uses_room_credentials():
+    interpretation = _FakeInterpretation(
         {
-            SETTING_BASE_URL: "https://example.com",
-            SETTING_AUTH_TOKEN: "tok",
+            SUSI_BASE_URL: "https://example.com",
+            SUSI_AUTH_TOKEN: "tok",
         }
     )
-    client = get_susi_client(event)
+    client = get_susi_client(interpretation)
     assert client.base_url == "https://example.com/"
     assert client.auth_token == "tok"
 
 
-def test_is_susi_connected_requires_url_and_token():
-    assert is_susi_connected(_FakeEvent()) is False
+def test_is_susi_configured_requires_url_and_token():
+    assert is_susi_configured(None) is False
     assert (
-        is_susi_connected(_FakeEvent({SETTING_BASE_URL: "https://example.com"}))
+        is_susi_configured(_FakeInterpretation({SUSI_BASE_URL: "https://example.com"}))
         is False
     )
     assert (
-        is_susi_connected(
-            _FakeEvent(
-                {
-                    SETTING_BASE_URL: "https://example.com",
-                    SETTING_AUTH_TOKEN: "tok",
-                }
-            )
-        )
-        is True
-    )
-
-
-def test_is_susi_configured_matches_connected_credentials():
-    assert is_susi_configured(_FakeEvent()) is False
-    assert (
         is_susi_configured(
-            _FakeEvent(
+            _FakeInterpretation(
                 {
-                    SETTING_BASE_URL: "https://example.com",
-                    SETTING_AUTH_TOKEN: "tok",
+                    SUSI_BASE_URL: "https://example.com",
+                    SUSI_AUTH_TOKEN: "tok",
                 }
             )
         )
         is True
     )
+    assert (
+        get_susi_base_url(_FakeInterpretation({SUSI_BASE_URL: "https://example.com/"}))
+        == "https://example.com"
+    )
+    assert get_susi_auth_token(_FakeInterpretation({SUSI_AUTH_TOKEN: "tok"})) == "tok"

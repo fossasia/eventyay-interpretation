@@ -10,6 +10,18 @@ os.environ.setdefault("EVY_RUNNING_ENVIRONMENT", "testing")
 
 User = get_user_model()
 
+SUSI_BACKEND_CONFIG = {
+    "susi_base_url": "https://susi.example.com",
+    "susi_auth_token": "jwt-test-token",
+    "susi_account_email": "susi@example.com",
+}
+
+
+@pytest.fixture(autouse=True)
+def align_site_url_with_test_client(settings):
+    # ponytail: test client host is testserver; middleware redirects otherwise.
+    settings.SITE_URL = "https://testserver"
+
 
 @pytest.fixture
 def user(db):
@@ -84,14 +96,50 @@ def dashboard_url(event):
 
 
 @pytest.fixture
+def rooms_url(event):
+    from django.urls import reverse
+
+    return reverse(
+        "plugins:interpretation:rooms",
+        kwargs={"organizer": event.organizer.slug, "event": event.slug},
+    )
+
+
+@pytest.fixture
+def room(event):
+    from eventyay.base.models import Room
+
+    return Room.objects.create(event=event, name="Main Stage")
+
+
+@pytest.fixture
 def connected_event(event):
-    event.settings.set("interpretation_auth_token", "jwt-test-token")
-    event.settings.set("interpretation_susi_email", "susi@example.com")
     return event
 
 
 @pytest.fixture
-def connection_payload():
+def connected_room(room):
+    from interpretation.models import RoomInterpretation
+
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        backend_config=dict(SUSI_BACKEND_CONFIG),
+    )
+    return room
+
+
+def room_connect_payload(room, **extra):
+    prefix = f"room-{room.pk}"
     return {
-        "interpretation-interpretation_base_url": "https://susi.example.com",
+        "interpretation_room_id": str(room.pk),
+        "interpretation_room_action": "connect",
+        f"{prefix}-interpreter": "susi",
+        f"{prefix}-room_enabled": "on",
+        f"{prefix}-interpretation_base_url": "https://susi.example.com",
+        f"{prefix}-susi_connect_email": "susi@example.com",
+        f"{prefix}-susi_connect_password": "secret",
+        "interpretation_connect": "1",
+        **extra,
     }

@@ -4,20 +4,10 @@ from django.utils.translation import gettext_lazy as _
 from eventyay.base.settings import settings_hierarkey
 from eventyay.control.signals import nav_event_common
 
-from .settings import (
-    SETTING_AUTH_TOKEN,
-    SETTING_BASE_URL,
-    SETTING_IS_ENABLED,
-    SETTING_SUSI_EMAIL,
-    SETTING_SUSI_NAME,
-)
+from .settings import SETTING_IS_ENABLED
 
 PLUGIN_MODULE = "interpretation"
 
-settings_hierarkey.add_default(SETTING_BASE_URL, "", str)
-settings_hierarkey.add_default(SETTING_AUTH_TOKEN, "", str)
-settings_hierarkey.add_default(SETTING_SUSI_EMAIL, "", str)
-settings_hierarkey.add_default(SETTING_SUSI_NAME, "", str)
 settings_hierarkey.add_default(SETTING_IS_ENABLED, True, bool)
 
 

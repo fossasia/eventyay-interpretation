@@ -1,0 +1,88 @@
+{% load i18n bootstrap3 %}
+<form method="post" class="interpretation-room-form" id="room-{{ entry.room.pk }}">
+    {% csrf_token %}
+    <input type="hidden" name="{{ room_id_key }}" value="{{ entry.room.pk }}">
+
+    <div class="interpretation-room-panel-grid">
+        <div class="form-group">
+            <label for="{{ entry.configure_form.interpreter.id_for_label }}">
+                {{ entry.configure_form.interpreter.label }}
+            </label>
+            {{ entry.configure_form.interpreter }}
+        </div>
+
+        <div class="interpretation-interpreter-panels">
+            {% for interpreter in available_interpreters %}
+                {% if interpreter.id != "none" %}
+                    <div class="interpretation-interpreter-panel"
+                         data-interpreter-panel="{{ interpreter.id }}"
+                         hidden>
+                        {% if interpreter.id == "susi" %}
+                            {% if entry.susi_connected %}
+                                <div class="interpretation-account-card interpretation-account-card--inline">
+                                    <div class="interpretation-account-main">
+                                        <span class="interpretation-status-dot" aria-hidden="true"></span>
+                                        <div>
+                                            <div class="interpretation-account-name">{{ entry.susi_account }}</div>
+                                            <div class="interpretation-account-server">{{ entry.susi_server_host }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="interpretation-account-actions">
+                                        <button type="submit"
+                                                name="{{ room_action_key }}"
+                                                value="test"
+                                                class="btn btn-default btn-sm">
+                                            {% trans "Test connection" %}
+                                        </button>
+                                        <button type="submit"
+                                                name="{{ room_action_key }}"
+                                                value="disconnect"
+                                                class="btn btn-link btn-sm">
+                                            {% trans "Clear room" %}
+                                        </button>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <p class="text-muted interpretation-section-hint">
+                                    {% trans "Sign in to use SUSI Translator for this room." %}
+                                </p>
+                                <div class="interpretation-fields">
+                                    {% bootstrap_field entry.susi_form.interpretation_base_url layout="vertical" show_help=False %}
+                                    {% bootstrap_field entry.susi_form.susi_connect_email layout="vertical" show_help=False %}
+                                    {% bootstrap_field entry.susi_form.susi_connect_password layout="vertical" show_help=False %}
+                                </div>
+                                <button type="submit"
+                                        name="{{ room_action_key }}"
+                                        value="connect"
+                                        class="btn btn-primary btn-sm">
+                                    <span class="fa fa-sign-in"></span>
+                                    {% trans "Sign in" %}
+                                </button>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="form-group">
+            <div class="checkbox">
+                <label>
+                    {{ entry.configure_form.room_enabled }}
+                    {{ entry.configure_form.room_enabled.label }}
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="interpretation-room-form-actions">
+        <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-default">
+            {% trans "Save" %}
+        </button>
+        {% if entry.data.status == "running" %}
+            <button type="submit" name="{{ room_action_key }}" value="stop" class="btn btn-warning">
+                {% trans "Stop session" %}
+            </button>
+        {% endif %}
+    </div>
+</form>

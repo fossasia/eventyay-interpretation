@@ -1,0 +1,112 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Room settings" %} — {% trans "Interpretation" %}{% endblock %}
+{% block content %}
+    <style>{% include "interpretation/dashboard.css" %}</style>
+
+    <header class="interpretation-hero interpretation-hero--subpage">
+        <div class="interpretation-hero-text">
+            <p class="interpretation-breadcrumb">
+                <a href="{% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Interpretation" %}
+                </a>
+                <span aria-hidden="true"> / </span>
+                <span>{% trans "Room settings" %}</span>
+            </p>
+            <h2 class="interpretation-hero-title">{% trans "Room settings" %}</h2>
+            <p class="interpretation-hero-lead">
+                {% trans "Configure an interpreter and sign in per room. Use the video admin API to start sessions." %}
+            </p>
+        </div>
+    </header>
+
+    <div class="interpretation-content">
+        {% include "interpretation/event_enable_form.html" with form=event_settings_form event_settings_save_key="interpretation_event_settings_save" %}
+
+        {% if not rooms %}
+            <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table table-hover interpretation-rooms-table">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Room" %}</th>
+                            <th>{% trans "Interpreter" %}</th>
+                            <th>{% trans "Session" %}</th>
+                            <th>{% trans "Caption languages" %}</th>
+                            <th class="text-right">{% trans "Configure" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in rooms %}
+                            <tr class="interpretation-room-summary" id="room-{{ entry.room.pk }}">
+                                <td class="interpretation-room-name">{{ entry.room.name }}</td>
+                                <td>
+                                    {% if entry.data.room_enabled and entry.data.interpreter != "none" %}
+                                        {{ entry.data.interpreter_label }}
+                                    {% else %}
+                                        <span class="text-muted">{% trans "Off" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if entry.data.status == "running" %}
+                                        <span class="interpretation-badge interpretation-badge--success">{% trans "Running" %}</span>
+                                    {% else %}
+                                        <span class="interpretation-badge">{% trans "Idle" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if entry.data.target_languages %}
+                                        {{ entry.data.target_languages|join:", " }}
+                                    {% else %}
+                                        <span class="text-muted">{% trans "Not set" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <button type="button"
+                                            class="btn btn-default btn-sm interpretation-room-toggle"
+                                            data-toggle="collapse"
+                                            data-target="#room-panel-{{ entry.room.pk }}"
+                                            aria-expanded="{% if entry.expanded %}true{% else %}false{% endif %}"
+                                            aria-controls="room-panel-{{ entry.room.pk }}">
+                                        {% trans "Configure" %}
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr class="interpretation-room-panel-row">
+                                <td colspan="5" class="interpretation-room-panel-cell">
+                                    <div id="room-panel-{{ entry.room.pk }}"
+                                         class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
+                                        {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        (function () {
+            function syncInterpreterPanels(form) {
+                var select = form.querySelector('select[name$="-interpreter"]');
+                if (!select) return;
+                var value = select.value;
+                form.querySelectorAll("[data-interpreter-panel]").forEach(function (panel) {
+                    panel.hidden = panel.getAttribute("data-interpreter-panel") !== value;
+                });
+            }
+
+            document.querySelectorAll(".interpretation-room-form").forEach(function (form) {
+                var select = form.querySelector('select[name$="-interpreter"]');
+                if (!select) return;
+                select.addEventListener("change", function () {
+                    syncInterpreterPanels(form);
+                });
+                syncInterpreterPanels(form);
+            });
+        })();
+    </script>
+{% endblock %}
