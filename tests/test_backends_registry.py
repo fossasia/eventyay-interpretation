@@ -4,6 +4,7 @@ import pytest
 
 from interpretation.backends import (
     get_backend,
+    is_known_interpreter,
     is_registered_interpreter,
     list_configurable_interpreters,
     registered_interpreter_ids,
@@ -18,6 +19,12 @@ pytestmark = pytest.mark.django_db
 def test_registered_interpreter_ids():
     assert RoomInterpretation.INTERPRETER_SUSI in registered_interpreter_ids()
     assert RoomInterpretation.INTERPRETER_NONE not in registered_interpreter_ids()
+
+
+def test_is_known_interpreter_includes_none():
+    assert is_known_interpreter(RoomInterpretation.INTERPRETER_NONE) is True
+    assert is_known_interpreter(RoomInterpretation.INTERPRETER_SUSI) is True
+    assert is_known_interpreter("unknown") is False
 
 
 def test_is_registered_interpreter():

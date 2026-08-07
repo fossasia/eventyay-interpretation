@@ -8,7 +8,7 @@ from django.utils.translation import gettext_lazy as _
 
 from .backends import (
     get_backend,
-    is_registered_interpreter,
+    is_known_interpreter,
     list_available_interpreters,
 )
 from .interpreter_credentials import (
@@ -149,7 +149,7 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
         interpreter = (
             data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE
         ).strip()
-        if not is_registered_interpreter(interpreter):
+        if not is_known_interpreter(interpreter):
             raise ValueError(_("Unknown interpreter."))
         interpretation.interpreter = interpreter
 

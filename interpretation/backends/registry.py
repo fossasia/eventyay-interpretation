@@ -25,6 +25,10 @@ def registered_interpreter_ids() -> frozenset[str]:
     return frozenset(_BACKENDS) - {INTERPRETER_NONE}
 
 
+def is_known_interpreter(interpreter_id: str) -> bool:
+    return interpreter_id in _BACKENDS
+
+
 def is_registered_interpreter(interpreter_id: str) -> bool:
     return interpreter_id in registered_interpreter_ids()
 
