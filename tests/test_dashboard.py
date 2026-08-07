@@ -4,12 +4,16 @@ import pytest
 from django.contrib.messages import get_messages
 from django.test import override_settings
 
-from interpretation.interpreter_credentials import get_susi_auth_token, is_susi_configured
-from interpretation.models import RoomInterpretation
+from interpretation.interpreter_credentials import (
+    get_susi_auth_token,
+    is_susi_configured,
+)
 from interpretation.susi import SusiResult
 from tests.conftest import SUSI_EVENT_CREDENTIALS, susi_connect_payload
 
 pytestmark = pytest.mark.django_db
+
+SUSI_CLIENT = "interpretation.interpreter_credentials.SusiClient"
 
 
 @override_settings(SITE_URL="https://testserver")
@@ -58,7 +62,7 @@ def test_interpreter_test_calls_verify_with_event_token(
                 message="Connected and authenticated.",
             )
 
-    monkeypatch.setattr("interpretation.interpreter_credentials.SusiClient", FakeSusiClient)
+    monkeypatch.setattr(SUSI_CLIENT, FakeSusiClient)
 
     response = organizer_client.post(
         interpreters_url,
@@ -92,7 +96,7 @@ def test_interpreter_test_warns_when_verify_rejects_token(
                 message="Server reachable but token is invalid or expired.",
             )
 
-    monkeypatch.setattr("interpretation.interpreter_credentials.SusiClient", FakeSusiClient)
+    monkeypatch.setattr(SUSI_CLIENT, FakeSusiClient)
 
     response = organizer_client.post(
         interpreters_url,
@@ -123,7 +127,7 @@ def test_interpreter_test_without_credentials_shows_error(
         def __init__(self, *args, **kwargs):
             calls.append(True)
 
-    monkeypatch.setattr("interpretation.interpreter_credentials.SusiClient", FakeSusiClient)
+    monkeypatch.setattr(SUSI_CLIENT, FakeSusiClient)
 
     response = organizer_client.post(
         interpreters_url,

@@ -1,12 +1,11 @@
 """Tests for event-level SUSI credential helpers."""
 
 from interpretation.forms import SusiInterpreterCredentialsForm, verify_susi_connection
-from interpretation.interpreter_credentials import (
-    SETTING_SUSI_AUTH_TOKEN,
-    SETTING_SUSI_BASE_URL,
-)
+from interpretation.interpreter_credentials import SETTING_SUSI_BASE_URL
 from interpretation.susi import SusiResult
 from tests.conftest import SUSI_EVENT_CREDENTIALS, apply_susi_event_credentials
+
+SUSI_CLIENT = "interpretation.interpreter_credentials.SusiClient"
 
 
 def test_test_susi_connection_uses_event_credentials(monkeypatch, event):
@@ -25,7 +24,7 @@ def test_test_susi_connection_uses_event_credentials(monkeypatch, event):
                 message="Connected and authenticated.",
             )
 
-    monkeypatch.setattr("interpretation.interpreter_credentials.SusiClient", FakeSusiClient)
+    monkeypatch.setattr(SUSI_CLIENT, FakeSusiClient)
     monkeypatch.setattr(
         "interpretation.forms.messages.success",
         lambda request, message: logged.append(message),
