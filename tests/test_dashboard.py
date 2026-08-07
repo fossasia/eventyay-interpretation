@@ -30,7 +30,9 @@ def test_interpreter_connect_stores_event_credentials(
     response = organizer_client.post(interpreters_url, susi_connect_payload())
 
     assert response.status_code == 302
-    event.refresh_from_db()
+    from eventyay.base.models import Event
+
+    event = Event.objects.get(pk=event.pk)
     assert is_susi_configured(event)
     assert get_susi_auth_token(event) == "jwt-test-token"
 
@@ -78,6 +80,10 @@ def test_interpreter_test_warns_when_verify_rejects_token(
     monkeypatch, organizer_client, connected_event, interpreters_url,
 ):
     class FakeSusiClient:
+        def __init__(self, base_url, auth_token="", timeout=10):
+            self.base_url = base_url
+            self.auth_token = auth_token
+
         def verify(self):
             return SusiResult(
                 ok=False,

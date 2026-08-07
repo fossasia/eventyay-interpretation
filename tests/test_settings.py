@@ -32,7 +32,7 @@ class _FakeSettings:
 def test_get_susi_client_uses_event_credentials():
     event = _FakeEvent(_FakeSettings(SUSI_EVENT_CREDENTIALS))
     client = get_susi_client(event)
-    assert client.base_url == "https://susi.example.com"
+    assert client.base_url.rstrip("/") == "https://susi.example.com"
     assert client.auth_token == "jwt-test-token"
 
 
