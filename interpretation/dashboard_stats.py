@@ -66,7 +66,7 @@ def build_overview_context(event) -> dict:
                 interpreters_in_use.get(data_interpreter, 0) + 1
             )
 
-        if room_on and data_interpreter != RoomInterpretation.INTERPRETER_NONE:
+        if status == RoomInterpretation.STATUS_RUNNING:
             snapshot_status = "running"
         elif room_on:
             snapshot_status = "ready" if interpreter_ready else "setup"
