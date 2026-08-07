@@ -1,16 +1,16 @@
 """Tests for event-level and per-room interpretation forms."""
 
-from interpretation.backend_credentials import (
-    SUSI_AUTH_TOKEN,
-    SUSI_BASE_URL,
-    get_susi_auth_token,
-    get_susi_base_url,
-    is_susi_configured,
-)
 from interpretation.forms import (
     CONNECT_POST_KEY,
     InterpretationSettingsForm,
-    RoomSusiCredentialsForm,
+    SusiInterpreterCredentialsForm,
+)
+from interpretation.interpreter_credentials import (
+    SETTING_SUSI_AUTH_TOKEN,
+    SETTING_SUSI_BASE_URL,
+    get_susi_auth_token,
+    get_susi_base_url,
+    is_susi_configured,
 )
 from interpretation.settings import SETTING_IS_ENABLED
 
@@ -53,15 +53,6 @@ class _FakeEvent:
         self.settings = _FakeSettings(settings)
 
 
-class _FakeInterpretation:
-    def __init__(self, config=None):
-        self.backend_config = dict(config or {})
-        self.saved = False
-
-    def save(self, update_fields=None):
-        self.saved = True
-
-
 def _event_form(data, settings=None, prefix="interpretation"):
     post = {f"{prefix}-{key}": value for key, value in data.items()}
     return InterpretationSettingsForm(
@@ -69,16 +60,14 @@ def _event_form(data, settings=None, prefix="interpretation"):
     )
 
 
-def _room_credentials_form(data, interpretation=None, prefix="room-1"):
+def _susi_credentials_form(data, event=None):
     post = {}
     for key, value in data.items():
         if key == CONNECT_POST_KEY:
             post[key] = value
         else:
-            post[f"{prefix}-{key}"] = value
-    return RoomSusiCredentialsForm(
-        data=post, prefix=prefix, interpretation=interpretation
-    )
+            post[key] = value
+    return SusiInterpreterCredentialsForm(data=post, event=event)
 
 
 def test_event_enable_toggle_can_be_saved(monkeypatch):
@@ -111,14 +100,14 @@ def test_event_disable_stops_sessions(monkeypatch):
     assert stopped == [form.obj]
 
 
-def test_room_credentials_base_url_trailing_slash_is_stripped():
-    form = _room_credentials_form({"interpretation_base_url": f"{PUBLIC_URL}/"})
+def test_susi_credentials_base_url_trailing_slash_is_stripped():
+    form = _susi_credentials_form({"interpretation_base_url": f"{PUBLIC_URL}/"})
     assert form.is_valid(), form.errors
     assert form.cleaned_data["interpretation_base_url"] == PUBLIC_URL
 
 
-def test_room_connect_requires_email_and_password():
-    form = _room_credentials_form(
+def test_susi_connect_requires_email_and_password():
+    form = _susi_credentials_form(
         {
             "interpretation_base_url": PUBLIC_URL,
             "susi_connect_email": "",
@@ -131,7 +120,7 @@ def test_room_connect_requires_email_and_password():
     assert "susi_connect_password" in form.errors
 
 
-def test_room_connect_stores_credentials_on_interpretation(monkeypatch):
+def test_susi_connect_stores_credentials_on_event(monkeypatch):
     from django.contrib import messages
 
     from interpretation.susi import SusiLoginResult
@@ -146,28 +135,28 @@ def test_room_connect_stores_credentials_on_interpretation(monkeypatch):
         "interpretation.forms.SusiClient.login",
         fake_login,
     )
-    interpretation = _FakeInterpretation()
-    form = _room_credentials_form(
+    event = _FakeEvent()
+    form = _susi_credentials_form(
         {
             "interpretation_base_url": PUBLIC_URL,
             "susi_connect_email": "bot@example.com",
             "susi_connect_password": "secret",
             CONNECT_POST_KEY: "1",
         },
-        interpretation=interpretation,
+        event=event,
     )
     assert form.is_valid(), form.errors
-    form.run_connect_action(request=type("R", (), {})(), interpretation=interpretation)
-    assert get_susi_auth_token(interpretation) == "jwt"
-    assert interpretation.backend_config[SUSI_BASE_URL] == PUBLIC_URL
+    form.run_connect_action(request=type("R", (), {})(), event=event)
+    assert get_susi_auth_token(event) == "jwt"
+    assert event.settings.get(SETTING_SUSI_BASE_URL) == PUBLIC_URL
 
 
-def test_is_susi_configured_reads_room_backend_config():
-    interpretation = _FakeInterpretation(
+def test_is_susi_configured_reads_event_settings():
+    event = _FakeEvent(
         {
-            SUSI_BASE_URL: PUBLIC_URL,
-            SUSI_AUTH_TOKEN: "tok",
+            SETTING_SUSI_BASE_URL: PUBLIC_URL,
+            SETTING_SUSI_AUTH_TOKEN: "tok",
         }
     )
-    assert is_susi_configured(interpretation) is True
-    assert get_susi_base_url(interpretation) == PUBLIC_URL
+    assert is_susi_configured(event) is True
+    assert get_susi_base_url(event) == PUBLIC_URL

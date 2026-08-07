@@ -6,10 +6,10 @@ from eventyay.base.models import LoggedModel
 class RoomInterpretation(LoggedModel):
     """Per-room interpretation configuration and session state.
 
-    Each room selects its own interpreter backend, stores its own backend
-    credentials in ``backend_config``, and runs sessions independently.
-    Event-level settings only store the feature toggle (see
-    :mod:`interpretation.settings`).
+    Each room selects its own interpreter backend and runs sessions
+    independently. Event-level settings store interpreter sign-in credentials
+    and the feature toggle (see :mod:`interpretation.settings` and
+    :mod:`interpretation.interpreter_credentials`).
     """
 
     INTERPRETER_NONE = "none"

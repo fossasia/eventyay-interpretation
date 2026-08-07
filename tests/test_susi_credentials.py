@@ -1,23 +1,15 @@
-"""Tests for SUSI credential helpers used by the dashboard."""
+"""Tests for event-level SUSI credential helpers."""
 
-from interpretation.backend_credentials import (
-    SUSI_AUTH_TOKEN,
-    SUSI_BASE_URL,
+from interpretation.forms import SusiInterpreterCredentialsForm, verify_susi_connection
+from interpretation.interpreter_credentials import (
+    SETTING_SUSI_AUTH_TOKEN,
+    SETTING_SUSI_BASE_URL,
 )
-from interpretation.forms import RoomSusiCredentialsForm, verify_susi_connection
 from interpretation.susi import SusiResult
+from tests.conftest import SUSI_EVENT_CREDENTIALS, apply_susi_event_credentials
 
 
-class _FakeInterpretation:
-    def __init__(self, config=None):
-        self.backend_config = dict(config or {})
-        self.saved = False
-
-    def save(self, update_fields=None):
-        self.saved = True
-
-
-def test_test_susi_connection_uses_room_credentials(monkeypatch):
+def test_test_susi_connection_uses_event_credentials(monkeypatch, event):
     calls = []
     logged = []
 
@@ -33,30 +25,24 @@ def test_test_susi_connection_uses_room_credentials(monkeypatch):
                 message="Connected and authenticated.",
             )
 
-    monkeypatch.setattr("interpretation.backend_credentials.SusiClient", FakeSusiClient)
+    monkeypatch.setattr("interpretation.interpreter_credentials.SusiClient", FakeSusiClient)
     monkeypatch.setattr(
         "interpretation.forms.messages.success",
         lambda request, message: logged.append(message),
     )
     monkeypatch.setattr("interpretation.forms.messages.error", lambda *a, **k: None)
 
-    interpretation = _FakeInterpretation(
-        {
-            SUSI_BASE_URL: "https://susi.example.com",
-            SUSI_AUTH_TOKEN: "jwt-test-token",
-        }
-    )
-    verify_susi_connection(interpretation, request=type("R", (), {})())
+    apply_susi_event_credentials(event)
+    verify_susi_connection(event, request=type("R", (), {})())
     assert calls == [("https://susi.example.com", "jwt-test-token")]
     assert logged
 
 
-def test_room_credentials_form_keeps_stored_base_url_when_post_empty():
-    interpretation = _FakeInterpretation({SUSI_BASE_URL: "https://susi.example.com"})
-    form = RoomSusiCredentialsForm(
-        data={"room-1-interpretation_base_url": ""},
-        prefix="room-1",
-        interpretation=interpretation,
+def test_susi_credentials_form_keeps_stored_base_url_when_post_empty(event):
+    apply_susi_event_credentials(event)
+    form = SusiInterpreterCredentialsForm(
+        data={"interpretation_base_url": ""},
+        event=event,
     )
     assert form.is_valid(), form.errors
-    assert form.resolved_base_url() == "https://susi.example.com"
+    assert form.resolved_base_url() == SUSI_EVENT_CREDENTIALS[SETTING_SUSI_BASE_URL]

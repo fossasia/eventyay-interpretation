@@ -12,7 +12,7 @@ from interpretation.utils import (
     normalize_target_languages,
     validate_target_language_codes,
 )
-from tests.conftest import SUSI_BACKEND_CONFIG
+from tests.conftest import apply_susi_event_credentials
 
 pytestmark = pytest.mark.django_db
 
@@ -43,12 +43,12 @@ def test_validate_target_language_codes_rejects_too_many():
         validate_target_language_codes(codes)
 
 
-def test_clear_room_setup_removes_credentials(event, room):
+def test_clear_room_setup_resets_room_without_touching_event_credentials(event, room):
+    apply_susi_event_credentials(event)
     interpretation = RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     clear_room_interpretation_setup(room, event)
@@ -56,30 +56,28 @@ def test_clear_room_setup_removes_credentials(event, room):
     interpretation.refresh_from_db()
     assert interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
     assert interpretation.room_enabled is False
-    assert not interpretation.backend_config.get("susi_auth_token")
 
 
-def test_serialize_room_interpretation_redacts_auth_token(event, room):
+def test_serialize_room_interpretation_reports_event_susi_status(event, room):
+    apply_susi_event_credentials(event)
     interpretation = RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     payload = serialize_room_interpretation(room, event, interpretation)
 
     assert payload["susi_connected"] is True
     assert "susi_auth_token" not in payload["backend_config"]
-    assert payload["backend_config"]["susi_account_email"] == "susi@example.com"
 
 
 def test_merge_public_backend_config_strips_credential_keys(event, room):
+    apply_susi_event_credentials(event)
     interpretation = RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     update_room_interpretation(
@@ -95,6 +93,6 @@ def test_merge_public_backend_config_strips_credential_keys(event, room):
     )
 
     interpretation.refresh_from_db()
-    assert interpretation.backend_config["susi_auth_token"] == "jwt-test-token"
-    assert interpretation.backend_config["susi_base_url"] == "https://susi.example.com"
+    assert "susi_auth_token" not in interpretation.backend_config
+    assert "susi_base_url" not in interpretation.backend_config
     assert interpretation.backend_config["feature_flag"] is True

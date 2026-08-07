@@ -12,7 +12,7 @@ class InterpreterBackend(Protocol):
     id: str
     label: str
 
-    def is_configured(self, interpretation: RoomInterpretation | None) -> bool: ...
+    def is_configured(self, event: Event) -> bool: ...
 
     def start(
         self,

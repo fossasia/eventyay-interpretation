@@ -15,13 +15,26 @@
             </p>
             <h2 class="interpretation-hero-title">{% trans "Room settings" %}</h2>
             <p class="interpretation-hero-lead">
-                {% trans "Configure an interpreter and sign in per room. Use the video admin API to start sessions." %}
+                {% trans "Choose an interpreter per room. Sign in to interpreter services on the configure interpreters page." %}
             </p>
+            <div class="interpretation-hero-actions">
+                <a class="btn btn-default"
+                   href="{{ interpreters_url }}">
+                    {% trans "Configure interpreters" %}
+                </a>
+            </div>
         </div>
     </header>
 
     <div class="interpretation-content">
         {% include "interpretation/event_enable_form.html" with form=event_settings_form event_settings_save_key="interpretation_event_settings_save" %}
+
+        {% if not susi_connected %}
+            <p class="text-muted interpretation-section-hint">
+                {% trans "SUSI is not connected for this event yet." %}
+                <a href="{{ interpreters_url }}">{% trans "Configure interpreters" %}</a>
+            </p>
+        {% endif %}
 
         {% if not rooms %}
             <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
@@ -77,7 +90,7 @@
                                 <td colspan="5" class="interpretation-room-panel-cell">
                                     <div id="room-panel-{{ entry.room.pk }}"
                                          class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
-                                        {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" %}
+                                        {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" interpreters_url=interpreters_url %}
                                     </div>
                                 </td>
                             </tr>
@@ -87,26 +100,4 @@
             </div>
         {% endif %}
     </div>
-
-    <script>
-        (function () {
-            function syncInterpreterPanels(form) {
-                var select = form.querySelector('select[name$="-interpreter"]');
-                if (!select) return;
-                var value = select.value;
-                form.querySelectorAll("[data-interpreter-panel]").forEach(function (panel) {
-                    panel.hidden = panel.getAttribute("data-interpreter-panel") !== value;
-                });
-            }
-
-            document.querySelectorAll(".interpretation-room-form").forEach(function (form) {
-                var select = form.querySelector('select[name$="-interpreter"]');
-                if (!select) return;
-                select.addEventListener("change", function () {
-                    syncInterpreterPanels(form);
-                });
-                syncInterpreterPanels(form);
-            });
-        })();
-    </script>
 {% endblock %}

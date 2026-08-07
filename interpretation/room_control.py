@@ -6,10 +6,10 @@ from dataclasses import dataclass
 
 from django.utils.translation import gettext_lazy as _
 
-from .backend_credentials import (
-    SUSI_AUTH_TOKEN,
+from .interpreter_credentials import (
     SUSI_CREDENTIAL_KEYS,
     is_susi_configured,
+    strip_room_credential_keys,
 )
 from .backends import get_backend, list_available_interpreters
 from .models import RoomInterpretation
@@ -59,15 +59,13 @@ def is_room_interpretation_ready(
         return False
     if interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE:
         return False
-    return get_backend(interpretation.interpreter).is_configured(interpretation)
+    return get_backend(interpretation.interpreter).is_configured(event)
 
 
 def _public_backend_config(interpretation: RoomInterpretation | None) -> dict:
     if interpretation is None:
         return {}
-    config = dict(interpretation.backend_config or {})
-    config.pop(SUSI_AUTH_TOKEN, None)
-    return config
+    return strip_room_credential_keys(interpretation.backend_config)
 
 
 def serialize_room_interpretation(room, event, interpretation=None) -> dict:
@@ -87,7 +85,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "interpreter_label": str(backend.label),
         "room_enabled": room_enabled,
         "interpreter_ready": is_room_interpretation_ready(room, event, interpretation),
-        "available_interpreters": list_available_interpreters(interpretation),
+        "available_interpreters": list_available_interpreters(event),
         "target_languages": list(interpretation.target_languages or [])
         if interpretation
         else [],
@@ -105,7 +103,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
         "plugin_enabled": plugin_enabled(event),
-        "susi_connected": is_susi_configured(interpretation),
+        "susi_connected": is_susi_configured(event),
         "dashboard_url": interpretation_dashboard_url(event.organizer.slug, event.slug),
     }
 
@@ -114,7 +112,7 @@ def _merge_public_backend_config(
     interpretation: RoomInterpretation, incoming: dict
 ) -> dict:
     """Merge non-credential backend_config keys; credentials are sign-in only."""
-    config = dict(interpretation.backend_config or {})
+    config = strip_room_credential_keys(interpretation.backend_config)
     for key, value in validate_backend_config(incoming).items():
         if key in SUSI_CREDENTIAL_KEYS:
             continue
@@ -211,11 +209,13 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
         )
 
     backend = get_backend(interpretation.interpreter)
-    if not backend.is_configured(interpretation):
+    if not backend.is_configured(event):
         return SessionResult(
             ok=False,
             error=str(
-                _("Sign in to %(name)s in this room's panel before starting.")
+                _(
+                    "Configure %(name)s under Configure interpreters before starting."
+                )
                 % {"name": backend.label}
             ),
             interpretation=interpretation,
@@ -263,14 +263,11 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
 
 
 def clear_room_interpretation_setup(room, event) -> RoomInterpretation:
-    """Stop this room's session, clear credentials, and reset interpreter."""
+    """Stop this room's session and reset interpreter selection."""
     interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
     if interpretation.backend_session_id:
         stop_room_session(room, event)
         interpretation.refresh_from_db()
-    from .backend_credentials import clear_backend_credentials
-
-    clear_backend_credentials(interpretation)
     return update_room_interpretation(
         room,
         event,

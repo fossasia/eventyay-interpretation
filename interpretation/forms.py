@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.utils.translation import gettext_lazy as _
 from eventyay.base.forms import SettingsForm
 
-from .backend_credentials import (
+from .interpreter_credentials import (
     get_susi_account_email,
     get_susi_auth_token,
     get_susi_base_url,
@@ -18,27 +18,29 @@ from .susi import SusiClient, SusiError
 CONNECT_POST_KEY = "interpretation_connect"
 TEST_POST_KEY = "interpretation_test_connection"
 EVENT_SETTINGS_SAVE_KEY = "interpretation_event_settings_save"
+INTERPRETER_ACTION_KEY = "interpretation_interpreter_action"
+INTERPRETER_ID_KEY = "interpretation_interpreter_id"
 ROOM_ID_KEY = "interpretation_room_id"
 ROOM_ACTION_KEY = "interpretation_room_action"
 
 
-def verify_susi_connection(interpretation, request) -> None:
-    """Verify stored SUSI credentials for a room."""
-    base_url = get_susi_base_url(interpretation)
+def verify_susi_connection(event, request) -> None:
+    """Verify stored event-level SUSI credentials."""
+    base_url = get_susi_base_url(event)
     if not base_url:
         messages.error(
             request,
-            _("Sign in to the interpreter with a server URL before testing."),
+            _("Sign in to SUSI with a server URL before testing."),
         )
         return
-    token = get_susi_auth_token(interpretation)
+    token = get_susi_auth_token(event)
     if not token:
         messages.error(
             request,
-            _("Sign in to the interpreter before testing the connection."),
+            _("Sign in to SUSI before testing the connection."),
         )
         return
-    client = get_susi_client(interpretation)
+    client = get_susi_client(event)
     try:
         result = client.verify()
     except SusiError as exc:
@@ -61,7 +63,7 @@ def room_form_prefix(room_id: int) -> str:
 
 
 class RoomConfigureForm(forms.Form):
-    """Per-room interpreter and caption settings on the dashboard."""
+    """Per-room interpreter selection."""
 
     interpreter = forms.ChoiceField(
         label=_("Interpreter"),
@@ -76,7 +78,7 @@ class RoomConfigureForm(forms.Form):
         super().__init__(*args, **kwargs)
         from .backends import list_available_interpreters
 
-        interpreters = list_available_interpreters()
+        interpreters = list_available_interpreters(event)
         self.fields["interpreter"].choices = [
             (item["id"], item["label"]) for item in interpreters
         ]
@@ -85,8 +87,8 @@ class RoomConfigureForm(forms.Form):
                 field.widget.attrs.setdefault("class", "form-control")
 
 
-class RoomSusiCredentialsForm(forms.Form):
-    """Per-room SUSI sign-in fields."""
+class SusiInterpreterCredentialsForm(forms.Form):
+    """Event-level SUSI sign-in fields."""
 
     interpretation_base_url = forms.URLField(
         label=_("SUSI server URL"),
@@ -106,27 +108,23 @@ class RoomSusiCredentialsForm(forms.Form):
         widget=forms.PasswordInput(render_value=False),
     )
 
-    def __init__(self, *args, interpretation=None, **kwargs):
+    def __init__(self, *args, event=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.interpretation = interpretation
+        self.event = event
         for name in self.fields:
             self.fields[name].widget.attrs.setdefault("class", "form-control")
-        if interpretation and get_susi_account_email(interpretation):
-            self.fields["susi_connect_email"].initial = get_susi_account_email(
-                interpretation
-            )
-        if interpretation and get_susi_base_url(interpretation):
-            self.fields["interpretation_base_url"].initial = get_susi_base_url(
-                interpretation
-            )
+        if event and get_susi_account_email(event):
+            self.fields["susi_connect_email"].initial = get_susi_account_email(event)
+        if event and get_susi_base_url(event):
+            self.fields["interpretation_base_url"].initial = get_susi_base_url(event)
 
     @property
     def is_connected(self) -> bool:
-        return is_susi_configured(self.interpretation)
+        return is_susi_configured(self.event)
 
     @property
     def connected_label(self) -> str:
-        return susi_account_label(self.interpretation)
+        return susi_account_label(self.event)
 
     def _connecting(self) -> bool:
         return CONNECT_POST_KEY in self.data
@@ -162,11 +160,11 @@ class RoomSusiCredentialsForm(forms.Form):
     def resolved_base_url(self) -> str:
         return (
             self.cleaned_data.get("interpretation_base_url")
-            or get_susi_base_url(self.interpretation)
+            or get_susi_base_url(self.event)
             or ""
         )
 
-    def run_connect_action(self, request, interpretation) -> None:
+    def run_connect_action(self, request, event) -> None:
         base_url = self.resolved_base_url()
         email = (self.cleaned_data.get("susi_connect_email") or "").strip()
         password = self.cleaned_data.get("susi_connect_password") or ""
@@ -180,7 +178,7 @@ class RoomSusiCredentialsForm(forms.Form):
             )
             return
         save_susi_credentials(
-            interpretation,
+            event,
             base_url=base_url,
             token=result.token,
             email=result.email,

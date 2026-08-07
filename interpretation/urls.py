@@ -3,7 +3,11 @@ from eventyay.api.urls import room_router
 from eventyay.common.urls import OrganizerSlugConverter  # noqa: F401
 
 from .api import RoomInterpretationViewSet
-from .views import InterpretationDashboard, InterpretationRoomSettings
+from .views import (
+    InterpretationDashboard,
+    InterpretationInterpreters,
+    InterpretationRoomSettings,
+)
 
 room_router.register(
     "interpretation",
@@ -18,6 +22,11 @@ urlpatterns = [
         _PREFIX,
         InterpretationDashboard.as_view(),
         name="dashboard",
+    ),
+    path(
+        _PREFIX + "interpreters/",
+        InterpretationInterpreters.as_view(),
+        name="interpreters",
     ),
     path(
         _PREFIX + "rooms/",

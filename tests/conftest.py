@@ -10,10 +10,11 @@ os.environ.setdefault("EVY_RUNNING_ENVIRONMENT", "testing")
 
 User = get_user_model()
 
-SUSI_BACKEND_CONFIG = {
-    "susi_base_url": "https://susi.example.com",
-    "susi_auth_token": "jwt-test-token",
-    "susi_account_email": "susi@example.com",
+SUSI_EVENT_CREDENTIALS = {
+    "interpretation_susi_base_url": "https://susi.example.com",
+    "interpretation_susi_auth_token": "jwt-test-token",
+    "interpretation_susi_account_email": "susi@example.com",
+    "interpretation_susi_account_name": "SUSI User",
 }
 
 
@@ -106,40 +107,52 @@ def rooms_url(event):
 
 
 @pytest.fixture
+def interpreters_url(event):
+    from django.urls import reverse
+
+    return reverse(
+        "plugins:interpretation:interpreters",
+        kwargs={"organizer": event.organizer.slug, "event": event.slug},
+    )
+
+
+@pytest.fixture
 def room(event):
     from eventyay.base.models import Room
 
     return Room.objects.create(event=event, name="Main Stage")
 
 
+def apply_susi_event_credentials(event):
+    for key, value in SUSI_EVENT_CREDENTIALS.items():
+        event.settings.set(key, value)
+
+
 @pytest.fixture
 def connected_event(event):
+    apply_susi_event_credentials(event)
     return event
 
 
 @pytest.fixture
-def connected_room(room):
+def connected_room(room, connected_event):
     from interpretation.models import RoomInterpretation
 
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
     return room
 
 
-def room_connect_payload(room, **extra):
-    prefix = f"room-{room.pk}"
+def susi_connect_payload(**extra):
     return {
-        "interpretation_room_id": str(room.pk),
-        "interpretation_room_action": "connect",
-        f"{prefix}-interpreter": "susi",
-        f"{prefix}-room_enabled": "on",
-        f"{prefix}-interpretation_base_url": "https://susi.example.com",
-        f"{prefix}-susi_connect_email": "susi@example.com",
-        f"{prefix}-susi_connect_password": "secret",
+        "interpretation_interpreter_id": "susi",
+        "interpretation_interpreter_action": "connect",
+        "interpretation_base_url": "https://susi.example.com",
+        "susi_connect_email": "susi@example.com",
+        "susi_connect_password": "secret",
         "interpretation_connect": "1",
         **extra,
     }

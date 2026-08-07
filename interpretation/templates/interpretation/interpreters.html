@@ -1,0 +1,84 @@
+{% extends "eventyay_common/event/base.html" %}
+{% load i18n bootstrap3 %}
+{% block title %}{% trans "Configure interpreters" %} — {% trans "Interpretation" %}{% endblock %}
+{% block content %}
+    <style>{% include "interpretation/dashboard.css" %}</style>
+
+    <header class="interpretation-hero interpretation-hero--subpage">
+        <div class="interpretation-hero-text">
+            <p class="interpretation-breadcrumb">
+                <a href="{% url 'plugins:interpretation:dashboard' organizer=event.organizer.slug event=event.slug %}">
+                    {% trans "Interpretation" %}
+                </a>
+                <span aria-hidden="true"> / </span>
+                <span>{% trans "Configure interpreters" %}</span>
+            </p>
+            <h2 class="interpretation-hero-title">{% trans "Configure interpreters" %}</h2>
+            <p class="interpretation-hero-lead">
+                {% trans "Sign in once per interpreter service for this event. Rooms choose which configured interpreter to use." %}
+            </p>
+        </div>
+    </header>
+
+    <div class="interpretation-content">
+        <p class="interpretation-section-hint">
+            <a href="{{ rooms_url }}">{% trans "Back to room settings" %}</a>
+        </p>
+
+        {% for entry in interpreters %}
+            <section class="interpretation-interpreter-card">
+                <h3 class="interpretation-section-title">{{ entry.label }}</h3>
+
+                {% if entry.id == "susi" %}
+                    {% if entry.configured %}
+                        <div class="interpretation-account-card">
+                            <div class="interpretation-account-main">
+                                <span class="interpretation-status-dot" aria-hidden="true"></span>
+                                <div>
+                                    <div class="interpretation-account-name">{{ entry.account }}</div>
+                                    <div class="interpretation-account-server">{{ entry.server_host }}</div>
+                                </div>
+                            </div>
+                            <form method="post" class="interpretation-interpreter-actions">
+                                {% csrf_token %}
+                                <input type="hidden" name="interpretation_interpreter_id" value="susi">
+                                <button type="submit"
+                                        name="interpretation_interpreter_action"
+                                        value="test"
+                                        class="btn btn-default btn-sm">
+                                    {% trans "Test connection" %}
+                                </button>
+                                <button type="submit"
+                                        name="interpretation_interpreter_action"
+                                        value="disconnect"
+                                        class="btn btn-link btn-sm">
+                                    {% trans "Disconnect" %}
+                                </button>
+                            </form>
+                        </div>
+                    {% else %}
+                        <form method="post" class="interpretation-interpreter-connect-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="interpretation_interpreter_id" value="susi">
+                            <input type="hidden" name="interpretation_connect" value="1">
+                            <div class="interpretation-fields">
+                                {% bootstrap_field entry.form.interpretation_base_url layout="vertical" show_help=False %}
+                                {% bootstrap_field entry.form.susi_connect_email layout="vertical" show_help=False %}
+                                {% bootstrap_field entry.form.susi_connect_password layout="vertical" show_help=False %}
+                            </div>
+                            <button type="submit"
+                                    name="interpretation_interpreter_action"
+                                    value="connect"
+                                    class="btn btn-primary">
+                                <span class="fa fa-sign-in"></span>
+                                {% trans "Sign in" %}
+                            </button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+            </section>
+        {% empty %}
+            <p class="text-muted">{% trans "No interpreter services are available yet." %}</p>
+        {% endfor %}
+    </div>
+{% endblock %}

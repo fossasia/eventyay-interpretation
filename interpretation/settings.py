@@ -1,4 +1,4 @@
-"""Event-level interpretation settings (feature toggle only)."""
+"""Event-level interpretation settings."""
 
 from __future__ import annotations
 

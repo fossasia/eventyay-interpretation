@@ -3,7 +3,6 @@
 import pytest
 
 from interpretation.models import RoomInterpretation
-from tests.conftest import SUSI_BACKEND_CONFIG
 
 pytestmark = pytest.mark.django_db
 
@@ -45,7 +44,6 @@ def test_api_config_get(organizer_client, connected_event, room):
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
         target_languages=["de"],
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     response = _api_request(
@@ -59,7 +57,6 @@ def test_api_config_get(organizer_client, connected_event, room):
     assert payload["susi_connected"] is True
     assert payload["session_id"] == ""
     assert "susi_auth_token" not in payload["backend_config"]
-    assert payload["backend_config"].get("susi_account_email") == "susi@example.com"
 
 
 def test_api_config_patch(organizer_client, connected_event, room):
@@ -93,7 +90,6 @@ def test_api_config_patch_ignores_credential_keys(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     response = _api_request(
@@ -113,8 +109,8 @@ def test_api_config_patch_ignores_credential_keys(
 
     assert response.status_code == 200
     interpretation = RoomInterpretation.objects.get(room=room)
-    assert interpretation.backend_config["susi_auth_token"] == "jwt-test-token"
-    assert interpretation.backend_config["susi_base_url"] == "https://susi.example.com"
+    assert "susi_auth_token" not in interpretation.backend_config
+    assert "susi_base_url" not in interpretation.backend_config
     assert interpretation.backend_config["custom_flag"] is True
     assert "susi_auth_token" not in response.json()["backend_config"]
 
@@ -127,7 +123,6 @@ def test_api_start_and_stop(organizer_client, connected_event, room, monkeypatch
         transcription_provider="whisper_local",
         translation_provider="nllb_local",
         target_languages=["en"],
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     def fake_start(room_arg, event, *, stream_url_override=""):
@@ -176,7 +171,6 @@ def test_api_stop_returns_warning_when_remote_stop_fails(
         room_enabled=True,
         status=RoomInterpretation.STATUS_RUNNING,
         backend_session_id="sess-1",
-        backend_config=dict(SUSI_BACKEND_CONFIG),
     )
 
     def fake_stop(room_arg, event):

@@ -6,26 +6,29 @@ from django.views import View
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
-from .backend_credentials import (
-    is_susi_configured,
-    susi_account_label,
-    susi_server_host,
-)
-from .backends import list_available_interpreters
+from .backends import get_backend, list_available_interpreters
 from .forms import (
     CONNECT_POST_KEY,
+    INTERPRETER_ACTION_KEY,
+    INTERPRETER_ID_KEY,
     ROOM_ACTION_KEY,
     ROOM_ID_KEY,
     InterpretationSettingsForm,
     RoomConfigureForm,
-    RoomSusiCredentialsForm,
+    SusiInterpreterCredentialsForm,
     room_form_prefix,
     verify_susi_connection,
+)
+from .interpreter_credentials import (
+    clear_interpreter_credentials,
+    is_interpreter_configured,
+    is_susi_configured,
+    susi_account_label,
+    susi_server_host,
 )
 from .models import RoomInterpretation
 from .room_control import (
     clear_room_interpretation_setup,
-    get_interpretation,
     serialize_room_interpretation,
     stop_room_session,
     update_room_interpretation,
@@ -49,6 +52,13 @@ def _notify_stop_result(request, room, result) -> None:
 def _rooms_url(event):
     return reverse(
         "plugins:interpretation:rooms",
+        kwargs={"organizer": event.organizer.slug, "event": event.slug},
+    )
+
+
+def _interpreters_url(event):
+    return reverse(
+        "plugins:interpretation:interpreters",
         kwargs={"organizer": event.organizer.slug, "event": event.slug},
     )
 
@@ -90,12 +100,82 @@ class InterpretationDashboard(
     EventPermissionRequiredMixin,
     View,
 ):
-    """PR2 landing: redirect organizers to per-room settings."""
+    """Landing: redirect organizers to room settings."""
 
     permission = "can_change_event_settings"
 
     def get(self, request, *args, **kwargs):
         return redirect(_rooms_url(request.event))
+
+
+class InterpretationInterpreters(
+    InterpretationEnabledMixin,
+    EventSettingsViewMixin,
+    EventPermissionRequiredMixin,
+    View,
+):
+    """Event-level interpreter sign-in and connection testing."""
+
+    template_name = "interpretation/interpreters.html"
+    permission = "can_change_event_settings"
+
+    def get(self, request, *args, **kwargs):
+        return render(request, self.template_name, self._context(request.event))
+
+    def post(self, request, *args, **kwargs):
+        event = request.event
+        backend_id = request.POST.get(INTERPRETER_ID_KEY)
+        action = request.POST.get(INTERPRETER_ACTION_KEY)
+        redirect_url = _interpreters_url(event)
+
+        if backend_id == RoomInterpretation.INTERPRETER_SUSI:
+            if action == "connect":
+                return self._handle_susi_connect(request, event, redirect_url)
+            if action == "test":
+                verify_susi_connection(event, request)
+                return redirect(redirect_url)
+            if action == "disconnect":
+                clear_interpreter_credentials(event, backend_id)
+                messages.success(request, _("Disconnected SUSI for this event."))
+                return redirect(redirect_url)
+
+        messages.error(request, _("Unknown interpreter action."))
+        return redirect(redirect_url)
+
+    def _handle_susi_connect(self, request, event, redirect_url):
+        post = request.POST.copy()
+        post[CONNECT_POST_KEY] = "1"
+        form = SusiInterpreterCredentialsForm(data=post, event=event)
+        if not form.is_valid():
+            messages.error(
+                request,
+                _("Could not connect. Check the sign-in details below."),
+            )
+            return redirect(redirect_url)
+        form.run_connect_action(request, event)
+        return redirect(redirect_url)
+
+    def _context(self, event):
+        interpreters = []
+        for item in list_available_interpreters(event):
+            if item["id"] == RoomInterpretation.INTERPRETER_NONE:
+                continue
+            entry = {
+                "id": item["id"],
+                "label": item["label"],
+                "configured": item["configured"],
+            }
+            if item["id"] == RoomInterpretation.INTERPRETER_SUSI:
+                entry["form"] = SusiInterpreterCredentialsForm(event=event)
+                entry["account"] = susi_account_label(event)
+                entry["server_host"] = susi_server_host(event)
+            interpreters.append(entry)
+        return {
+            "event": event,
+            "interpreters": interpreters,
+            "rooms_url": _rooms_url(event),
+            "is_event_settings": True,
+        }
 
 
 class InterpretationRoomSettings(
@@ -104,7 +184,7 @@ class InterpretationRoomSettings(
     EventPermissionRequiredMixin,
     View,
 ):
-    """Per-room interpreter configuration and session control."""
+    """Per-room interpreter selection and session control."""
 
     template_name = "interpretation/room_settings.html"
     permission = "can_change_event_settings"
@@ -135,17 +215,9 @@ class InterpretationRoomSettings(
                 return self._handle_room_save(
                     request, room, event, prefix, redirect_url
                 )
-            if action == "connect":
-                return self._handle_room_connect(
-                    request, room, event, prefix, redirect_url
-                )
-            if action == "test":
-                return self._handle_room_test(
-                    request, room, event, prefix, redirect_url
-                )
             if action == "disconnect":
-                return self._handle_room_disconnect(
-                    request, room, event, prefix, redirect_url
+                return self._handle_room_clear(
+                    request, room, event, redirect_url
                 )
             if action == "stop":
                 return self._handle_room_stop(request, room, event, redirect_url)
@@ -187,53 +259,27 @@ class InterpretationRoomSettings(
                     _("Could not save room settings. See below for details."),
                 )
             return redirect(redirect_url)
+        if (
+            interpretation
+            and interpretation.interpreter != RoomInterpretation.INTERPRETER_NONE
+            and not is_interpreter_configured(event, interpretation.interpreter)
+        ):
+            backend = get_backend(interpretation.interpreter)
+            messages.warning(
+                request,
+                _(
+                    "%(name)s is not configured for this event yet. "
+                    "Open Configure interpreters to sign in."
+                )
+                % {"name": backend.label},
+            )
         messages.success(
             request,
             _("Saved interpretation settings for %(room)s.") % {"room": room.name},
         )
         return redirect(redirect_url)
 
-    def _handle_room_connect(self, request, room, event, prefix, redirect_url):
-        interpretation, error = self._apply_room_configure_form(
-            request, room, event, prefix
-        )
-        if error is not None:
-            if isinstance(error, str):
-                messages.error(request, error)
-            else:
-                messages.error(
-                    request,
-                    _("Save the interpreter selection before signing in."),
-                )
-            return redirect(redirect_url)
-        post = request.POST.copy()
-        post[CONNECT_POST_KEY] = "1"
-        form = RoomSusiCredentialsForm(
-            data=post,
-            prefix=prefix,
-            interpretation=interpretation,
-        )
-        if not form.is_valid():
-            messages.error(
-                request,
-                _("Could not connect. Check the sign-in details below."),
-            )
-            return redirect(redirect_url)
-        form.run_connect_action(request, interpretation)
-        return redirect(redirect_url)
-
-    def _handle_room_test(self, request, room, event, prefix, redirect_url):
-        interpretation = get_interpretation(room)
-        if interpretation is None:
-            messages.error(
-                request,
-                _("Configure this room before testing the connection."),
-            )
-            return redirect(redirect_url)
-        verify_susi_connection(interpretation, request)
-        return redirect(redirect_url)
-
-    def _handle_room_disconnect(self, request, room, event, prefix, redirect_url):
+    def _handle_room_clear(self, request, room, event, redirect_url):
         try:
             clear_room_interpretation_setup(room, event)
         except ValueError as exc:
@@ -262,6 +308,7 @@ class InterpretationRoomSettings(
             interpretation = existing.get(room.pk)
             data = serialize_room_interpretation(room, event, interpretation)
             prefix = room_form_prefix(room.pk)
+            selected = data["interpreter"]
             rooms.append(
                 {
                     "room": room,
@@ -274,21 +321,19 @@ class InterpretationRoomSettings(
                             "room_enabled": data["room_enabled"],
                         },
                     ),
-                    "susi_form": RoomSusiCredentialsForm(
-                        prefix=prefix,
-                        interpretation=interpretation,
+                    "interpreter_configured": is_interpreter_configured(
+                        event, selected
                     ),
-                    "susi_connected": is_susi_configured(interpretation),
-                    "susi_server_host": susi_server_host(interpretation),
-                    "susi_account": susi_account_label(interpretation),
                     "expanded": str(room.pk) == str(expanded_room),
                 }
             )
         return {
             "event": event,
             "rooms": rooms,
-            "available_interpreters": list_available_interpreters(),
+            "available_interpreters": list_available_interpreters(event),
+            "interpreters_url": _interpreters_url(event),
             "event_settings_form": _event_settings_form(event),
+            "susi_connected": is_susi_configured(event),
             "is_event_settings": True,
             **kwargs,
         }

@@ -3,8 +3,8 @@
 import pytest
 from django.contrib.messages import get_messages
 
-from interpretation.backend_credentials import is_susi_configured
 from interpretation.forms import ROOM_ACTION_KEY, ROOM_ID_KEY
+from interpretation.interpreter_credentials import is_susi_configured
 from interpretation.models import RoomInterpretation
 
 pytestmark = pytest.mark.django_db
@@ -41,8 +41,8 @@ def test_room_save_persists_interpreter(
     assert interpretation.room_enabled is True
 
 
-def test_room_clear_removes_room_credentials(
-    organizer_client, connected_room, rooms_url
+def test_room_clear_resets_room_selection(
+    organizer_client, connected_room, connected_event, rooms_url
 ):
     room = connected_room
     interpretation = RoomInterpretation.objects.get(room=room)
@@ -54,7 +54,7 @@ def test_room_clear_removes_room_credentials(
 
     assert response.status_code == 302
     interpretation.refresh_from_db()
-    assert not is_susi_configured(interpretation)
+    assert is_susi_configured(connected_event)
     assert interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
     assert interpretation.room_enabled is False
     messages = [str(message) for message in get_messages(response.wsgi_request)]

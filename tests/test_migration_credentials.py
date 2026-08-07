@@ -1,10 +1,14 @@
-"""Tests for the per-room credential data migration."""
+"""Tests for the event-level credential data migration."""
 
 import importlib
 
 import pytest
 from django.apps import apps
 
+from interpretation.interpreter_credentials import (
+    SETTING_SUSI_AUTH_TOKEN,
+    SETTING_SUSI_BASE_URL,
+)
 from interpretation.models import RoomInterpretation
 
 pytestmark = pytest.mark.django_db
@@ -12,7 +16,9 @@ pytestmark = pytest.mark.django_db
 _migration = importlib.import_module(
     "interpretation.migrations.0006_move_credentials_to_rooms"
 )
-copy_event_credentials_to_rooms = _migration.copy_event_credentials_to_rooms
+consolidate_interpreter_credentials_at_event = (
+    _migration.consolidate_interpreter_credentials_at_event
+)
 
 
 @pytest.fixture
@@ -22,32 +28,30 @@ def room(event):
     return Room.objects.create(event=event, name="Main Stage")
 
 
-def test_migration_copies_legacy_event_credentials_to_room(event, room):
-    event.settings.set("interpretation_base_url", "https://legacy.example.com")
-    event.settings.set("interpretation_auth_token", "legacy-token")
-    event.settings.set("interpretation_susi_email", "legacy@example.com")
-    event.settings.set("interpretation_susi_name", "Legacy User")
-
+def test_migration_copies_room_credentials_to_event(event, room):
     interpretation = RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
+        backend_config={
+            "susi_base_url": "https://room.example.com",
+            "susi_auth_token": "room-token",
+            "susi_account_email": "room@example.com",
+            "susi_account_name": "Room User",
+        },
     )
 
-    copy_event_credentials_to_rooms(apps, None)
+    consolidate_interpreter_credentials_at_event(apps, None)
 
+    assert event.settings.get(SETTING_SUSI_BASE_URL, as_type=str) == "https://room.example.com"
+    assert event.settings.get(SETTING_SUSI_AUTH_TOKEN, as_type=str) == "room-token"
     interpretation.refresh_from_db()
-    assert (
-        interpretation.backend_config["susi_base_url"] == "https://legacy.example.com"
-    )
-    assert interpretation.backend_config["susi_auth_token"] == "legacy-token"
-    assert interpretation.backend_config["susi_account_email"] == "legacy@example.com"
-    assert interpretation.backend_config["susi_account_name"] == "Legacy User"
+    assert "susi_auth_token" not in interpretation.backend_config
 
 
-def test_migration_skips_room_that_already_has_credentials(event, room):
-    event.settings.set("interpretation_base_url", "https://legacy.example.com")
-    event.settings.set("interpretation_auth_token", "legacy-token")
+def test_migration_keeps_existing_event_credentials(event, room):
+    event.settings.set("interpretation_susi_base_url", "https://event.example.com")
+    event.settings.set("interpretation_susi_auth_token", "event-token")
 
     interpretation = RoomInterpretation.objects.create(
         room=room,
@@ -59,8 +63,8 @@ def test_migration_skips_room_that_already_has_credentials(event, room):
         },
     )
 
-    copy_event_credentials_to_rooms(apps, None)
+    consolidate_interpreter_credentials_at_event(apps, None)
 
+    assert event.settings.get(SETTING_SUSI_AUTH_TOKEN, as_type=str) == "event-token"
     interpretation.refresh_from_db()
-    assert interpretation.backend_config["susi_auth_token"] == "room-token"
-    assert interpretation.backend_config["susi_base_url"] == "https://room.example.com"
+    assert "susi_auth_token" not in interpretation.backend_config
