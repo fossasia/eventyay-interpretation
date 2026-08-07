@@ -18,7 +18,10 @@ SUSI_CLIENT = "interpretation.interpreter_credentials.SusiClient"
 
 @override_settings(SITE_URL="https://testserver")
 def test_interpreter_connect_stores_event_credentials(
-    organizer_client, event, interpreters_url, monkeypatch,
+    organizer_client,
+    event,
+    interpreters_url,
+    monkeypatch,
 ):
     from interpretation.susi import SusiLoginResult
 
@@ -46,7 +49,10 @@ def test_interpreter_connect_stores_event_credentials(
 
 @override_settings(SITE_URL="https://testserver")
 def test_interpreter_test_calls_verify_with_event_token(
-    monkeypatch, organizer_client, connected_event, interpreters_url,
+    monkeypatch,
+    organizer_client,
+    connected_event,
+    interpreters_url,
 ):
     calls = []
 
@@ -81,7 +87,10 @@ def test_interpreter_test_calls_verify_with_event_token(
 
 @override_settings(SITE_URL="https://testserver")
 def test_interpreter_test_warns_when_verify_rejects_token(
-    monkeypatch, organizer_client, connected_event, interpreters_url,
+    monkeypatch,
+    organizer_client,
+    connected_event,
+    interpreters_url,
 ):
     class FakeSusiClient:
         def __init__(self, base_url, auth_token="", timeout=10):
@@ -119,7 +128,10 @@ def test_interpreter_test_warns_when_verify_rejects_token(
 
 @override_settings(SITE_URL="https://testserver")
 def test_interpreter_test_without_credentials_shows_error(
-    monkeypatch, organizer_client, event, interpreters_url,
+    monkeypatch,
+    organizer_client,
+    event,
+    interpreters_url,
 ):
     calls = []
 

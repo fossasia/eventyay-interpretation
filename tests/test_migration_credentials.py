@@ -46,7 +46,10 @@ def test_migration_copies_room_credentials_to_event(event, room):
     from eventyay.base.models import Event
 
     event = Event.objects.get(pk=event.pk)
-    assert event.settings.get(SETTING_SUSI_BASE_URL, as_type=str) == "https://room.example.com"
+    assert (
+        event.settings.get(SETTING_SUSI_BASE_URL, as_type=str)
+        == "https://room.example.com"
+    )
     assert event.settings.get(SETTING_SUSI_AUTH_TOKEN, as_type=str) == "room-token"
     interpretation.refresh_from_db()
     assert "susi_auth_token" not in interpretation.backend_config

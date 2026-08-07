@@ -213,9 +213,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
         return SessionResult(
             ok=False,
             error=str(
-                _(
-                    "Configure %(name)s under Configure interpreters before starting."
-                )
+                _("Configure %(name)s under Configure interpreters before starting.")
                 % {"name": backend.label}
             ),
             interpretation=interpretation,

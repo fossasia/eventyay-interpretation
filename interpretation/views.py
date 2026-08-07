@@ -216,9 +216,7 @@ class InterpretationRoomSettings(
                     request, room, event, prefix, redirect_url
                 )
             if action == "disconnect":
-                return self._handle_room_clear(
-                    request, room, event, redirect_url
-                )
+                return self._handle_room_clear(request, room, event, redirect_url)
             if action == "stop":
                 return self._handle_room_stop(request, room, event, redirect_url)
 

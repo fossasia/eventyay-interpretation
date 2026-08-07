@@ -43,7 +43,9 @@ def test_is_susi_configured_requires_url_and_token():
     event = _FakeEvent(_FakeSettings(SUSI_EVENT_CREDENTIALS))
     assert is_susi_configured(event) is True
     assert (
-        get_susi_base_url(_FakeEvent(_FakeSettings({SETTING_SUSI_BASE_URL: "https://example.com/"})))
+        get_susi_base_url(
+            _FakeEvent(_FakeSettings({SETTING_SUSI_BASE_URL: "https://example.com/"}))
+        )
         == "https://example.com"
     )
     assert (
