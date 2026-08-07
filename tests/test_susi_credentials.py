@@ -5,7 +5,7 @@ from interpretation.interpreter_credentials import SETTING_SUSI_BASE_URL
 from interpretation.susi import SusiResult
 from tests.conftest import SUSI_EVENT_CREDENTIALS, apply_susi_event_credentials
 
-SUSI_CLIENT = "interpretation.interpreter_credentials.SusiClient"
+SUSI_CLIENT = "interpretation.backends.susi_credentials.SusiClient"
 
 
 def test_test_susi_connection_uses_event_credentials(monkeypatch, event):

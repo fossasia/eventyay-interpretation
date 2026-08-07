@@ -533,7 +533,9 @@ class InterpretationCaptionPreviewPoll(
         try:
             result = client.latest_transcript(interpretation.backend_session_id)
             if not result.ok:
-                return JsonResponse({"running": True, "text": "", "error": str(result.data)})
+                return JsonResponse(
+                    {"running": True, "text": "", "error": str(result.data)}
+                )
             text = _preview_caption_text(result.data)
             return JsonResponse({"running": True, "text": text, "error": ""})
         except SusiError as exc:

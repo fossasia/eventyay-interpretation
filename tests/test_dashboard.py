@@ -13,7 +13,7 @@ from tests.conftest import SUSI_EVENT_CREDENTIALS, susi_connect_payload
 
 pytestmark = pytest.mark.django_db
 
-SUSI_CLIENT = "interpretation.interpreter_credentials.SusiClient"
+SUSI_CLIENT = "interpretation.backends.susi_credentials.SusiClient"
 
 
 @override_settings(SITE_URL="https://testserver")
