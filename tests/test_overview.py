@@ -88,7 +88,9 @@ def test_room_settings_renders_table(organizer_client, rooms_url, room):
     assert "Configure" in content
 
 
-def test_overview_links_to_interpreters(organizer_client, dashboard_url, interpreters_url):
+def test_overview_links_to_interpreters(
+    organizer_client, dashboard_url, interpreters_url,
+):
     response = organizer_client.get(dashboard_url)
 
     assert response.status_code == 200

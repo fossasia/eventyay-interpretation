@@ -36,3 +36,20 @@ def test_build_overview_context_flags_unconfigured_susi(event, room):
     context = build_overview_context(event)
 
     assert context["stats"]["room_needs_setup"] == 1
+    assert context["backends"][0]["configured"] is False
+
+
+def test_build_overview_context_marks_event_susi_connected(
+    event, room, connected_event,
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+    )
+
+    context = build_overview_context(connected_event)
+
+    assert context["stats"]["room_needs_setup"] == 0
+    assert context["backends"][0]["configured"] is True
+    assert context["backends"][0]["rooms_using"] == 1
