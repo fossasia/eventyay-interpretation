@@ -29,7 +29,7 @@
             <section class="interpretation-interpreter-card">
                 <h3 class="interpretation-section-title">{{ entry.label }}</h3>
 
-                {% if entry.id == "susi" %}
+                {% if entry.uses_event_credentials %}
                     {% if entry.configured %}
                         <div class="interpretation-account-card">
                             <div class="interpretation-account-main">
@@ -41,7 +41,7 @@
                             </div>
                             <form method="post" class="interpretation-interpreter-actions">
                                 {% csrf_token %}
-                                <input type="hidden" name="interpretation_interpreter_id" value="susi">
+                                <input type="hidden" name="interpretation_interpreter_id" value="{{ entry.id }}">
                                 <button type="submit"
                                         name="interpretation_interpreter_action"
                                         value="test"
@@ -59,12 +59,12 @@
                     {% else %}
                         <form method="post" class="interpretation-interpreter-connect-form">
                             {% csrf_token %}
-                            <input type="hidden" name="interpretation_interpreter_id" value="susi">
+                            <input type="hidden" name="interpretation_interpreter_id" value="{{ entry.id }}">
                             <input type="hidden" name="interpretation_connect" value="1">
                             <div class="interpretation-fields">
-                                {% bootstrap_field entry.form.interpretation_base_url layout="vertical" show_help=False %}
-                                {% bootstrap_field entry.form.susi_connect_email layout="vertical" show_help=False %}
-                                {% bootstrap_field entry.form.susi_connect_password layout="vertical" show_help=False %}
+                                {% for field in entry.connect_form %}
+                                    {% bootstrap_field field layout="vertical" show_help=False %}
+                                {% endfor %}
                             </div>
                             <button type="submit"
                                     name="interpretation_interpreter_action"
@@ -75,6 +75,8 @@
                             </button>
                         </form>
                     {% endif %}
+                {% else %}
+                    <p class="text-muted">{% trans "No event sign-in required for this interpreter." %}</p>
                 {% endif %}
             </section>
         {% empty %}

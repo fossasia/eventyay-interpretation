@@ -6,7 +6,11 @@ from dataclasses import dataclass
 
 from django.utils.translation import gettext_lazy as _
 
-from .backends import get_backend, list_available_interpreters
+from .backends import (
+    get_backend,
+    is_registered_interpreter,
+    list_available_interpreters,
+)
 from .interpreter_credentials import (
     SUSI_CREDENTIAL_KEYS,
     is_susi_configured,
@@ -145,10 +149,7 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
         interpreter = (
             data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE
         ).strip()
-        if interpreter not in {
-            RoomInterpretation.INTERPRETER_NONE,
-            RoomInterpretation.INTERPRETER_SUSI,
-        }:
+        if not is_registered_interpreter(interpreter):
             raise ValueError(_("Unknown interpreter."))
         interpretation.interpreter = interpreter
 

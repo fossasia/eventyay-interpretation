@@ -10,7 +10,6 @@ from eventyay.control.views.event import EventSettingsViewMixin
 from .backends import get_backend, list_available_interpreters
 from .dashboard_stats import build_overview_context
 from .forms import (
-    CONNECT_POST_KEY,
     EVENT_SETTINGS_SAVE_KEY,
     INTERPRETER_ACTION_KEY,
     INTERPRETER_ID_KEY,
@@ -23,18 +22,14 @@ from .forms import (
     CaptionPreviewSettingsForm,
     InterpretationSettingsForm,
     RoomConfigureForm,
-    SusiInterpreterCredentialsForm,
     preview_settings_payload,
     room_form_prefix,
-    verify_susi_connection,
 )
 from .interpreter_credentials import (
     clear_interpreter_credentials,
     get_susi_client,
     is_interpreter_configured,
     is_susi_configured,
-    susi_account_label,
-    susi_server_host,
 )
 from .models import RoomInterpretation
 from .room_control import (
@@ -164,32 +159,32 @@ class InterpretationInterpreters(
         backend_id = request.POST.get(INTERPRETER_ID_KEY)
         action = request.POST.get(INTERPRETER_ACTION_KEY)
         redirect_url = _interpreters_url(event)
+        backend = get_backend(backend_id or "")
 
-        if backend_id == RoomInterpretation.INTERPRETER_SUSI:
-            if action == "connect":
-                return self._handle_susi_connect(request, event, redirect_url)
-            if action == "test":
-                verify_susi_connection(event, request)
-                return redirect(redirect_url)
-            if action == "disconnect":
-                clear_interpreter_credentials(event, backend_id)
-                messages.success(request, _("Disconnected SUSI for this event."))
-                return redirect(redirect_url)
+        if not backend.uses_event_credentials:
+            messages.error(request, _("Unknown interpreter action."))
+            return redirect(redirect_url)
 
-        messages.error(request, _("Unknown interpreter action."))
-        return redirect(redirect_url)
-
-    def _handle_susi_connect(self, request, event, redirect_url):
-        post = request.POST.copy()
-        post[CONNECT_POST_KEY] = "1"
-        form = SusiInterpreterCredentialsForm(data=post, event=event)
-        if not form.is_valid():
-            messages.error(
+        if action == "connect":
+            _form, ok = backend.connect(request, event, request.POST)
+            if not ok:
+                messages.error(
+                    request,
+                    _("Could not connect. Check the sign-in details below."),
+                )
+            return redirect(redirect_url)
+        if action == "test":
+            backend.test_connection(request, event)
+            return redirect(redirect_url)
+        if action == "disconnect":
+            clear_interpreter_credentials(event, backend.id)
+            messages.success(
                 request,
-                _("Could not connect. Check the sign-in details below."),
+                _("Disconnected %(name)s for this event.") % {"name": backend.label},
             )
             return redirect(redirect_url)
-        form.run_connect_action(request, event)
+
+        messages.error(request, _("Unknown interpreter action."))
         return redirect(redirect_url)
 
     def _context(self, event):
@@ -197,15 +192,17 @@ class InterpretationInterpreters(
         for item in list_available_interpreters(event):
             if item["id"] == RoomInterpretation.INTERPRETER_NONE:
                 continue
+            backend = get_backend(item["id"])
             entry = {
                 "id": item["id"],
                 "label": item["label"],
                 "configured": item["configured"],
+                "uses_event_credentials": item["uses_event_credentials"],
             }
-            if item["id"] == RoomInterpretation.INTERPRETER_SUSI:
-                entry["form"] = SusiInterpreterCredentialsForm(event=event)
-                entry["account"] = susi_account_label(event)
-                entry["server_host"] = susi_server_host(event)
+            if backend.uses_event_credentials:
+                entry["connect_form"] = backend.build_credentials_form(event=event)
+                entry["account"] = backend.credentials_account_label(event)
+                entry["server_host"] = backend.credentials_server_label(event)
             interpreters.append(entry)
         return {
             "event": event,

@@ -3,9 +3,10 @@ from __future__ import annotations
 from django.utils.translation import gettext_lazy as _
 
 from ..models import RoomInterpretation
+from .base import InterpreterBackend
 
 
-class NoopBackend:
+class NoopBackend(InterpreterBackend):
     id = RoomInterpretation.INTERPRETER_NONE
     label = _("None")
 

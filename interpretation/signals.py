@@ -4,31 +4,13 @@ from django.utils.translation import gettext_lazy as _
 from eventyay.base.settings import settings_hierarkey
 from eventyay.control.signals import nav_event_common
 
-from .interpreter_credentials import (
-    LEGACY_SUSI_AUTH_TOKEN,
-    LEGACY_SUSI_BASE_URL,
-    LEGACY_SUSI_EMAIL,
-    LEGACY_SUSI_NAME,
-    SETTING_SUSI_ACCOUNT_EMAIL,
-    SETTING_SUSI_ACCOUNT_NAME,
-    SETTING_SUSI_AUTH_TOKEN,
-    SETTING_SUSI_BASE_URL,
-)
+from .backends.susi_credentials import EVENT_SETTINGS_KEYS
 from .settings import SETTING_IS_ENABLED
 
 PLUGIN_MODULE = "interpretation"
 
 settings_hierarkey.add_default(SETTING_IS_ENABLED, True, bool)
-for _key in (
-    SETTING_SUSI_BASE_URL,
-    SETTING_SUSI_AUTH_TOKEN,
-    SETTING_SUSI_ACCOUNT_EMAIL,
-    SETTING_SUSI_ACCOUNT_NAME,
-    LEGACY_SUSI_BASE_URL,
-    LEGACY_SUSI_AUTH_TOKEN,
-    LEGACY_SUSI_EMAIL,
-    LEGACY_SUSI_NAME,
-):
+for _key in EVENT_SETTINGS_KEYS:
     settings_hierarkey.add_default(_key, "", str)
 
 
