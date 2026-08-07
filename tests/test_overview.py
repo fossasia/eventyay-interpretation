@@ -89,7 +89,9 @@ def test_room_settings_renders_table(organizer_client, rooms_url, room):
 
 
 def test_overview_links_to_interpreters(
-    organizer_client, dashboard_url, interpreters_url,
+    organizer_client,
+    dashboard_url,
+    interpreters_url,
 ):
     response = organizer_client.get(dashboard_url)
 

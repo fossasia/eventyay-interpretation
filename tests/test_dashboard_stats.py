@@ -40,7 +40,9 @@ def test_build_overview_context_flags_unconfigured_susi(event, room):
 
 
 def test_build_overview_context_marks_event_susi_connected(
-    event, room, connected_event,
+    event,
+    room,
+    connected_event,
 ):
     RoomInterpretation.objects.create(
         room=room,
