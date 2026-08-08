@@ -15,24 +15,12 @@
                     Live captions, translated audio, and language channels for {{ event_name }}.
                 {% endblocktrans %}
             </p>
-            <div class="interpretation-hero-actions">
-                <a class="btn btn-primary"
-                   href="{% url 'plugins:interpretation:rooms' organizer=event.organizer.slug event=event.slug %}">
-                    {% trans "Room settings" %}
-                </a>
-                <a class="btn btn-default"
-                   href="{{ interpreters_url }}">
-                    {% trans "Configure interpreters" %}
-                </a>
-            </div>
+
         </div>
     </header>
 
     <div class="interpretation-content">
-        <section class="interpretation-overview-section">
-            <h3 class="interpretation-section-title">{% trans "Event settings" %}</h3>
-            {% include "interpretation/event_enable_form.html" with form=event_settings_form event_settings_save_key=event_settings_save_key %}
-        </section>
+
         <div class="row" style="margin-top: 2rem;">
             <div class="col-md-4">
                 <div class="panel panel-default">
