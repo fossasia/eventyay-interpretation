@@ -13,7 +13,6 @@ from .backends import (
 )
 from .interpreter_credentials import (
     SUSI_CREDENTIAL_KEYS,
-    is_susi_configured,
     strip_room_credential_keys,
 )
 from .models import RoomInterpretation
@@ -107,7 +106,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
         "plugin_enabled": plugin_enabled(event),
-        "susi_connected": is_susi_configured(event),
+
         "dashboard_url": interpretation_dashboard_url(event.organizer.slug, event.slug),
     }
 

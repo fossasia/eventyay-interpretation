@@ -29,7 +29,6 @@ from .interpreter_credentials import (
     clear_interpreter_credentials,
     get_susi_client,
     is_interpreter_configured,
-    is_susi_configured,
 )
 from .models import RoomInterpretation
 from .room_control import (
@@ -364,7 +363,7 @@ class InterpretationRoomSettings(
             "rooms": rooms,
             "available_interpreters": list_available_interpreters(event),
             "interpreters_url": _interpreters_url(event),
-            "susi_connected": is_susi_configured(event),
+
             "is_event_settings": True,
             **kwargs,
         }
@@ -505,7 +504,7 @@ class InterpretationCaptionPreview(
             ),
             "rooms_url": _rooms_url(event),
             "interpreters_url": _interpreters_url(event),
-            "susi_connected": is_susi_configured(event),
+
             "is_event_settings": True,
         }
 

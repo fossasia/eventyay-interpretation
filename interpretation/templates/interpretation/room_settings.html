@@ -27,12 +27,7 @@
     </header>
 
     <div class="interpretation-content">
-        {% if not susi_connected %}
-            <p class="text-muted interpretation-section-hint">
-                {% trans "SUSI is not connected for this event yet." %}
-                <a href="{{ interpreters_url }}">{% trans "Configure interpreters" %}</a>
-            </p>
-        {% endif %}
+
 
         {% if not rooms %}
             <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
