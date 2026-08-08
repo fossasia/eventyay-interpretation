@@ -320,11 +320,7 @@ class InterpretationSettingsForm(SettingsForm):
         required=False,
     )
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["interpretation_is_enabled"].widget.attrs.setdefault(
-            "class", "form-control"
-        )
+
 
     def save(self):
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True
