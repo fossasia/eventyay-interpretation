@@ -74,7 +74,9 @@ class VoxbentoBackend(InterpreterBackend):
 
         # Find languages that were removed and delete them from VoxBento
         removed_langs = [
-            lang for lang in booths.keys() if lang not in interpretation.target_languages
+            lang
+            for lang in booths.keys()
+            if lang not in interpretation.target_languages
         ]
         for lang in removed_langs:
             delete_url = (
