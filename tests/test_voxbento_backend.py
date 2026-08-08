@@ -17,11 +17,9 @@ from interpretation.backends.voxbento_credentials import (
 
 
 @pytest.fixture
-def empty_event(db):
+def empty_event(event):
     """An event with no credentials."""
-    from eventyay.base.models import Event
-
-    return Event.objects.create(name="Test Event")
+    return event
 
 
 def test_voxbento_backend_is_registered():

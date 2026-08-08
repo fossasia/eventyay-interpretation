@@ -68,7 +68,7 @@ def test_serialize_room_interpretation_reports_event_susi_status(event, room):
 
     payload = serialize_room_interpretation(room, event, interpretation)
 
-    assert payload["susi_connected"] is True
+    assert payload["interpreter_ready"] is True
     assert "susi_auth_token" not in payload["backend_config"]
 
 

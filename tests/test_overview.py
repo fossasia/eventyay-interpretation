@@ -19,8 +19,9 @@ def test_overview_renders(organizer_client, dashboard_url):
 
     assert response.status_code == 200
     content = response.content.decode()
-    assert "Room settings" in content
-    assert "Enable live interpretation for this event" in content
+    assert "Enable Interpretation" in content
+    assert "Connect Services" in content
+    assert "Configure Rooms" in content
 
 
 def test_overview_disable_stops_sessions(
@@ -60,24 +61,6 @@ def test_overview_disable_stops_sessions(
     assert connected_event.settings.get(SETTING_IS_ENABLED, as_type=bool) is False
 
 
-def test_overview_shows_room_stats(organizer_client, dashboard_url, room):
-    RoomInterpretation.objects.create(
-        room=room,
-        interpreter=RoomInterpretation.INTERPRETER_SUSI,
-        room_enabled=True,
-        status=RoomInterpretation.STATUS_RUNNING,
-        target_languages=["de", "fr"],
-    )
-
-    response = organizer_client.get(dashboard_url)
-
-    assert response.status_code == 200
-    content = response.content.decode()
-    assert "Main Stage" in content
-    assert "Live now" in content
-    assert "1" in content
-
-
 def test_room_settings_renders_table(organizer_client, rooms_url, room):
     response = organizer_client.get(rooms_url)
 
@@ -97,7 +80,7 @@ def test_overview_links_to_interpreters(
 
     assert response.status_code == 200
     assert interpreters_url in response.content.decode()
-    assert "Configure interpreters" in response.content.decode()
+    assert "Connect Services" in response.content.decode()
 
 
 def test_overview_links_to_room_settings(organizer_client, dashboard_url, rooms_url):

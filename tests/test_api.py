@@ -54,7 +54,7 @@ def test_api_config_get(organizer_client, connected_event, room):
     payload = response.json()
     assert payload["interpreter"] == RoomInterpretation.INTERPRETER_SUSI
     assert payload["target_languages"] == ["de"]
-    assert payload["susi_connected"] is True
+    assert payload["interpreter_ready"] is True
     assert payload["session_id"] == ""
     assert "susi_auth_token" not in payload["backend_config"]
 
