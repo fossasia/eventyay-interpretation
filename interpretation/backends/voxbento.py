@@ -55,6 +55,7 @@ class VoxbentoBackend(InterpreterBackend):
                 "language_code": lang,
                 "language": lang.upper(),
                 "room_id": interpretation.room_id,
+                "room_name": str(interpretation.room.name),
             }
             try:
                 response = requests.post(
