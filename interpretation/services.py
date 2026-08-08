@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from .susi import SusiError
-from .utils import SUSI_STREAM_TYPE
+from .susi_providers import (
+    resolve_transcription_provider,
+    resolve_translation_provider,
+)
+from .utils import SUSI_SESSION_SOURCE, SUSI_STREAM_TYPE
 
 
 def _provider_config(provider_name: str):
-    return {"provider_name": provider_name} if provider_name else None
+    resolved = resolve_transcription_provider(provider_name)
+    return {"provider_name": resolved}
 
 
 def _translation_config(
@@ -16,9 +21,8 @@ def _translation_config(
     source_language: str = "",
     target_languages: list[str] | None = None,
 ):
-    if not provider_name:
-        return None
-    cfg = {"provider_name": provider_name}
+    resolved = resolve_translation_provider(provider_name)
+    cfg = {"provider_name": resolved}
     source = (source_language or "").strip()
     if source:
         cfg["source_lang"] = source
@@ -41,16 +45,14 @@ def start_stream_session(
 ) -> str:
     """Create a SUSI session and configure it to ingest ``stream_url``.
 
-    All Eventyay stream URLs are sent through SUSI's ``youtube`` source
-    (``YouTubeSource``), which handles YouTube, Twitch, Vimeo, and HLS via
-    yt-dlp / ffmpeg.
+    Eventyay stream URLs use SUSI ``platform`` ingest (YouTube/Twitch/Vimeo/HLS).
 
     Returns the SUSI tenant/session id. Raises ``SusiError`` on failure.
     """
     if not stream_url:
         raise ValueError("stream_url is required to start a session")
 
-    tenant_id = client.create_session(source=SUSI_STREAM_TYPE)
+    tenant_id = client.create_session(source=SUSI_SESSION_SOURCE)
     try:
         client.configure(
             tenant_id,

@@ -15,8 +15,10 @@ NATIVE_LIVESTREAM = "livestream.native"
 YOUTUBE_LIVESTREAM = "livestream.youtube"
 IFRAME_LIVESTREAM = "livestream.iframe"
 
-# SUSI ``YouTubeSource``: yt-dlp for platform URLs, ffmpeg for direct ``.m3u8``.
-SUSI_STREAM_TYPE = "youtube"
+# configure ``stream_type``; SUSI rewrites ``.m3u8`` platform URLs to ``url`` itself.
+SUSI_STREAM_TYPE = "platform"
+# POST /session ``source`` (must stay in SUSI VALID_SOURCES).
+SUSI_SESSION_SOURCE = "youtube"
 
 # Embed-only schedules have no direct audio URL for SUSI to ingest.
 _SKIP_SCHEDULE_TYPES = frozenset({"iframe"})

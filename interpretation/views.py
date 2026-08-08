@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -504,8 +504,8 @@ class InterpretationCaptionPreview(
             "is_running": is_running,
             "preview_supported": data.get("interpreter")
             == RoomInterpretation.INTERPRETER_SUSI,
-            "poll_url": reverse(
-                "plugins:interpretation:room.preview.poll",
+            "stream_url": reverse(
+                "plugins:interpretation:room.preview.stream",
                 kwargs={
                     "organizer": event.organizer.slug,
                     "event": event.slug,
@@ -518,33 +518,50 @@ class InterpretationCaptionPreview(
         }
 
 
-class InterpretationCaptionPreviewPoll(
+class InterpretationCaptionPreviewStream(
     InterpretationEnabledMixin,
     EventPermissionRequiredMixin,
     View,
 ):
-    """Temporary JSON poll endpoint for the caption preview page."""
+    """Proxy SUSI SSE captions for the organizer preview page."""
 
     permission = "can_change_event_settings"
     http_method_names = ["get"]
 
     def get(self, request, pk, *args, **kwargs):
+        import json
+
         room = get_object_or_404(
             request.event.rooms.filter(deleted=False),
             pk=pk,
         )
         interpretation, is_running = _preview_session(room, request.event)
         if interpretation is None or not is_running:
-            return JsonResponse({"running": False, "text": "", "error": ""})
+            return JsonResponse(
+                {"status": "error", "message": str(_("Session is not running."))},
+                status=409,
+            )
 
         client = get_susi_client(request.event)
-        try:
-            result = client.latest_transcript(interpretation.backend_session_id)
-            if not result.ok:
-                return JsonResponse(
-                    {"running": True, "text": "", "error": str(result.data)}
+        tenant_id = interpretation.backend_session_id
+        target_lang = ""
+        if interpretation.target_languages:
+            target_lang = interpretation.target_languages[0]
+
+        def event_stream():
+            try:
+                yield from client.iter_caption_stream(
+                    tenant_id,
+                    target_lang=target_lang,
                 )
-            text = _preview_caption_text(result.data)
-            return JsonResponse({"running": True, "text": text, "error": ""})
-        except SusiError as exc:
-            return JsonResponse({"running": True, "text": "", "error": str(exc)})
+            except SusiError as exc:
+                payload = json.dumps({"status": "error", "message": str(exc)})
+                yield f"data: {payload}\n\n".encode()
+
+        response = StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+        )
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
