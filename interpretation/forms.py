@@ -31,6 +31,117 @@ PREVIEW_SAVE = "save_settings"
 PREVIEW_START = "start"
 PREVIEW_STOP = "stop"
 
+from .backends.voxbento_credentials import (
+    VoxbentoError,
+    get_voxbento_api_key,
+    get_voxbento_base_url,
+    is_voxbento_configured,
+    save_voxbento_credentials,
+    test_voxbento_connection,
+    voxbento_server_host,
+)
+
+
+def verify_voxbento_connection(event, request) -> None:
+    """Verify stored event-level VoxBento credentials."""
+    base_url = get_voxbento_base_url(event)
+    api_key = get_voxbento_api_key(event)
+    if not base_url or not api_key:
+        messages.error(
+            request,
+            _("Please provide a VoxBento Base URL and API Key before testing."),
+        )
+        return
+
+    try:
+        test_voxbento_connection(base_url, api_key, event.slug)
+    except VoxbentoError as exc:
+        messages.error(
+            request,
+            _("VoxBento connection failed: %(error)s") % {"error": str(exc)},
+        )
+    else:
+        messages.success(
+            request,
+            _("Successfully connected to VoxBento at %(server)s.")
+            % {"server": voxbento_server_host(event)},
+        )
+
+
+class VoxbentoInterpreterCredentialsForm(forms.Form):
+    """Event-level VoxBento credentials fields."""
+
+    interpretation_voxbento_base_url = forms.URLField(
+        label=_("VoxBento Base URL"),
+        help_text=_(
+            "Base URL of the VoxBento Console, e.g. https://voxbento.example.com"
+        ),
+        required=False,
+        widget=forms.URLInput(attrs={"placeholder": "https://voxbento.example.com"}),
+    )
+    interpretation_voxbento_api_key = forms.CharField(
+        label=_("VoxBento API Key"),
+        required=False,
+        widget=forms.PasswordInput(render_value=True),
+        help_text=_("Event-scoped API Key generated from VoxBento."),
+    )
+
+    def __init__(self, *args, event=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.event = event
+        for name in self.fields:
+            self.fields[name].widget.attrs.setdefault("class", "form-control")
+        if event and get_voxbento_base_url(event):
+            self.fields["interpretation_voxbento_base_url"].initial = (
+                get_voxbento_base_url(event)
+            )
+        if event and get_voxbento_api_key(event):
+            self.fields["interpretation_voxbento_api_key"].initial = (
+                get_voxbento_api_key(event)
+            )
+
+    @property
+    def is_connected(self) -> bool:
+        return is_voxbento_configured(self.event)
+
+    @property
+    def connected_label(self) -> str:
+        return _("VoxBento API Key configured")
+
+    def _connecting(self) -> bool:
+        return CONNECT_POST_KEY in self.data
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self._connecting():
+            return cleaned_data
+        base_url = cleaned_data.get("interpretation_voxbento_base_url")
+        api_key = cleaned_data.get("interpretation_voxbento_api_key")
+        if not base_url or not api_key:
+            raise forms.ValidationError(
+                _("Both Base URL and API Key are required to connect to VoxBento.")
+            )
+        return cleaned_data
+
+    def run_connect_action(self, request, event) -> None:
+        base_url = self.cleaned_data.get("interpretation_voxbento_base_url").strip()
+        api_key = self.cleaned_data.get("interpretation_voxbento_api_key").strip()
+
+        try:
+            test_voxbento_connection(base_url, api_key, event.slug)
+        except VoxbentoError as exc:
+            messages.error(
+                request,
+                _("Could not connect to VoxBento: %(error)s") % {"error": str(exc)},
+            )
+            return
+
+        save_voxbento_credentials(event, base_url, api_key)
+        messages.success(
+            request,
+            _("Connected to VoxBento at %(server)s.")
+            % {"server": voxbento_server_host(event)},
+        )
 
 def verify_susi_connection(event, request) -> None:
     """Verify stored event-level SUSI credentials."""
