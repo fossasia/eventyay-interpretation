@@ -271,6 +271,7 @@ class InterpretationRoomSettings(
                 {
                     "interpreter": form.cleaned_data["interpreter"],
                     "room_enabled": form.cleaned_data.get("room_enabled"),
+                    "target_languages": form.cleaned_data.get("target_languages"),
                 },
             )
         except ValueError as exc:
@@ -304,6 +305,13 @@ class InterpretationRoomSettings(
                 )
                 % {"name": backend.label},
             )
+        elif (
+            interpretation
+            and interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO
+        ):
+            backend = get_backend(interpretation.interpreter)
+            backend.sync_booths(event, interpretation)
+
         messages.success(
             request,
             _("Saved interpretation settings for %(room)s.") % {"room": room.name},
@@ -350,6 +358,9 @@ class InterpretationRoomSettings(
                         initial={
                             "interpreter": data["interpreter"],
                             "room_enabled": data["room_enabled"],
+                            "target_languages": ", ".join(
+                                data.get("target_languages", [])
+                            ),
                         },
                     ),
                     "interpreter_configured": is_interpreter_configured(

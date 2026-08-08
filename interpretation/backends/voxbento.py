@@ -6,6 +6,8 @@ from ..models import RoomInterpretation
 from .base import InterpreterBackend
 from .voxbento_credentials import (
     clear_voxbento_credentials,
+    get_voxbento_api_key,
+    get_voxbento_base_url,
     is_voxbento_configured,
     voxbento_server_host,
 )
@@ -27,6 +29,50 @@ class VoxbentoBackend(InterpreterBackend):
         # VoxBento is an interpreter console where interpreters speak directly.
         # So starting the session here just marks the room as active.
         return f"{event.slug}-{interpretation.room_id}"
+
+    def sync_booths(self, event, interpretation) -> None:
+        if not interpretation.target_languages:
+            return
+
+        base_url = get_voxbento_base_url(event)
+        api_key = get_voxbento_api_key(event)
+        if not base_url or not api_key:
+            return
+
+        url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/booths"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+
+        config = interpretation.backend_config.copy()
+        booths = config.get("booths", {})
+
+        import requests
+
+        for lang in interpretation.target_languages:
+            payload = {
+                "language_code": lang,
+                "room_id": interpretation.room.pk,
+            }
+            try:
+                response = requests.post(
+                    url, headers=headers, json=payload, timeout=5.0
+                )
+                if response.ok:
+                    data = response.json()
+                    booths[lang] = {
+                        "invite_url": data.get("interpreter_invite_url"),
+                        "caption_url": data.get("caption_url"),
+                        "whip_url": data.get("whip_url"),
+                        "whep_url": data.get("whep_url"),
+                    }
+            except requests.RequestException:
+                pass
+
+        config["booths"] = booths
+        interpretation.backend_config = config
+        interpretation.save(update_fields=["backend_config"])
 
     def stop(self, event, interpretation) -> None:
         # Stopping just marks it inactive on Eventyay side.

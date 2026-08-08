@@ -84,3 +84,34 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if result.warning:
             payload["warning"] = result.warning
         return Response(payload)
+
+    @action(detail=False, methods=["post"], url_path="listener-token")
+    def listener_token(self, request, room_pk=None, **kwargs):
+        self._ensure_room()
+        
+        from .backends.voxbento_credentials import (
+            get_voxbento_api_key,
+            get_voxbento_base_url,
+        )
+        import requests
+
+        base_url = get_voxbento_base_url(self.event)
+        api_key = get_voxbento_api_key(self.event)
+        
+        if not base_url or not api_key:
+            return Response({"detail": "VoxBento is not configured for this event."}, status=400)
+
+        url = f"{base_url.rstrip('/')}/api/v1/tokens/listener"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, timeout=5.0)
+            if response.ok:
+                return Response({"token": response.json().get("token")})
+            else:
+                return Response({"detail": f"VoxBento API Error: {response.text}"}, status=400)
+        except requests.RequestException as e:
+            return Response({"detail": f"Connection failed: {e}"}, status=400)

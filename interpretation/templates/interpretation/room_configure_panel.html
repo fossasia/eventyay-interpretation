@@ -21,6 +21,13 @@
         {% endif %}
 
         <div class="form-group">
+            <label for="{{ entry.configure_form.target_languages.id_for_label }}">
+                {{ entry.configure_form.target_languages.label }}
+            </label>
+            {{ entry.configure_form.target_languages }}
+        </div>
+
+        <div class="form-group">
             <div class="checkbox">
                 <label>
                     {{ entry.configure_form.room_enabled }}
@@ -43,4 +50,17 @@
             {% trans "Clear room" %}
         </button>
     </div>
+
+    {% if entry.data.interpreter == "voxbento" and entry.data.backend_config.booths %}
+    <hr>
+    <h4>{% trans "Interpreter Links" %}</h4>
+    <ul class="list-group" style="margin-top: 10px;">
+        {% for lang, urls in entry.data.backend_config.booths.items %}
+            <li class="list-group-item">
+                <strong>{{ lang }}</strong>:
+                <a href="{{ urls.invite_url }}" target="_blank">{{ urls.invite_url }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </form>
