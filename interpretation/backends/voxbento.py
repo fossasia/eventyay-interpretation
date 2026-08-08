@@ -39,7 +39,7 @@ class VoxbentoBackend(InterpreterBackend):
         if not base_url or not api_key:
             return
 
-        url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/booths"
+        url = f"{base_url.rstrip('/')}/api/events/{event.slug}/booths"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
