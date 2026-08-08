@@ -82,7 +82,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
     interpretation_voxbento_api_key = forms.CharField(
         label=_("VoxBento API Key"),
         required=False,
-        widget=forms.PasswordInput(render_value=True),
+        widget=forms.PasswordInput(render_value=False),
         help_text=_("Event-scoped API Key generated from VoxBento."),
     )
 
@@ -95,10 +95,6 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
             self.fields[
                 "interpretation_voxbento_base_url"
             ].initial = get_voxbento_base_url(event)
-        if event and get_voxbento_api_key(event):
-            self.fields[
-                "interpretation_voxbento_api_key"
-            ].initial = get_voxbento_api_key(event)
 
     @property
     def is_connected(self) -> bool:
@@ -123,7 +119,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
             )
         return cleaned_data
 
-    def run_connect_action(self, request, event) -> None:
+    def run_connect_action(self, request, event) -> bool:
         base_url = self.cleaned_data.get("interpretation_voxbento_base_url").strip()
         api_key = self.cleaned_data.get("interpretation_voxbento_api_key").strip()
 
@@ -134,7 +130,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
                 request,
                 _("Could not connect to VoxBento: %(error)s") % {"error": str(exc)},
             )
-            return
+            return False
 
         save_voxbento_credentials(event, base_url, api_key)
         messages.success(
@@ -142,6 +138,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
             _("Connected to VoxBento at %(server)s.")
             % {"server": voxbento_server_host(event)},
         )
+        return True
 
 
 def verify_susi_connection(event, request) -> None:
@@ -284,7 +281,7 @@ class SusiInterpreterCredentialsForm(forms.Form):
             or ""
         )
 
-    def run_connect_action(self, request, event) -> None:
+    def run_connect_action(self, request, event) -> bool:
         base_url = self.resolved_base_url()
         email = (self.cleaned_data.get("susi_connect_email") or "").strip()
         password = self.cleaned_data.get("susi_connect_password") or ""
@@ -296,7 +293,7 @@ class SusiInterpreterCredentialsForm(forms.Form):
                 request,
                 _("Could not connect to SUSI: %(error)s") % {"error": str(exc)},
             )
-            return
+            return False
         save_susi_credentials(
             event,
             base_url=base_url,
@@ -311,6 +308,7 @@ class SusiInterpreterCredentialsForm(forms.Form):
             request,
             _("Connected to SUSI as %(account)s.") % {"account": label},
         )
+        return True
 
 
 class InterpretationSettingsForm(SettingsForm):

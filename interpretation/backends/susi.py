@@ -61,8 +61,8 @@ class SusiBackend(InterpreterBackend):
         form = self.build_credentials_form(event, data=post)
         if not form.is_valid():
             return form, False
-        form.run_connect_action(request, event)
-        return form, True
+        success = form.run_connect_action(request, event)
+        return form, success
 
     def test_connection(self, request, event) -> None:
         from ..forms import verify_susi_connection

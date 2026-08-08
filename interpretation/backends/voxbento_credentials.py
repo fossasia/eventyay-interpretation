@@ -52,10 +52,7 @@ def voxbento_server_host(event: Event) -> str:
     url = get_voxbento_base_url(event)
     if not url:
         return ""
-    try:
-        return urlparse(url).netloc
-    except Exception:
-        return url
+    return urlparse(url).netloc
 
 
 def test_voxbento_connection(base_url: str, api_key: str, event_slug: str) -> None:
@@ -75,6 +72,6 @@ def test_voxbento_connection(base_url: str, api_key: str, event_slug: str) -> No
     if not response.ok:
         try:
             error_msg = response.json().get("detail", response.text)
-        except Exception:
+        except ValueError:
             error_msg = response.text
         raise VoxbentoError(f"VoxBento API error ({response.status_code}): {error_msg}")
