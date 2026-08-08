@@ -55,11 +55,7 @@ def build_overview_context(event) -> dict:
                     "target_languages": target_languages,
                 }
             )
-        if (
-            room_on
-            and data_interpreter != RoomInterpretation.INTERPRETER_NONE
-            and not interpreter_ready
-        ):
+        if room_on and not interpreter_ready:
             room_needs_setup += 1
         if room_on and data_interpreter != RoomInterpretation.INTERPRETER_NONE:
             interpreters_in_use[data_interpreter] = (
