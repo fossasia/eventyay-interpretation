@@ -53,7 +53,8 @@ class VoxbentoBackend(InterpreterBackend):
         for lang in interpretation.target_languages:
             payload = {
                 "language_code": lang,
-                "room_id": interpretation.room.pk,
+                "language": lang.upper(),
+                "room_id": interpretation.room_id,
             }
             try:
                 response = requests.post(
