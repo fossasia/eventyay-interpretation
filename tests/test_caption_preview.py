@@ -88,8 +88,10 @@ def test_preview_stream_requires_running_session(organizer_client, connected_eve
 
     response = organizer_client.get(preview_stream_url(connected_event, room))
 
-    assert response.status_code == 409
-    assert response.json()["status"] == "error"
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith("text/event-stream")
+    body = b"".join(response.streaming_content).decode()
+    assert "Session is not running" in body
 
 
 def test_preview_treats_legacy_stopped_status_as_not_running(
@@ -105,7 +107,8 @@ def test_preview_treats_legacy_stopped_status_as_not_running(
 
     response = organizer_client.get(preview_stream_url(connected_event, room))
 
-    assert response.status_code == 409
+    assert response.status_code == 200
+    assert b"Session is not running" in b"".join(response.streaming_content)
 
 
 def test_preview_stream_proxies_sse(organizer_client, connected_event, room, monkeypatch):
@@ -119,9 +122,11 @@ def test_preview_stream_proxies_sse(organizer_client, connected_event, room, mon
     )
 
     class FakeClient:
+        auth_token = "tok"
+
         def iter_caption_stream(self, tenant_id, *, target_lang=""):
             assert tenant_id == "tenant-1"
-            assert target_lang == "de"
+            assert target_lang == ""
             payload = json.dumps({"transcript": "hello world", "translation": "hallo"})
             yield f"data: {payload}\n\n".encode()
 
@@ -133,7 +138,7 @@ def test_preview_stream_proxies_sse(organizer_client, connected_event, room, mon
     response = organizer_client.get(preview_stream_url(connected_event, room))
 
     assert response.status_code == 200
-    assert response["Content-Type"] == "text/event-stream"
+    assert response["Content-Type"].startswith("text/event-stream")
     body = b"".join(response.streaming_content)
     assert b"hello world" in body
 

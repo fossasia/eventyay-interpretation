@@ -122,19 +122,29 @@
                         return;
                     }
                     if (data.status === "connected") {
-                        statusLine.textContent = "{% trans 'Waiting for captions…'|escapejs %}";
+                        statusLine.textContent = "{% trans 'Connected — waiting for captions…'|escapejs %}";
                         statusLine.classList.remove("is-error");
                         return;
                     }
                     if (data.status === "error") {
                         statusLine.textContent = data.message || "{% trans 'Stream error.'|escapejs %}";
                         statusLine.classList.add("is-error");
+                        source.close();
                         return;
                     }
-                    showCaption(data.translation || data.transcript || "");
+                    var text = (data.translation || data.transcript || "").trim();
+                    showCaption(text);
+                };
+
+                source.onopen = function () {
+                    statusLine.textContent = "{% trans 'Connected — waiting for captions…'|escapejs %}";
+                    statusLine.classList.remove("is-error");
                 };
 
                 source.onerror = function () {
+                    if (source.readyState === EventSource.CLOSED) {
+                        return;
+                    }
                     statusLine.textContent = "{% trans 'Caption stream disconnected.'|escapejs %}";
                     statusLine.classList.add("is-error");
                 };

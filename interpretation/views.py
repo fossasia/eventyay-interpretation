@@ -444,7 +444,7 @@ class InterpretationCaptionPreview(
     def get(self, request, pk, *args, **kwargs):
         event = request.event
         room = self._room(event, pk)
-        return render(request, self.template_name, self._context(event, room))
+        return render(request, self.template_name, self._context(request, event, room))
 
     def post(self, request, pk, *args, **kwargs):
         event = request.event
@@ -492,9 +492,17 @@ class InterpretationCaptionPreview(
 
         return redirect(redirect_url)
 
-    def _context(self, event, room):
+    def _context(self, request, event, room):
         interpretation, is_running = _preview_session(room, event)
         data = serialize_room_interpretation(room, event, interpretation)
+        stream_path = reverse(
+            "plugins:interpretation:room.preview.stream",
+            kwargs={
+                "organizer": event.organizer.slug,
+                "event": event.slug,
+                "pk": room.pk,
+            },
+        )
         return {
             "event": event,
             "room": room,
@@ -504,18 +512,21 @@ class InterpretationCaptionPreview(
             "is_running": is_running,
             "preview_supported": data.get("interpreter")
             == RoomInterpretation.INTERPRETER_SUSI,
-            "stream_url": reverse(
-                "plugins:interpretation:room.preview.stream",
-                kwargs={
-                    "organizer": event.organizer.slug,
-                    "event": event.slug,
-                    "pk": room.pk,
-                },
-            ),
+            "stream_url": request.build_absolute_uri(stream_path),
             "rooms_url": _rooms_url(event),
             "interpreters_url": _interpreters_url(event),
             "is_event_settings": True,
         }
+
+
+def _preview_sse_error(message: str) -> StreamingHttpResponse:
+    import json
+
+    payload = json.dumps({"status": "error", "message": message})
+    return StreamingHttpResponse(
+        [f"data: {payload}\n\n".encode()],
+        content_type="text/event-stream; charset=utf-8",
+    )
 
 
 class InterpretationCaptionPreviewStream(
@@ -537,18 +548,18 @@ class InterpretationCaptionPreviewStream(
         )
         interpretation, is_running = _preview_session(room, request.event)
         if interpretation is None or not is_running:
-            return JsonResponse(
-                {"status": "error", "message": str(_("Session is not running."))},
-                status=409,
-            )
+            return _preview_sse_error(str(_("Session is not running.")))
 
         client = get_susi_client(request.event)
+        if not client.auth_token:
+            return _preview_sse_error(str(_("SUSI is not connected for this event.")))
+
         tenant_id = interpretation.backend_session_id
+        # Preview shows source transcript; per-language translation comes later in video UI.
         target_lang = ""
-        if interpretation.target_languages:
-            target_lang = interpretation.target_languages[0]
 
         def event_stream():
+            yield b": stream-open\n\n"
             try:
                 yield from client.iter_caption_stream(
                     tenant_id,
@@ -560,8 +571,8 @@ class InterpretationCaptionPreviewStream(
 
         response = StreamingHttpResponse(
             event_stream(),
-            content_type="text/event-stream",
+            content_type="text/event-stream; charset=utf-8",
         )
-        response["Cache-Control"] = "no-cache"
+        response["Cache-Control"] = "no-cache, no-transform"
         response["X-Accel-Buffering"] = "no"
         return response
