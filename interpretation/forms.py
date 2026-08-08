@@ -92,13 +92,13 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
         for name in self.fields:
             self.fields[name].widget.attrs.setdefault("class", "form-control")
         if event and get_voxbento_base_url(event):
-            self.fields["interpretation_voxbento_base_url"].initial = (
-                get_voxbento_base_url(event)
-            )
+            self.fields[
+                "interpretation_voxbento_base_url"
+            ].initial = get_voxbento_base_url(event)
         if event and get_voxbento_api_key(event):
-            self.fields["interpretation_voxbento_api_key"].initial = (
-                get_voxbento_api_key(event)
-            )
+            self.fields[
+                "interpretation_voxbento_api_key"
+            ].initial = get_voxbento_api_key(event)
 
     @property
     def is_connected(self) -> bool:
@@ -142,6 +142,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
             _("Connected to VoxBento at %(server)s.")
             % {"server": voxbento_server_host(event)},
         )
+
 
 def verify_susi_connection(event, request) -> None:
     """Verify stored event-level SUSI credentials."""
@@ -319,8 +320,6 @@ class InterpretationSettingsForm(SettingsForm):
         label=_("Enable live interpretation for this event"),
         required=False,
     )
-
-
 
     def save(self):
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True

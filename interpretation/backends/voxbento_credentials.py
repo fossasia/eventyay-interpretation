@@ -18,6 +18,7 @@ EVENT_SETTINGS_KEYS = frozenset(
 
 class VoxbentoError(Exception):
     """Exception raised for VoxBento API errors."""
+
     pass
 
 

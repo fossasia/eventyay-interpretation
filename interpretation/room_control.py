@@ -106,7 +106,6 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
         "plugin_enabled": plugin_enabled(event),
-
         "dashboard_url": interpretation_dashboard_url(event.organizer.slug, event.slug),
     }
 

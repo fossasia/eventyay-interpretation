@@ -363,7 +363,6 @@ class InterpretationRoomSettings(
             "rooms": rooms,
             "available_interpreters": list_available_interpreters(event),
             "interpreters_url": _interpreters_url(event),
-
             "is_event_settings": True,
             **kwargs,
         }
@@ -504,7 +503,6 @@ class InterpretationCaptionPreview(
             ),
             "rooms_url": _rooms_url(event),
             "interpreters_url": _interpreters_url(event),
-
             "is_event_settings": True,
         }
 
