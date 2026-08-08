@@ -85,19 +85,26 @@ def _migrate_legacy_event_keys(event) -> None:
 
 
 def consolidate_interpreter_credentials_at_event(apps, schema_editor):
-    RoomInterpretation = apps.get_model("interpretation", "RoomInterpretation")
-    events_seen: set[int] = set()
+    from eventyay.base.models import Event
 
-    for interpretation in RoomInterpretation.objects.select_related("room__event").iterator():
-        event = interpretation.room.event
-        event_id = event.pk
+    RoomInterpretation = apps.get_model("interpretation", "RoomInterpretation")
+    events_legacy_migrated: set[int] = set()
+    events_with_token: set[int] = set()
+
+    for interpretation in RoomInterpretation.objects.select_related("room").iterator():
+        event_id = interpretation.room.event_id
+        real_event = Event.objects.get(pk=event_id)
         config = dict(interpretation.backend_config or {})
 
-        if event_id not in events_seen:
-            events_seen.add(event_id)
-            _migrate_legacy_event_keys(event)
-            if not _event_has_susi_token(event):
-                _copy_room_credentials_to_event(event, config)
+        if event_id not in events_legacy_migrated:
+            events_legacy_migrated.add(event_id)
+            _migrate_legacy_event_keys(real_event)
+
+        if event_id not in events_with_token:
+            if not _event_has_susi_token(real_event):
+                _copy_room_credentials_to_event(real_event, config)
+            if _event_has_susi_token(real_event):
+                events_with_token.add(event_id)
 
         if config.keys() & INTERPRETER_CREDENTIAL_KEYS:
             for key in INTERPRETER_CREDENTIAL_KEYS:
