@@ -524,9 +524,7 @@ def _preview_sse(message: str, *, error: bool = False) -> StreamingHttpResponse:
     import json
 
     payload = (
-        {"status": "error", "message": message}
-        if error
-        else {"status": "connected"}
+        {"status": "error", "message": message} if error else {"status": "connected"}
     )
     body = f"data: {json.dumps(payload)}\n\n".encode()
     return StreamingHttpResponse(
@@ -594,6 +592,4 @@ class InterpretationCaptionPreviewStream(View):
         )(request.event, pk)
         if error:
             return _preview_sse(error, error=True)
-        return _preview_stream_response(
-            stream_susi_captions_async(client, tenant_id)
-        )
+        return _preview_stream_response(stream_susi_captions_async(client, tenant_id))
