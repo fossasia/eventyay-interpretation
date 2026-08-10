@@ -9,11 +9,14 @@ from .settings import use_plugin_language_streams
 
 def augment_room_config(room, room_config: dict) -> None:
     event = room.event
-    if not plugin_enabled(event) or not use_plugin_language_streams(event):
+    if not plugin_enabled(event):
+        return
+    flag_on = use_plugin_language_streams(event)
+    room_config["interpretation_use_plugin_streams"] = flag_on
+    if not flag_on:
         return
     interpretation = get_interpretation(room)
     stored = interpretation.language_streams if interpretation else []
-    room_config["interpretation_use_plugin_streams"] = True
     room_config["interpretation_language_streams"] = attendee_language_streams(stored)
 
 

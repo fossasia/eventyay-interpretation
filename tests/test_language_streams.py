@@ -50,6 +50,8 @@ def test_attendee_language_streams_includes_original():
 
 
 def test_augment_room_config_when_flag_enabled(event, room):
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
     event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
     RoomInterpretation.objects.create(
         room=room,
@@ -63,7 +65,9 @@ def test_augment_room_config_when_flag_enabled(event, room):
     assert any(entry["language"] == "French" for entry in config["interpretation_language_streams"])
 
 
-def test_augment_room_config_skipped_when_flag_disabled(event, room):
+def test_augment_room_config_when_flag_disabled(event, room):
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
     RoomInterpretation.objects.create(
         room=room,
         language_streams=[
@@ -72,7 +76,8 @@ def test_augment_room_config_skipped_when_flag_disabled(event, room):
     )
     config = {}
     augment_room_config(room, config)
-    assert "interpretation_use_plugin_streams" not in config
+    assert config["interpretation_use_plugin_streams"] is False
+    assert "interpretation_language_streams" not in config
 
 
 def test_api_streams_endpoint(organizer_client, event, room):
@@ -93,3 +98,30 @@ def test_api_streams_endpoint(organizer_client, event, room):
     assert payload["use_plugin_language_streams"] is True
     assert payload["language_streams"][0]["language"] == "German"
     assert any(entry["language"] == "Original" for entry in payload["attendee_language_streams"])
+
+
+def test_api_config_patch_language_streams(organizer_client, event, room):
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
+    event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
+    RoomInterpretation.objects.create(room=room)
+    org = event.organizer.slug
+    slug = event.slug
+    url = f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
+    response = organizer_client.patch(
+        url,
+        {
+            "language_streams": [
+                {
+                    "language": "Spanish",
+                    "youtube_id": "https://whep.example/es",
+                    "use_video": True,
+                }
+            ]
+        },
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["language_streams"][0]["language"] == "Spanish"
+    assert payload["language_streams"][0]["use_video"] is True
