@@ -5,7 +5,9 @@ from eventyay.base.settings import settings_hierarkey
 from eventyay.control.signals import nav_event_common
 
 from .backends.susi_credentials import EVENT_SETTINGS_KEYS as SUSI_EVENT_SETTINGS_KEYS
-from .backends.voxbento_credentials import EVENT_SETTINGS_KEYS as VOXBENTO_EVENT_SETTINGS_KEYS
+from .backends.voxbento_credentials import (
+    EVENT_SETTINGS_KEYS as VOXBENTO_EVENT_SETTINGS_KEYS,
+)
 from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS
 
 PLUGIN_MODULE = "interpretation"

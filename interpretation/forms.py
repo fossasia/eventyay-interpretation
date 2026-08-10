@@ -12,7 +12,10 @@ from .interpreter_credentials import (
     save_susi_credentials,
     susi_account_label,
 )
-from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS, is_interpretation_enabled
+from .settings import (
+    SETTING_IS_ENABLED,
+    is_interpretation_enabled,
+)
 from .susi import SusiClient, SusiError
 from .susi_providers import (
     SUSI_TRANSCRIPTION_PROVIDERS,

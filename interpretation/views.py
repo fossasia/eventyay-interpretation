@@ -28,7 +28,6 @@ from .forms import (
     preview_settings_payload,
     room_form_prefix,
 )
-from .settings import use_plugin_language_streams
 from .interpreter_credentials import (
     clear_interpreter_credentials,
     get_susi_client,
@@ -45,6 +44,7 @@ from .room_control import (
     stop_room_session,
     update_room_interpretation,
 )
+from .settings import use_plugin_language_streams
 from .susi import SusiError
 
 PLUGIN_MODULE = "interpretation"
@@ -92,7 +92,7 @@ def _event_settings_form(event, data=None):
 
 
 def _notify_video_room_config_changed(event) -> None:
-    # ponytail: push event.updated so video SPA reloads room objects with plugin streams.
+    # ponytail: push event.updated so video SPA reloads rooms with plugin streams.
     try:
         from asgiref.sync import async_to_sync
         from eventyay.base.services.event import notify_event_change

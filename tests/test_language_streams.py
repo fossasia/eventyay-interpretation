@@ -62,7 +62,8 @@ def test_augment_room_config_when_flag_enabled(event, room):
     config = {}
     augment_room_config(room, config)
     assert config["interpretation_use_plugin_streams"] is True
-    assert any(entry["language"] == "French" for entry in config["interpretation_language_streams"])
+    streams = config["interpretation_language_streams"]
+    assert any(entry["language"] == "French" for entry in streams)
 
 
 def test_augment_room_config_when_flag_disabled(event, room):
@@ -107,7 +108,8 @@ def test_api_streams_endpoint(organizer_client, event, room):
     payload = response.json()
     assert payload["use_plugin_language_streams"] is True
     assert payload["language_streams"][0]["language"] == "German"
-    assert any(entry["language"] == "Original" for entry in payload["attendee_language_streams"])
+    attendee = payload["attendee_language_streams"]
+    assert any(entry["language"] == "Original" for entry in attendee)
 
 
 def test_api_config_patch_language_streams(organizer_client, event, room):
@@ -117,7 +119,9 @@ def test_api_config_patch_language_streams(organizer_client, event, room):
     RoomInterpretation.objects.create(room=room)
     org = event.organizer.slug
     slug = event.slug
-    url = f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
+    url = (
+        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
+    )
     response = organizer_client.patch(
         url,
         {

@@ -7,10 +7,6 @@ from dataclasses import dataclass
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
-from .language_streams import (
-    attendee_language_streams,
-    validate_language_streams,
-)
 from .backends import (
     get_backend,
     is_known_interpreter,
@@ -19,6 +15,10 @@ from .backends import (
 from .interpreter_credentials import (
     SUSI_CREDENTIAL_KEYS,
     strip_room_credential_keys,
+)
+from .language_streams import (
+    attendee_language_streams,
+    validate_language_streams,
 )
 from .models import RoomInterpretation
 from .settings import is_interpretation_enabled, use_plugin_language_streams

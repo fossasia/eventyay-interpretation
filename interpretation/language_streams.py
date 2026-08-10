@@ -31,7 +31,7 @@ def normalize_youtube_video_id(value: str) -> str | None:
 
 
 def normalize_audio_source(audio_source: str) -> str | None:
-    """Return a YouTube id or absolute URL (WHEP/HLS/etc.), matching video validators."""
+    """Return YouTube id or absolute URL (WHEP/HLS/etc.), like video validators."""
     if not audio_source:
         return None
     youtube_id = normalize_youtube_video_id(audio_source)
@@ -96,9 +96,7 @@ def validate_language_streams(streams) -> list[dict]:
                 _("Duplicate language: %(language)s") % {"language": language}
             )
         if not entry["youtube_id"]:
-            raise ValidationError(
-                _("Each language needs a YouTube ID or WHEP URL.")
-            )
+            raise ValidationError(_("Each language needs a YouTube ID or WHEP URL."))
         seen_languages.add(language)
         cleaned.append(entry)
 
@@ -113,9 +111,7 @@ def validate_language_streams(streams) -> list[dict]:
 def attendee_language_streams(stored_streams: list | None) -> list[dict]:
     """Dropdown payload for the video room, always including Original."""
     streams = [
-        entry
-        for entry in (stored_streams or [])
-        if is_usable_stream_entry(entry)
+        entry for entry in (stored_streams or []) if is_usable_stream_entry(entry)
     ]
     normalized = [normalize_stream_entry(entry) for entry in streams]
     if not any(entry["language"] == ORIGINAL_LANGUAGE for entry in normalized):
