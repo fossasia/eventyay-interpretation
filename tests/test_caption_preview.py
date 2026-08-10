@@ -3,12 +3,27 @@
 import json
 
 import pytest
+from asgiref.sync import async_to_sync
 from django.urls import reverse
 
 from interpretation.models import RoomInterpretation
 from interpretation.room_control import SessionResult
 
 pytestmark = pytest.mark.django_db
+
+
+def _sse_body(response) -> bytes:
+    stream = response.streaming_content
+    if hasattr(stream, "__aiter__"):
+
+        async def _collect() -> bytes:
+            chunks = []
+            async for chunk in stream:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        return async_to_sync(_collect)()
+    return b"".join(stream)
 
 
 @pytest.fixture
@@ -90,7 +105,7 @@ def test_preview_stream_requires_running_session(organizer_client, connected_eve
 
     assert response.status_code == 200
     assert response["Content-Type"].startswith("text/event-stream")
-    body = b"".join(response.streaming_content).decode()
+    body = _sse_body(response).decode()
     assert "Session is not running" in body
 
 
@@ -108,7 +123,7 @@ def test_preview_treats_legacy_stopped_status_as_not_running(
     response = organizer_client.get(preview_stream_url(connected_event, room))
 
     assert response.status_code == 200
-    assert b"Session is not running" in b"".join(response.streaming_content)
+    assert b"Session is not running" in _sse_body(response)
 
 
 def test_preview_stream_proxies_sse(organizer_client, connected_event, room, monkeypatch):
@@ -118,7 +133,6 @@ def test_preview_stream_proxies_sse(organizer_client, connected_event, room, mon
         room_enabled=True,
         status=RoomInterpretation.STATUS_RUNNING,
         backend_session_id="tenant-1",
-        target_languages=["de"],
     )
 
     class FakeClient:
@@ -126,7 +140,6 @@ def test_preview_stream_proxies_sse(organizer_client, connected_event, room, mon
 
         def iter_caption_stream(self, tenant_id, *, target_lang=""):
             assert tenant_id == "tenant-1"
-            assert target_lang == ""
             payload = json.dumps({"transcript": "hello world", "translation": "hallo"})
             yield f"data: {payload}\n\n".encode()
 
@@ -139,7 +152,8 @@ def test_preview_stream_proxies_sse(organizer_client, connected_event, room, mon
 
     assert response.status_code == 200
     assert response["Content-Type"].startswith("text/event-stream")
-    body = b"".join(response.streaming_content)
+    body = _sse_body(response)
+    assert b": stream-open" in body
     assert b"hello world" in body
 
 

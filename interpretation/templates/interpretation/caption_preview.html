@@ -103,17 +103,6 @@
                 var lastText = "";
                 var source = new EventSource(streamUrl);
 
-                function showCaption(text) {
-                    if (!text || text === lastText) {
-                        return;
-                    }
-                    lastText = text;
-                    captionBox.textContent = text;
-                    captionBox.classList.remove("interpretation-preview-caption-box--idle");
-                    statusLine.textContent = "{% trans 'Receiving captions.'|escapejs %}";
-                    statusLine.classList.remove("is-error");
-                }
-
                 source.onmessage = function (event) {
                     var data;
                     try {
@@ -133,20 +122,20 @@
                         return;
                     }
                     var text = (data.translation || data.transcript || "").trim();
-                    showCaption(text);
-                };
-
-                source.onopen = function () {
-                    statusLine.textContent = "{% trans 'Connected — waiting for captions…'|escapejs %}";
-                    statusLine.classList.remove("is-error");
+                    if (text && text !== lastText) {
+                        lastText = text;
+                        captionBox.textContent = text;
+                        captionBox.classList.remove("interpretation-preview-caption-box--idle");
+                        statusLine.textContent = "{% trans 'Receiving captions.'|escapejs %}";
+                        statusLine.classList.remove("is-error");
+                    }
                 };
 
                 source.onerror = function () {
-                    if (source.readyState === EventSource.CLOSED) {
-                        return;
+                    if (source.readyState !== EventSource.CLOSED) {
+                        statusLine.textContent = "{% trans 'Caption stream disconnected.'|escapejs %}";
+                        statusLine.classList.add("is-error");
                     }
-                    statusLine.textContent = "{% trans 'Caption stream disconnected.'|escapejs %}";
-                    statusLine.classList.add("is-error");
                 };
             })();
         </script>

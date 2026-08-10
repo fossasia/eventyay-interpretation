@@ -196,28 +196,25 @@ class SusiClient:
         """Stop the grabber and release resources for a tenant."""
         return self._request("POST", f"/stop_event/{tenant_id}")
 
-    def _stream_headers(self) -> dict:
-        headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
-        if self.auth_token:
-            headers["Authorization"] = f"Bearer {self.auth_token}"
-        return headers
-
     def iter_caption_stream(
         self,
         tenant_id: str,
         *,
         target_lang: str = "",
     ) -> Iterator[bytes]:
-        """Stream SSE caption events from ``/api/v1/translate/stream``."""
+        """Yield raw SSE bytes from ``/api/v1/translate/stream``."""
         params = {"tenant_id": tenant_id, "last_chunk_id": "0"}
         lang = (target_lang or "").strip()
         if lang:
             params["target_lang"] = lang
+        headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
         url = self._url("/api/v1/translate/stream")
         try:
             resp = requests.get(
                 url,
-                headers=self._stream_headers(),
+                headers=headers,
                 params=params,
                 stream=True,
                 timeout=(self.timeout, None),
@@ -231,9 +228,6 @@ class SusiClient:
                 detail = resp.text
             raise SusiError(f"SUSI stream failed ({resp.status_code}): {detail}")
         try:
-            # ponytail: line-at-a-time passthrough so WSGI flushes each SSE event.
-            for line in resp.iter_lines(decode_unicode=False, delimiter=b"\n"):
-                if line is not None:
-                    yield line + b"\n"
+            yield from resp.iter_content(chunk_size=1024)
         finally:
             resp.close()

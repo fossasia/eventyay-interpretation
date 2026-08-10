@@ -1,9 +1,11 @@
 from django.contrib import messages
-from django.http import JsonResponse, StreamingHttpResponse
+from django.core.exceptions import PermissionDenied
+from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views import View
+from asgiref.sync import sync_to_async
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
@@ -40,7 +42,7 @@ from .room_control import (
     stop_room_session,
     update_room_interpretation,
 )
-from .susi import SusiError
+from .preview_stream import stream_susi_captions_async
 
 PLUGIN_MODULE = "interpretation"
 
@@ -495,14 +497,6 @@ class InterpretationCaptionPreview(
     def _context(self, request, event, room):
         interpretation, is_running = _preview_session(room, event)
         data = serialize_room_interpretation(room, event, interpretation)
-        stream_path = reverse(
-            "plugins:interpretation:room.preview.stream",
-            kwargs={
-                "organizer": event.organizer.slug,
-                "event": event.slug,
-                "pk": room.pk,
-            },
-        )
         return {
             "event": event,
             "room": room,
@@ -512,67 +506,94 @@ class InterpretationCaptionPreview(
             "is_running": is_running,
             "preview_supported": data.get("interpreter")
             == RoomInterpretation.INTERPRETER_SUSI,
-            "stream_url": request.build_absolute_uri(stream_path),
+            "stream_url": reverse(
+                "plugins:interpretation:room.preview.stream",
+                kwargs={
+                    "organizer": event.organizer.slug,
+                    "event": event.slug,
+                    "pk": room.pk,
+                },
+            ),
             "rooms_url": _rooms_url(event),
             "interpreters_url": _interpreters_url(event),
             "is_event_settings": True,
         }
 
 
-def _preview_sse_error(message: str) -> StreamingHttpResponse:
+def _preview_sse(message: str, *, error: bool = False) -> StreamingHttpResponse:
     import json
 
-    payload = json.dumps({"status": "error", "message": message})
+    payload = (
+        {"status": "error", "message": message}
+        if error
+        else {"status": "connected"}
+    )
+    body = f"data: {json.dumps(payload)}\n\n".encode()
     return StreamingHttpResponse(
-        [f"data: {payload}\n\n".encode()],
-        content_type="text/event-stream; charset=utf-8",
+        [body], content_type="text/event-stream; charset=utf-8"
     )
 
 
-class InterpretationCaptionPreviewStream(
-    InterpretationEnabledMixin,
-    EventPermissionRequiredMixin,
-    View,
-):
-    """Proxy SUSI SSE captions for the organizer preview page."""
+def _preview_stream_response(stream) -> StreamingHttpResponse:
+    response = StreamingHttpResponse(
+        stream, content_type="text/event-stream; charset=utf-8"
+    )
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+def _load_preview_stream(event, pk):
+    """Sync ORM/auth lookup for preview stream (call via sync_to_async)."""
+    room = get_object_or_404(event.rooms.filter(deleted=False), pk=pk)
+    interpretation, is_running = _preview_session(room, event)
+    if interpretation is None or not is_running:
+        return None, None, str(_("Session is not running."))
+    client = get_susi_client(event)
+    if not client.auth_token:
+        return None, None, str(_("SUSI is not connected for this event."))
+    return client, interpretation.backend_session_id, None
+
+
+class InterpretationCaptionPreviewStream(View):
+    """Proxy SUSI caption SSE to the organizer preview page (async for Daphne)."""
 
     permission = "can_change_event_settings"
     http_method_names = ["get"]
 
-    def get(self, request, pk, *args, **kwargs):
-        import json
+    async def dispatch(self, request, *args, **kwargs):
+        if PLUGIN_MODULE not in request.event.get_plugins():
+            return redirect(
+                "eventyay_common:event.plugins",
+                organizer=request.event.organizer.slug,
+                event=request.event.slug,
+            )
+        if not request.user.is_authenticated:
+            raise PermissionDenied()
+        allowed = await sync_to_async(
+            request.user.has_event_permission,
+            thread_sensitive=True,
+        )(request.organizer, request.event, self.permission, request=request)
+        if not allowed:
+            raise PermissionDenied(
+                _("You do not have permission to view this content.")
+            )
+        self.setup(request, *args, **kwargs)
+        method = request.method.lower()
+        if method not in self.http_method_names:
+            return await self.http_method_not_allowed(request, *args, **kwargs)
+        handler = getattr(self, method, None)
+        if handler is None:
+            return await self.http_method_not_allowed(request, *args, **kwargs)
+        return await handler(request, *args, **kwargs)
 
-        room = get_object_or_404(
-            request.event.rooms.filter(deleted=False),
-            pk=pk,
+    async def get(self, request, pk, *args, **kwargs):
+        client, tenant_id, error = await sync_to_async(
+            _load_preview_stream,
+            thread_sensitive=True,
+        )(request.event, pk)
+        if error:
+            return _preview_sse(error, error=True)
+        return _preview_stream_response(
+            stream_susi_captions_async(client, tenant_id)
         )
-        interpretation, is_running = _preview_session(room, request.event)
-        if interpretation is None or not is_running:
-            return _preview_sse_error(str(_("Session is not running.")))
-
-        client = get_susi_client(request.event)
-        if not client.auth_token:
-            return _preview_sse_error(str(_("SUSI is not connected for this event.")))
-
-        tenant_id = interpretation.backend_session_id
-        # Preview shows source transcript; per-language translation comes later in video UI.
-        target_lang = ""
-
-        def event_stream():
-            yield b": stream-open\n\n"
-            try:
-                yield from client.iter_caption_stream(
-                    tenant_id,
-                    target_lang=target_lang,
-                )
-            except SusiError as exc:
-                payload = json.dumps({"status": "error", "message": str(exc)})
-                yield f"data: {payload}\n\n".encode()
-
-        response = StreamingHttpResponse(
-            event_stream(),
-            content_type="text/event-stream; charset=utf-8",
-        )
-        response["Cache-Control"] = "no-cache, no-transform"
-        response["X-Accel-Buffering"] = "no"
-        return response
