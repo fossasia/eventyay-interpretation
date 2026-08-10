@@ -1,3 +1,4 @@
+from asgiref.sync import sync_to_async
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.http import StreamingHttpResponse
@@ -5,7 +6,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views import View
-from asgiref.sync import sync_to_async
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
@@ -33,6 +33,7 @@ from .interpreter_credentials import (
     is_interpreter_configured,
 )
 from .models import RoomInterpretation
+from .preview_stream import stream_susi_captions_async
 from .room_control import (
     clear_room_interpretation_setup,
     get_interpretation,
@@ -42,7 +43,6 @@ from .room_control import (
     stop_room_session,
     update_room_interpretation,
 )
-from .preview_stream import stream_susi_captions_async
 
 PLUGIN_MODULE = "interpretation"
 

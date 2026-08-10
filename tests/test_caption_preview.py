@@ -76,7 +76,9 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "Session ID" not in content
 
 
-def test_preview_page_includes_sse_when_running(organizer_client, connected_event, room):
+def test_preview_page_includes_sse_when_running(
+    organizer_client, connected_event, room
+):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
@@ -93,7 +95,9 @@ def test_preview_page_includes_sse_when_running(organizer_client, connected_even
     assert "preview/stream" in content
 
 
-def test_preview_stream_requires_running_session(organizer_client, connected_event, room):
+def test_preview_stream_requires_running_session(
+    organizer_client, connected_event, room
+):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
@@ -126,7 +130,9 @@ def test_preview_treats_legacy_stopped_status_as_not_running(
     assert b"Session is not running" in _sse_body(response)
 
 
-def test_preview_stream_proxies_sse(organizer_client, connected_event, room, monkeypatch):
+def test_preview_stream_proxies_sse(
+    organizer_client, connected_event, room, monkeypatch
+):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,

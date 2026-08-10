@@ -365,7 +365,9 @@ class CaptionPreviewSettingsForm(forms.Form):
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
         if interpretation:
-            self.fields["transcription_provider"].initial = resolve_transcription_provider(
+            self.fields[
+                "transcription_provider"
+            ].initial = resolve_transcription_provider(
                 interpretation.transcription_provider
             )
             self.fields["translation_provider"].initial = resolve_translation_provider(
