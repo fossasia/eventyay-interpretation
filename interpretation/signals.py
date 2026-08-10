@@ -4,13 +4,17 @@ from django.utils.translation import gettext_lazy as _
 from eventyay.base.settings import settings_hierarkey
 from eventyay.control.signals import nav_event_common
 
-from .backends.susi_credentials import EVENT_SETTINGS_KEYS
-from .settings import SETTING_IS_ENABLED
+from .backends.susi_credentials import EVENT_SETTINGS_KEYS as SUSI_EVENT_SETTINGS_KEYS
+from .backends.voxbento_credentials import EVENT_SETTINGS_KEYS as VOXBENTO_EVENT_SETTINGS_KEYS
+from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS
 
 PLUGIN_MODULE = "interpretation"
 
 settings_hierarkey.add_default(SETTING_IS_ENABLED, True, bool)
-for _key in EVENT_SETTINGS_KEYS:
+settings_hierarkey.add_default(SETTING_USE_PLUGIN_STREAMS, False, bool)
+for _key in SUSI_EVENT_SETTINGS_KEYS:
+    settings_hierarkey.add_default(_key, "", str)
+for _key in VOXBENTO_EVENT_SETTINGS_KEYS:
     settings_hierarkey.add_default(_key, "", str)
 
 

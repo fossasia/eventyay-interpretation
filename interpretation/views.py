@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -22,13 +23,17 @@ from .forms import (
     CaptionPreviewSettingsForm,
     InterpretationSettingsForm,
     RoomConfigureForm,
+    language_streams_form_prefix,
+    parse_language_streams_post,
     preview_settings_payload,
     room_form_prefix,
 )
+from .settings import use_plugin_language_streams
 from .interpreter_credentials import (
     clear_interpreter_credentials,
     get_susi_client,
     is_interpreter_configured,
+    is_susi_configured,
 )
 from .models import RoomInterpretation
 from .room_control import (
@@ -86,10 +91,22 @@ def _event_settings_form(event, data=None):
     )
 
 
+def _notify_video_room_config_changed(event) -> None:
+    # ponytail: push event.updated so video SPA reloads room objects with plugin streams.
+    try:
+        from asgiref.sync import async_to_sync
+        from eventyay.base.services.event import notify_event_change
+
+        async_to_sync(notify_event_change)(event.id)
+    except Exception:
+        pass
+
+
 def _process_event_settings_post(request, event, redirect_url):
     form = _event_settings_form(event, data=request.POST)
     if form.is_valid():
         form.save()
+        _notify_video_room_config_changed(event)
         messages.success(request, _("Your changes have been saved."))
     else:
         messages.error(
@@ -248,6 +265,10 @@ class InterpretationRoomSettings(
                 return self._handle_room_save(
                     request, room, event, prefix, redirect_url
                 )
+            if action == "save_streams":
+                return self._handle_room_streams_save(
+                    request, room, event, redirect_url
+                )
             if action == "disconnect":
                 return self._handle_room_clear(request, room, event, redirect_url)
             if action == "stop":
@@ -318,6 +339,29 @@ class InterpretationRoomSettings(
         )
         return redirect(redirect_url)
 
+    def _handle_room_streams_save(self, request, room, event, redirect_url):
+        prefix = language_streams_form_prefix(room.pk)
+        try:
+            streams = parse_language_streams_post(request.POST, prefix)
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+            return redirect(f"{redirect_url}?room={room.pk}")
+        try:
+            update_room_interpretation(
+                room,
+                event,
+                {"language_streams": streams},
+            )
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect(f"{redirect_url}?room={room.pk}")
+        _notify_video_room_config_changed(event)
+        messages.success(
+            request,
+            _("Saved language streams for %(room)s.") % {"room": room.name},
+        )
+        return redirect(f"{redirect_url}?room={room.pk}")
+
     def _handle_room_clear(self, request, room, event, redirect_url):
         try:
             clear_room_interpretation_setup(room, event)
@@ -348,10 +392,16 @@ class InterpretationRoomSettings(
             data = serialize_room_interpretation(room, event, interpretation)
             prefix = room_form_prefix(room.pk)
             selected = data["interpreter"]
+            stored_streams = list(data.get("language_streams") or [])
+            stream_rows = stored_streams + [
+                {"language": "", "youtube_id": "", "use_video": False}
+            ]
             rooms.append(
                 {
                     "room": room,
                     "data": data,
+                    "streams_prefix": language_streams_form_prefix(room.pk),
+                    "stream_rows": stream_rows,
                     "configure_form": RoomConfigureForm(
                         prefix=prefix,
                         event=event,
@@ -374,6 +424,8 @@ class InterpretationRoomSettings(
             "rooms": rooms,
             "available_interpreters": list_available_interpreters(event),
             "interpreters_url": _interpreters_url(event),
+            "susi_connected": is_susi_configured(event),
+            "use_plugin_language_streams": use_plugin_language_streams(event),
             "is_event_settings": True,
             **kwargs,
         }

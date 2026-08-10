@@ -1,4 +1,25 @@
 /* eventyay interpretation dashboard — full-width commons layout */
+.interpretation-language-stream-row {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto;
+    gap: 1rem;
+    align-items: end;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--interp-border);
+}
+.interpretation-language-stream-row .checkbox {
+    margin: 0 0 0.5rem;
+}
+.interpretation-subsection-title {
+    font-size: 1.05rem;
+    margin: 1.25rem 0 0.5rem;
+}
+@media (max-width: 768px) {
+    .interpretation-language-stream-row {
+        grid-template-columns: 1fr;
+    }
+}
 .interpretation-hero,
 .interpretation-form,
 .interpretation-content {

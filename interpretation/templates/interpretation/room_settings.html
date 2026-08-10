@@ -27,7 +27,12 @@
     </header>
 
     <div class="interpretation-content">
-
+        {% if not susi_connected %}
+            <p class="text-muted interpretation-section-hint">
+                {% trans "SUSI is not connected for this event yet." %}
+                <a href="{{ interpreters_url }}">{% trans "Configure interpreters" %}</a>
+            </p>
+        {% endif %}
 
         {% if not rooms %}
             <p class="text-muted">{% trans "This event has no rooms yet." %}</p>
@@ -91,6 +96,7 @@
                                     <div id="room-panel-{{ entry.room.pk }}"
                                          class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
                                         {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" interpreters_url=interpreters_url %}
+                                        {% include "interpretation/language_streams_panel.html" with entry=entry streams_prefix=entry.streams_prefix room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" stream_rows=entry.stream_rows %}
                                     </div>
                                 </td>
                             </tr>

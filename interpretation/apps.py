@@ -23,3 +23,6 @@ class InterpretationApp(PluginConfig):
 
     def ready(self):
         from . import signals  # NOQA
+        from .video_integration import install_video_integration
+
+        install_video_integration()

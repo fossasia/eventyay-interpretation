@@ -97,6 +97,14 @@ class RoomInterpretation(LoggedModel):
         choices=STATUS_CHOICES,
         default=STATUS_IDLE,
     )
+    language_streams = models.JSONField(
+        verbose_name=_("Language streams"),
+        default=list,
+        blank=True,
+        help_text=_(
+            "Attendee audio translation channels (YouTube ID or WHEP URL per language)."
+        ),
+    )
 
     class Meta:
         verbose_name = _("Room interpretation")

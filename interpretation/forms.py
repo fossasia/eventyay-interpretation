@@ -12,7 +12,7 @@ from .interpreter_credentials import (
     save_susi_credentials,
     susi_account_label,
 )
-from .settings import SETTING_IS_ENABLED, is_interpretation_enabled
+from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS, is_interpretation_enabled
 from .susi import SusiClient, SusiError
 from .susi_providers import (
     SUSI_TRANSCRIPTION_PROVIDERS,
@@ -322,6 +322,20 @@ class InterpretationSettingsForm(SettingsForm):
         label=_("Enable live interpretation for this event"),
         required=False,
     )
+    interpretation_use_plugin_streams = forms.BooleanField(
+        label=_("Use plugin language streams in the video room"),
+        required=False,
+        help_text=_(
+            "When enabled, the video room audio translation dropdown reads "
+            "language streams from this plugin instead of the core video "
+            "room module. Core language URLs are kept but hidden."
+        ),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ("interpretation_is_enabled", "interpretation_use_plugin_streams"):
+            self.fields[name].widget.attrs.setdefault("class", "form-control")
 
     def save(self):
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True
@@ -340,6 +354,31 @@ class InterpretationSettingsForm(SettingsForm):
 
             stop_all_event_sessions(self.obj)
         return result
+
+
+def language_streams_form_prefix(room_id: int) -> str:
+    return f"room-{room_id}-streams"
+
+
+def parse_language_streams_post(post, prefix: str):
+    from .language_streams import validate_language_streams
+
+    count = int(post.get(f"{prefix}-count") or 0)
+    entries = []
+    for index in range(count):
+        language = (post.get(f"{prefix}-{index}-language") or "").strip()
+        audio_source = (post.get(f"{prefix}-{index}-audio_source") or "").strip()
+        use_video = post.get(f"{prefix}-{index}-use_video") == "on"
+        if not language and not audio_source:
+            continue
+        entries.append(
+            {
+                "language": language,
+                "youtube_id": audio_source,
+                "use_video": use_video,
+            }
+        )
+    return validate_language_streams(entries)
 
 
 class CaptionPreviewSettingsForm(forms.Form):
