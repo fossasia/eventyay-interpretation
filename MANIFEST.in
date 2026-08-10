@@ -1,9 +1,7 @@
 recursive-include interpretation/static *
 recursive-include interpretation/templates *
 recursive-include interpretation/locale *
-recursive-include integration *.js
-recursive-include integration *.md
-recursive-include integration *.vue
+graft integration
 include LICENSE
 include uv.lock
 exclude .gitlab-ci.yml
