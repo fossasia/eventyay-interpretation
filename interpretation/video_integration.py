@@ -22,16 +22,29 @@ def augment_room_config(room, room_config: dict) -> None:
 
 def install_video_integration() -> None:
     from eventyay.base.services import event as event_service
+    from eventyay.features.live.modules import room as room_module
 
-    if getattr(event_service, "_interpretation_video_patched", False):
+    if getattr(install_video_integration, "_patched", False):
         return
 
-    original = event_service.get_room_config
+    original_get_room_config = event_service.get_room_config
 
     def get_room_config(room, permissions):
-        config = original(room, permissions)
+        config = original_get_room_config(room, permissions)
         augment_room_config(room, config)
         return config
 
+    original_serialize_room_config = room_module.serialize_room_config
+
+    def serialize_room_config(room_or_rooms, many=False):
+        data = original_serialize_room_config(room_or_rooms, many=many)
+        if many:
+            for room, item in zip(room_or_rooms, data, strict=True):
+                augment_room_config(room, item)
+        else:
+            augment_room_config(room_or_rooms, data)
+        return data
+
     event_service.get_room_config = get_room_config
-    event_service._interpretation_video_patched = True
+    room_module.serialize_room_config = serialize_room_config
+    install_video_integration._patched = True

@@ -38,7 +38,7 @@
 			LanguageAudioSourceList.plugin-language-streams(
 				v-if="showPluginLanguageStreams"
 				title="Languages and Audio Source (Interpretation plugin)"
-				:entries="interpretationAdmin.languageStreams"
+				:entries="pluginLanguageStreamEntries"
 			)
 			// Switch button for no-cookies domain
 			.bunt-switch-container
@@ -101,8 +101,11 @@ function getDefaultStreamConfig(streamSource, playbackMode = PLAYBACK_MODE_ALWAY
 export default defineComponent({
 	components: { UploadUrlInput, LanguageAudioSourceList },
 	mixins: [mixin],
-	inject: {
-		interpretationAdmin: { default: null },
+	props: {
+		interpretationAdmin: {
+			type: Object,
+			default: null,
+		},
 	},
 	setup: () => ({ v$: useVuelidate() }),
 	data() {
@@ -215,7 +218,10 @@ export default defineComponent({
 			}
 		},
 		showPluginLanguageStreams() {
-			return Boolean(this.interpretationAdmin?.usePluginStreams)
+			return Boolean(this.config?.interpretation_use_plugin_streams)
+		},
+		pluginLanguageStreamEntries() {
+			return this.interpretationAdmin?.languageStreams ?? []
 		}
 	},
 	created() {

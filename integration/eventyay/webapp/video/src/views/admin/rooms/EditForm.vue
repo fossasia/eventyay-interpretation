@@ -9,8 +9,8 @@
 					bunt-checkbox(name="is_unscheduled", v-model="config.is_unscheduled", label="Unscheduled room (hide from schedule/sessions)", :disabled="config.has_linked_sessions")
 				template(v-if="inferredType")
 					bunt-checkbox(v-if="inferredType.id === 'channel-text'", name="force_join", v-model="config.force_join", label="Force join on login (use for non-volatile, text-based chats only!!)")
-			component.stage-settings(ref="settings", v-if="inferredType && typeComponents[inferredType.id]", :is="typeComponents[inferredType.id]", :config="config", :modules="modules", :creating="creating")
-			stream-schedule(ref="streamSchedule", v-if="showStreamSchedule", :room-id="config.id ? String(config.id) : null", :room-name="localizedName", :open-create-on-mount="openStreamScheduleCreateOnMount", @opened-create-on-mount="clearOpenStreamScheduleCreateQuery", @create-requires-room="createRoomForStreamSchedule")
+			component.stage-settings(ref="settings", v-if="inferredType && typeComponents[inferredType.id]", :is="typeComponents[inferredType.id]", :config="config", :modules="modules", :creating="creating", :interpretation-admin="interpretationAdmin")
+			stream-schedule(ref="streamSchedule", v-if="showStreamSchedule", :config="config", :room-id="config.id ? String(config.id) : null", :room-name="localizedName", :open-create-on-mount="openStreamScheduleCreateOnMount", @opened-create-on-mount="clearOpenStreamScheduleCreateQuery", @create-requires-room="createRoomForStreamSchedule")
 			sidebar-addons(v-if="inferredType && inferredType.id === 'stage'", :config="config", :modules="modules", :creating="creating")
 	.ui-form-actions
 		bunt-button.btn-save(@click="save", :loading="saving", :error="!!error") {{ creating ? 'create' : 'save' }}
@@ -143,13 +143,6 @@ export default {
 	methods: {
 		async loadInterpretationLanguageStreams() {
 			if (this.creating || !this.config?.id) return
-			this.interpretationAdmin.usePluginStreams = Boolean(
-				this.config.interpretation_use_plugin_streams
-			)
-			if (!this.interpretationAdmin.usePluginStreams) {
-				this.interpretationAdmin.loaded = true
-				return
-			}
 			try {
 				const data = await fetchInterpretationLanguageStreams(
 					this.$store,
@@ -158,11 +151,16 @@ export default {
 				this.interpretationAdmin.usePluginStreams = Boolean(
 					data.use_plugin_language_streams
 				)
-				this.interpretationAdmin.languageStreams = cloneLanguageStreamEntries(
-					data.language_streams
-				)
+				if (this.interpretationAdmin.usePluginStreams) {
+					this.interpretationAdmin.languageStreams = cloneLanguageStreamEntries(
+						data.language_streams
+					)
+				}
 			} catch (error) {
 				console.warn('interpretation language streams unavailable', error)
+				this.interpretationAdmin.usePluginStreams = Boolean(
+					this.config.interpretation_use_plugin_streams
+				)
 				this.interpretationAdmin.languageStreams = []
 			} finally {
 				this.interpretationAdmin.loaded = true

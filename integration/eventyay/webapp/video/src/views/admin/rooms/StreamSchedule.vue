@@ -8,7 +8,7 @@
 		.interpretation-plugin-language-streams(v-if="roomId && showPluginLanguageStreams")
 			LanguageAudioSourceList(
 				title="Languages and Audio Source (Interpretation plugin)"
-				:entries="interpretationAdmin.languageStreams"
+				:entries="pluginLanguageStreamEntries"
 			)
 			p.plugin-language-streams-hint Room-level plugin streams used when “Use plugin language streams” is enabled on the Interpretation overview.
 		.stream-schedules-list(v-scrollbar.y="", v-if="streamSchedules && streamSchedules.length > 0")
@@ -72,6 +72,10 @@ export default {
 		interpretationAdmin: { default: null },
 	},
 	props: {
+		config: {
+			type: Object,
+			default: null,
+		},
 		roomId: {
 			type: [String, Number],
 			default: null,
@@ -114,7 +118,10 @@ export default {
 	},
 	computed: {
 		showPluginLanguageStreams() {
-			return Boolean(this.interpretationAdmin?.usePluginStreams);
+			return Boolean(this.config?.interpretation_use_plugin_streams)
+		},
+		pluginLanguageStreamEntries() {
+			return this.interpretationAdmin?.languageStreams ?? []
 		},
 		eventTimezone() {
 			return this.$store.state.world?.timezone || 'UTC';

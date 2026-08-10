@@ -80,6 +80,16 @@ def test_augment_room_config_when_flag_disabled(event, room):
     assert "interpretation_language_streams" not in config
 
 
+def test_serialize_room_config_includes_plugin_flag(event, room):
+    from eventyay.features.live.modules.room import serialize_room_config
+
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
+    event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
+    payload = serialize_room_config(room)
+    assert payload["interpretation_use_plugin_streams"] is True
+
+
 def test_api_streams_endpoint(organizer_client, event, room):
     event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
     RoomInterpretation.objects.create(

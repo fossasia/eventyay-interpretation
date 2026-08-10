@@ -35,7 +35,18 @@ cp "$PLUGIN_ROOT/integration/eventyay/webapp/video/src/views/admin/rooms/EditFor
 Requires `lib/interpretation-api.js` from Eventyay (already present on
 interpretation-plugin branches).
 
-Rebuild or restart the video dev server after copying.
+Rebuilt or restart the video dev server after copying.
+
+For a local Eventyay app, build into the path Django actually serves:
+
+```bash
+cd /path/to/eventyay/app
+OUT_DIR="$(pwd)/eventyay/data/compiled-frontend/" npm run build --prefix=eventyay/webapp/video
+EVY_RUNNING_ENVIRONMENT=development .venv/bin/python manage.py collectstatic --noinput
+```
+
+Django serves video assets from `static.dist/video/` (via `collectstatic`), not
+from `webapp/video/dist/` directly.
 
 ## Behaviour
 
