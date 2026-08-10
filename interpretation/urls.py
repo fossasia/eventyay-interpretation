@@ -8,6 +8,7 @@ from .views import (
     InterpretationCaptionPreviewStream,
     InterpretationInterpreters,
     InterpretationOverview,
+    InterpretationRoomCaptions,
     InterpretationRoomSettings,
 )
 
@@ -44,5 +45,10 @@ urlpatterns = [
         _PREFIX + "rooms/<int:pk>/preview/stream/",
         InterpretationCaptionPreviewStream.as_view(),
         name="room.preview.stream",
+    ),
+    path(
+        _PREFIX + "rooms/<int:pk>/captions/",
+        InterpretationRoomCaptions.as_view(),
+        name="room.captions",
     ),
 ]

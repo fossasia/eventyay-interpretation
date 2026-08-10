@@ -201,9 +201,13 @@ class SusiClient:
         tenant_id: str,
         *,
         target_lang: str = "",
+        last_chunk_id: str = "0",
     ) -> Iterator[bytes]:
         """Yield raw SSE bytes from ``/api/v1/translate/stream``."""
-        params = {"tenant_id": tenant_id, "last_chunk_id": "0"}
+        params = {
+            "tenant_id": tenant_id,
+            "last_chunk_id": str(last_chunk_id or "0"),
+        }
         lang = (target_lang or "").strip()
         if lang:
             params["target_lang"] = lang

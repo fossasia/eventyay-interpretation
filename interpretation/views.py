@@ -1,7 +1,7 @@
 from asgiref.sync import sync_to_async
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
-from django.http import StreamingHttpResponse
+from django.http import Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -541,16 +541,41 @@ def _preview_stream_response(stream) -> StreamingHttpResponse:
     return response
 
 
-def _load_preview_stream(event, pk):
-    """Sync ORM/auth lookup for preview stream (call via sync_to_async)."""
+def _load_caption_stream(
+    event,
+    pk,
+    *,
+    target_lang: str = "",
+    last_chunk_id: str = "0",
+):
+    """Sync ORM lookup for caption SSE (organizer preview or attendee room)."""
     room = get_object_or_404(event.rooms.filter(deleted=False), pk=pk)
     interpretation, is_running = _preview_session(room, event)
     if interpretation is None or not is_running:
         return None, None, str(_("Session is not running."))
+    lang = (target_lang or "").strip()
+    languages = list(interpretation.target_languages or [])
+    if lang and languages and lang not in languages:
+        return None, None, str(_("Unknown caption language for this room."))
     client = get_susi_client(event)
     if not client.auth_token:
         return None, None, str(_("SUSI is not connected for this event."))
-    return client, interpretation.backend_session_id, None
+    return (
+        client,
+        {
+            "tenant_id": interpretation.backend_session_id,
+            "target_lang": lang,
+            "last_chunk_id": str(last_chunk_id or "0"),
+        },
+        None,
+    )
+
+
+def _load_preview_stream(event, pk):
+    client, stream_args, error = _load_caption_stream(event, pk)
+    if error:
+        return None, None, error
+    return client, stream_args["tenant_id"], None
 
 
 class InterpretationCaptionPreviewStream(View):
@@ -593,3 +618,32 @@ class InterpretationCaptionPreviewStream(View):
         if error:
             return _preview_sse(error, error=True)
         return _preview_stream_response(stream_susi_captions_async(client, tenant_id))
+
+
+class InterpretationRoomCaptions(View):
+    """Relay SUSI captions to video attendees as same-origin SSE."""
+
+    http_method_names = ["get"]
+
+    async def get(self, request, pk, *args, **kwargs):
+        if PLUGIN_MODULE not in request.event.get_plugins():
+            raise Http404("Interpretation is not enabled for this event.")
+        client, stream_args, error = await sync_to_async(
+            _load_caption_stream,
+            thread_sensitive=True,
+        )(
+            request.event,
+            pk,
+            target_lang=request.GET.get("lang", ""),
+            last_chunk_id=request.GET.get("last_chunk_id", "0"),
+        )
+        if error:
+            return _preview_sse(error, error=True)
+        return _preview_stream_response(
+            stream_susi_captions_async(
+                client,
+                stream_args["tenant_id"],
+                target_lang=stream_args["target_lang"],
+                last_chunk_id=stream_args["last_chunk_id"],
+            )
+        )

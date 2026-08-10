@@ -55,6 +55,17 @@ def preview_stream_url(event, room):
     )
 
 
+def room_captions_url(event, room):
+    return reverse(
+        "plugins:interpretation:room.captions",
+        kwargs={
+            "organizer": event.organizer.slug,
+            "event": event.slug,
+            "pk": room.pk,
+        },
+    )
+
+
 def test_preview_page_is_simple(organizer_client, connected_event, room):
     RoomInterpretation.objects.create(
         room=room,
@@ -161,6 +172,59 @@ def test_preview_stream_proxies_sse(
     body = _sse_body(response)
     assert b": stream-open" in body
     assert b"hello world" in body
+
+
+def test_room_captions_stream_requires_running_session(
+    organizer_client, connected_event, room
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_IDLE,
+    )
+
+    response = organizer_client.get(room_captions_url(connected_event, room))
+
+    assert response.status_code == 200
+    assert b"Session is not running" in _sse_body(response)
+
+
+def test_room_captions_stream_proxies_with_lang(
+    organizer_client, connected_event, room, monkeypatch
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_RUNNING,
+        backend_session_id="tenant-1",
+        target_languages=["de", "fr"],
+    )
+
+    class FakeClient:
+        auth_token = "tok"
+
+        def iter_caption_stream(self, tenant_id, *, target_lang="", last_chunk_id="0"):
+            assert tenant_id == "tenant-1"
+            assert target_lang == "de"
+            assert last_chunk_id == "5"
+            payload = json.dumps(
+                {"transcript": "hello", "translation": "hallo", "chunk_id": 6}
+            )
+            yield f"data: {payload}\n\n".encode()
+
+    monkeypatch.setattr(
+        "interpretation.views.get_susi_client",
+        lambda event: FakeClient(),
+    )
+
+    response = organizer_client.get(
+        room_captions_url(connected_event, room) + "?lang=de&last_chunk_id=5"
+    )
+
+    assert response.status_code == 200
+    assert b"hallo" in _sse_body(response)
 
 
 def _preview_settings_post():

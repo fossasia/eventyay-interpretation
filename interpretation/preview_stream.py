@@ -16,9 +16,20 @@ _CONNECTED = b'data: {"status":"connected"}\n\n'
 _HEARTBEAT_SECS = 25.0
 
 
-def _relay_upstream(client, tenant_id: str, put) -> None:
+def _relay_upstream(
+    client,
+    tenant_id: str,
+    put,
+    *,
+    target_lang: str = "",
+    last_chunk_id: str = "0",
+) -> None:
     try:
-        for chunk in client.iter_caption_stream(tenant_id):
+        for chunk in client.iter_caption_stream(
+            tenant_id,
+            target_lang=target_lang,
+            last_chunk_id=last_chunk_id,
+        ):
             if chunk:
                 put(chunk)
     except SusiError as exc:
@@ -26,7 +37,13 @@ def _relay_upstream(client, tenant_id: str, put) -> None:
         put(f"data: {payload}\n\n".encode())
 
 
-def stream_susi_captions_sync(client, tenant_id: str):
+def stream_susi_captions_sync(
+    client,
+    tenant_id: str,
+    *,
+    target_lang: str = "",
+    last_chunk_id: str = "0",
+):
     """Yield SUSI SSE bytes; flush open comment first, then relay in a thread."""
     yield b": stream-open\n\n"
     yield _FLUSH_PAD
@@ -39,7 +56,13 @@ def stream_susi_captions_sync(client, tenant_id: str):
         out.put(item)
 
     def upstream() -> None:
-        _relay_upstream(client, tenant_id, put)
+        _relay_upstream(
+            client,
+            tenant_id,
+            put,
+            target_lang=target_lang,
+            last_chunk_id=last_chunk_id,
+        )
         out.put(done)
 
     threading.Thread(target=upstream, daemon=True).start()
@@ -55,7 +78,13 @@ def stream_susi_captions_sync(client, tenant_id: str):
         yield chunk
 
 
-async def stream_susi_captions_async(client, tenant_id: str):
+async def stream_susi_captions_async(
+    client,
+    tenant_id: str,
+    *,
+    target_lang: str = "",
+    last_chunk_id: str = "0",
+):
     """Async SSE relay for Daphne — flush headers before blocking SUSI read."""
     yield b": stream-open\n\n"
     yield _FLUSH_PAD
@@ -69,7 +98,13 @@ async def stream_susi_captions_async(client, tenant_id: str):
         loop.call_soon_threadsafe(out.put_nowait, item)
 
     def upstream() -> None:
-        _relay_upstream(client, tenant_id, put)
+        _relay_upstream(
+            client,
+            tenant_id,
+            put,
+            target_lang=target_lang,
+            last_chunk_id=last_chunk_id,
+        )
         put(done)
 
     threading.Thread(target=upstream, daemon=True).start()
