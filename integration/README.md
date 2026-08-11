@@ -35,6 +35,19 @@ cp "$PLUGIN_ROOT/integration/eventyay/webapp/video/src/views/admin/rooms/EditFor
 Requires `lib/interpretation-api.js` from Eventyay (already present on
 interpretation-plugin branches).
 
+Also patch the video Vuex store so translation selection is per-room (needed for
+`use_video` / "Use video from this interpretation channel"):
+
+```bash
+# In eventyay/webapp/video/src/store/index.js
+# - state: youtubeTranslationsByRoom: {}  (replace youtubeTranslation: null)
+# - mutation updateYoutubeTransAudio(state, { roomId, youtubeTranslation })
+#     stores youtubeTranslation under youtubeTranslationsByRoom[roomId]
+#
+# In eventyay/webapp/video/src/components/MediaSource.vue
+# - read store.state.youtubeTranslationsByRoom?.[props.room.id]
+```
+
 Rebuilt or restart the video dev server after copying.
 
 For a local Eventyay app, build into the path Django actually serves:
