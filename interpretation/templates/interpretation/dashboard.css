@@ -101,6 +101,73 @@
 .interpretation-hero-actions {
     margin-top: 1.25rem;
 }
+.interpretation-event-settings-form .checkbox {
+    margin: 0.75rem 0 0;
+}
+.interpretation-event-settings-form .checkbox:first-child {
+    margin-top: 0;
+}
+.interpretation-event-settings-form .checkbox label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0;
+    padding-left: 0;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--interp-text);
+}
+/* ponytail: commons checkbox skin uses absolute ::before; breaks in flex row */
+.interpretation-event-settings-form .checkbox label::before,
+.interpretation-event-settings-form .checkbox label::after {
+    content: none !important;
+    display: none !important;
+}
+.interpretation-event-settings-form .checkbox input[type="checkbox"] {
+    position: static;
+    float: none;
+    margin: 0;
+    opacity: 1;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+.interpretation-event-settings-form .help-block {
+    margin: 0.35rem 0 0.75rem;
+}
+.interpretation-event-settings-form .btn-save {
+    margin-top: auto;
+}
+.interpretation-overview-steps {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    margin-top: 2rem;
+}
+.interpretation-overview-steps > [class*="col-"] {
+    display: flex;
+    margin-bottom: 1.5rem;
+}
+.interpretation-overview-step {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 0;
+}
+.interpretation-overview-step .panel-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+}
+.interpretation-overview-step .panel-body > .interpretation-event-settings-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+}
+.interpretation-overview-step .panel-body > .btn {
+    margin-top: auto;
+    align-self: stretch;
+}
 
 /* Temporary caption preview — full-width like other dashboard pages */
     .interpretation-preview-page {

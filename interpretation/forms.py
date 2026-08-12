@@ -335,14 +335,9 @@ class InterpretationSettingsForm(SettingsForm):
         help_text=_(
             "When enabled, the video room audio translation dropdown reads "
             "language streams from this plugin instead of the core video "
-            "room module. Core language URLs are kept but hidden."
+            "room module."
         ),
     )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        for name in ("interpretation_is_enabled", "interpretation_use_plugin_streams"):
-            self.fields[name].widget.attrs.setdefault("class", "form-control")
 
     def save(self):
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True
