@@ -9,14 +9,14 @@ from interpretation.forms import (
 def test_preview_settings_payload_maps_providers():
     form = CaptionPreviewSettingsForm(
         data={
-            "transcription_provider": "whisper_local",
-            "translation_provider": "nllb_local",
+            "transcription_provider": "faster_whisper",
+            "translation_provider": "nllb_ctranslate2",
         }
     )
     assert form.is_valid(), form.errors
     assert preview_settings_payload(form) == {
-        "transcription_provider": "whisper_local",
-        "translation_provider": "nllb_local",
+        "transcription_provider": "faster_whisper",
+        "translation_provider": "nllb_ctranslate2",
     }
 
 

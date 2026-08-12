@@ -1,6 +1,9 @@
+from asgiref.sync import sync_to_async
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
+from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -35,6 +38,7 @@ from .interpreter_credentials import (
     is_susi_configured,
 )
 from .models import RoomInterpretation
+from .preview_stream import stream_susi_captions_async
 from .room_control import (
     clear_room_interpretation_setup,
     get_interpretation,
@@ -496,7 +500,7 @@ class InterpretationCaptionPreview(
     def get(self, request, pk, *args, **kwargs):
         event = request.event
         room = self._room(event, pk)
-        return render(request, self.template_name, self._context(event, room))
+        return render(request, self.template_name, self._context(request, event, room))
 
     def post(self, request, pk, *args, **kwargs):
         event = request.event
@@ -544,7 +548,7 @@ class InterpretationCaptionPreview(
 
         return redirect(redirect_url)
 
-    def _context(self, event, room):
+    def _context(self, request, event, room):
         interpretation, is_running = _preview_session(room, event)
         data = serialize_room_interpretation(room, event, interpretation)
         return {
@@ -556,8 +560,8 @@ class InterpretationCaptionPreview(
             "is_running": is_running,
             "preview_supported": data.get("interpreter")
             == RoomInterpretation.INTERPRETER_SUSI,
-            "poll_url": reverse(
-                "plugins:interpretation:room.preview.poll",
+            "stream_url": reverse(
+                "plugins:interpretation:room.preview.stream",
                 kwargs={
                     "organizer": event.organizer.slug,
                     "event": event.slug,
@@ -570,33 +574,76 @@ class InterpretationCaptionPreview(
         }
 
 
-class InterpretationCaptionPreviewPoll(
-    InterpretationEnabledMixin,
-    EventPermissionRequiredMixin,
-    View,
-):
-    """Temporary JSON poll endpoint for the caption preview page."""
+def _preview_sse(message: str, *, error: bool = False) -> StreamingHttpResponse:
+    import json
+
+    payload = (
+        {"status": "error", "message": message} if error else {"status": "connected"}
+    )
+    body = f"data: {json.dumps(payload)}\n\n".encode()
+    return StreamingHttpResponse(
+        [body], content_type="text/event-stream; charset=utf-8"
+    )
+
+
+def _preview_stream_response(stream) -> StreamingHttpResponse:
+    response = StreamingHttpResponse(
+        stream, content_type="text/event-stream; charset=utf-8"
+    )
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+def _load_preview_stream(event, pk):
+    """Sync ORM/auth lookup for preview stream (call via sync_to_async)."""
+    room = get_object_or_404(event.rooms.filter(deleted=False), pk=pk)
+    interpretation, is_running = _preview_session(room, event)
+    if interpretation is None or not is_running:
+        return None, None, str(_("Session is not running."))
+    client = get_susi_client(event)
+    if not client.auth_token:
+        return None, None, str(_("SUSI is not connected for this event."))
+    return client, interpretation.backend_session_id, None
+
+
+class InterpretationCaptionPreviewStream(View):
+    """Proxy SUSI caption SSE to the organizer preview page (async for Daphne)."""
 
     permission = "can_change_event_settings"
     http_method_names = ["get"]
 
-    def get(self, request, pk, *args, **kwargs):
-        room = get_object_or_404(
-            request.event.rooms.filter(deleted=False),
-            pk=pk,
-        )
-        interpretation, is_running = _preview_session(room, request.event)
-        if interpretation is None or not is_running:
-            return JsonResponse({"running": False, "text": "", "error": ""})
+    async def dispatch(self, request, *args, **kwargs):
+        if PLUGIN_MODULE not in request.event.get_plugins():
+            return redirect(
+                "eventyay_common:event.plugins",
+                organizer=request.event.organizer.slug,
+                event=request.event.slug,
+            )
+        if not request.user.is_authenticated:
+            raise PermissionDenied()
+        allowed = await sync_to_async(
+            request.user.has_event_permission,
+            thread_sensitive=True,
+        )(request.organizer, request.event, self.permission, request=request)
+        if not allowed:
+            raise PermissionDenied(
+                _("You do not have permission to view this content.")
+            )
+        self.setup(request, *args, **kwargs)
+        method = request.method.lower()
+        if method not in self.http_method_names:
+            return await self.http_method_not_allowed(request, *args, **kwargs)
+        handler = getattr(self, method, None)
+        if handler is None:
+            return await self.http_method_not_allowed(request, *args, **kwargs)
+        return await handler(request, *args, **kwargs)
 
-        client = get_susi_client(request.event)
-        try:
-            result = client.latest_transcript(interpretation.backend_session_id)
-            if not result.ok:
-                return JsonResponse(
-                    {"running": True, "text": "", "error": str(result.data)}
-                )
-            text = _preview_caption_text(result.data)
-            return JsonResponse({"running": True, "text": text, "error": ""})
-        except SusiError as exc:
-            return JsonResponse({"running": True, "text": "", "error": str(exc)})
+    async def get(self, request, pk, *args, **kwargs):
+        client, tenant_id, error = await sync_to_async(
+            _load_preview_stream,
+            thread_sensitive=True,
+        )(request.event, pk)
+        if error:
+            return _preview_sse(error, error=True)
+        return _preview_stream_response(stream_susi_captions_async(client, tenant_id))

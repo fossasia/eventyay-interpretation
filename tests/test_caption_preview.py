@@ -1,13 +1,29 @@
 """Tests for the temporary caption preview page."""
 
+import json
+
 import pytest
+from asgiref.sync import async_to_sync
 from django.urls import reverse
 
 from interpretation.models import RoomInterpretation
 from interpretation.room_control import SessionResult
-from interpretation.susi import SusiResult
 
 pytestmark = pytest.mark.django_db
+
+
+def _sse_body(response) -> bytes:
+    stream = response.streaming_content
+    if hasattr(stream, "__aiter__"):
+
+        async def _collect() -> bytes:
+            chunks = []
+            async for chunk in stream:
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        return async_to_sync(_collect)()
+    return b"".join(stream)
 
 
 @pytest.fixture
@@ -28,9 +44,9 @@ def preview_url(event, room):
     )
 
 
-def preview_poll_url(event, room):
+def preview_stream_url(event, room):
     return reverse(
-        "plugins:interpretation:room.preview.poll",
+        "plugins:interpretation:room.preview.stream",
         kwargs={
             "organizer": event.organizer.slug,
             "event": event.slug,
@@ -60,7 +76,28 @@ def test_preview_page_is_simple(organizer_client, connected_event, room):
     assert "Session ID" not in content
 
 
-def test_preview_poll_requires_running_session(organizer_client, connected_event, room):
+def test_preview_page_includes_sse_when_running(
+    organizer_client, connected_event, room
+):
+    RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_SUSI,
+        room_enabled=True,
+        status=RoomInterpretation.STATUS_RUNNING,
+        backend_session_id="tenant-1",
+    )
+
+    response = organizer_client.get(preview_url(connected_event, room))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "EventSource" in content
+    assert "preview/stream" in content
+
+
+def test_preview_stream_requires_running_session(
+    organizer_client, connected_event, room
+):
     RoomInterpretation.objects.create(
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
@@ -68,10 +105,12 @@ def test_preview_poll_requires_running_session(organizer_client, connected_event
         status=RoomInterpretation.STATUS_IDLE,
     )
 
-    response = organizer_client.get(preview_poll_url(connected_event, room))
+    response = organizer_client.get(preview_stream_url(connected_event, room))
 
     assert response.status_code == 200
-    assert response.json() == {"running": False, "text": "", "error": ""}
+    assert response["Content-Type"].startswith("text/event-stream")
+    body = _sse_body(response).decode()
+    assert "Session is not running" in body
 
 
 def test_preview_treats_legacy_stopped_status_as_not_running(
@@ -85,13 +124,13 @@ def test_preview_treats_legacy_stopped_status_as_not_running(
         backend_session_id="stale-tenant",
     )
 
-    response = organizer_client.get(preview_poll_url(connected_event, room))
+    response = organizer_client.get(preview_stream_url(connected_event, room))
 
     assert response.status_code == 200
-    assert response.json() == {"running": False, "text": "", "error": ""}
+    assert b"Session is not running" in _sse_body(response)
 
 
-def test_preview_poll_returns_transcript(
+def test_preview_stream_proxies_sse(
     organizer_client, connected_event, room, monkeypatch
 ):
     RoomInterpretation.objects.create(
@@ -103,34 +142,32 @@ def test_preview_poll_returns_transcript(
     )
 
     class FakeClient:
-        def latest_transcript(self, tenant_id):
+        auth_token = "tok"
+
+        def iter_caption_stream(self, tenant_id, *, target_lang=""):
             assert tenant_id == "tenant-1"
-            return SusiResult(
-                ok=True,
-                status_code=200,
-                data={"transcript": "hello world"},
-            )
+            payload = json.dumps({"transcript": "hello world", "translation": "hallo"})
+            yield f"data: {payload}\n\n".encode()
 
     monkeypatch.setattr(
         "interpretation.views.get_susi_client",
         lambda event: FakeClient(),
     )
 
-    response = organizer_client.get(preview_poll_url(connected_event, room))
+    response = organizer_client.get(preview_stream_url(connected_event, room))
 
     assert response.status_code == 200
-    assert response.json() == {
-        "running": True,
-        "text": "hello world",
-        "error": "",
-    }
+    assert response["Content-Type"].startswith("text/event-stream")
+    body = _sse_body(response)
+    assert b": stream-open" in body
+    assert b"hello world" in body
 
 
 def _preview_settings_post():
     return {
         "preview_action": "start",
-        "transcription_provider": "whisper_local",
-        "translation_provider": "nllb_local",
+        "transcription_provider": "faster_whisper",
+        "translation_provider": "nllb_ctranslate2",
     }
 
 
@@ -145,15 +182,15 @@ def test_preview_save_settings(organizer_client, connected_event, room):
         preview_url(connected_event, room),
         {
             "preview_action": "save_settings",
-            "transcription_provider": "whisper_local",
-            "translation_provider": "nllb_local",
+            "transcription_provider": "faster_whisper",
+            "translation_provider": "nllb_ctranslate2",
         },
     )
 
     assert response.status_code == 302
     interpretation = RoomInterpretation.objects.get(room=room)
-    assert interpretation.transcription_provider == "whisper_local"
-    assert interpretation.translation_provider == "nllb_local"
+    assert interpretation.transcription_provider == "faster_whisper"
+    assert interpretation.translation_provider == "nllb_ctranslate2"
 
 
 def test_preview_start_action(organizer_client, connected_event, room, monkeypatch):
@@ -175,7 +212,7 @@ def test_preview_start_action(organizer_client, connected_event, room, monkeypat
 
     assert response.status_code == 302
     interpretation.refresh_from_db()
-    assert interpretation.transcription_provider == "whisper_local"
+    assert interpretation.transcription_provider == "faster_whisper"
 
 
 def test_preview_caption_text_uses_transcript():

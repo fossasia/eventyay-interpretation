@@ -70,15 +70,15 @@ def test_api_config_patch(organizer_client, connected_event, room):
             "interpreter": RoomInterpretation.INTERPRETER_SUSI,
             "room_enabled": True,
             "target_languages": ["fr", "de"],
-            "transcription_provider": "whisper_local",
-            "translation_provider": "nllb_local",
+            "transcription_provider": "faster_whisper",
+            "translation_provider": "nllb_ctranslate2",
         },
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["target_languages"] == ["fr", "de"]
-    assert payload["transcription_provider"] == "whisper_local"
+    assert payload["transcription_provider"] == "faster_whisper"
 
 
 def test_api_config_patch_ignores_credential_keys(
@@ -120,8 +120,8 @@ def test_api_start_and_stop(organizer_client, connected_event, room, monkeypatch
         room=room,
         interpreter=RoomInterpretation.INTERPRETER_SUSI,
         room_enabled=True,
-        transcription_provider="whisper_local",
-        translation_provider="nllb_local",
+        transcription_provider="faster_whisper",
+        translation_provider="nllb_ctranslate2",
         target_languages=["en"],
     )
 

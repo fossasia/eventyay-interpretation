@@ -8,14 +8,16 @@ Bearer token to avoid cookie CSRF handling.
 Relevant SUSI endpoints used here:
     GET  /auth/api/status     -> {"authenticated": bool, "email", "name"}
     POST /auth/api/login      -> sets JWT cookie, body {status,email,name}
-    POST /session             -> {"tenant_id", "source"}
+    POST /session                        -> {"tenant_id", "source"}
     POST /api/v1/translate/configure
     GET  /api/v1/translate/status/<tenant_id>
+    GET  /api/v1/translate/stream        -> SSE captions (tenant_id, target_lang)
     POST /stop_event/<tenant_id>
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from urllib.parse import urljoin
 
@@ -150,9 +152,12 @@ class SusiClient:
 
     # -- session lifecycle (used by later milestones) -------------------
 
-    def create_session(self, source: str = "youtube") -> str:
+    def create_session(self, source: str = "youtube", *, name: str = "") -> str:
         """Mint a tenant/session ID for a given audio source."""
-        result = self._request("POST", "/session", json={"source": source})
+        payload: dict = {"source": source}
+        if name:
+            payload["name"] = name
+        result = self._request("POST", "/session", json=payload)
         if not result.ok:
             raise SusiError(f"Failed to create SUSI session: {result.data}")
         tenant_id = result.data.get("tenant_id")
@@ -165,7 +170,7 @@ class SusiClient:
         tenant_id: str,
         *,
         stream_url: str = "",
-        stream_type: str = "youtube",
+        stream_type: str = "platform",
         transcription: dict | None = None,
         translation: dict | None = None,
     ) -> SusiResult:
@@ -177,7 +182,6 @@ class SusiClient:
             payload["translation"] = translation
         if stream_url:
             payload["stream_url"] = stream_url
-            # SUSI reads ``stream_type`` (defaults to ``youtube`` if omitted).
             payload["stream_type"] = stream_type
         result = self._request("POST", "/api/v1/translate/configure", json=payload)
         if not result.ok:
@@ -192,7 +196,38 @@ class SusiClient:
         """Stop the grabber and release resources for a tenant."""
         return self._request("POST", f"/stop_event/{tenant_id}")
 
-    def latest_transcript(self, tenant_id: str, sentences: bool = True) -> SusiResult:
-        """Fetch the most recent transcript for a tenant (non-destructive)."""
-        params = {"tenant_id": tenant_id, "sentences": "true" if sentences else "false"}
-        return self._request("GET", "/transcripts/latest", params=params)
+    def iter_caption_stream(
+        self,
+        tenant_id: str,
+        *,
+        target_lang: str = "",
+    ) -> Iterator[bytes]:
+        """Yield raw SSE bytes from ``/api/v1/translate/stream``."""
+        params = {"tenant_id": tenant_id, "last_chunk_id": "0"}
+        lang = (target_lang or "").strip()
+        if lang:
+            params["target_lang"] = lang
+        headers = {"Accept": "text/event-stream", "Cache-Control": "no-cache"}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        url = self._url("/api/v1/translate/stream")
+        try:
+            resp = requests.get(
+                url,
+                headers=headers,
+                params=params,
+                stream=True,
+                timeout=(self.timeout, None),
+            )
+        except requests.RequestException as exc:
+            raise SusiError(f"Could not reach SUSI stream at {url}: {exc}") from exc
+        if not resp.ok:
+            try:
+                detail = resp.json()
+            except ValueError:
+                detail = resp.text
+            raise SusiError(f"SUSI stream failed ({resp.status_code}): {detail}")
+        try:
+            yield from resp.iter_content(chunk_size=1024)
+        finally:
+            resp.close()

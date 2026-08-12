@@ -97,40 +97,46 @@
     {% if preview_supported and is_running %}
         <script>
             (function () {
-                var pollUrl = "{{ poll_url|escapejs }}";
+                var streamUrl = "{{ stream_url|escapejs }}";
                 var statusLine = document.getElementById("preview-status-line");
                 var captionBox = document.getElementById("preview-caption-box");
                 var lastText = "";
+                var source = new EventSource(streamUrl);
 
-                function poll() {
-                    fetch(pollUrl, { credentials: "same-origin", headers: { Accept: "application/json" } })
-                        .then(function (response) { return response.json(); })
-                        .then(function (data) {
-                            if (data.error) {
-                                statusLine.textContent = data.error;
-                                statusLine.classList.add("is-error");
-                                return;
-                            }
-                            if (!data.running) {
-                                statusLine.textContent = "{% trans 'Session stopped.'|escapejs %}";
-                                return;
-                            }
-                            if (data.text && data.text !== lastText) {
-                                lastText = data.text;
-                                captionBox.textContent = data.text;
-                                captionBox.classList.remove("interpretation-preview-caption-box--idle");
-                                statusLine.textContent = "{% trans 'Receiving captions.'|escapejs %}";
-                                statusLine.classList.remove("is-error");
-                            }
-                        })
-                        .catch(function () {
-                            statusLine.textContent = "{% trans 'Could not load captions.'|escapejs %}";
-                            statusLine.classList.add("is-error");
-                        });
-                }
+                source.onmessage = function (event) {
+                    var data;
+                    try {
+                        data = JSON.parse(event.data);
+                    } catch (err) {
+                        return;
+                    }
+                    if (data.status === "connected") {
+                        statusLine.textContent = "{% trans 'Connected — waiting for captions…'|escapejs %}";
+                        statusLine.classList.remove("is-error");
+                        return;
+                    }
+                    if (data.status === "error") {
+                        statusLine.textContent = data.message || "{% trans 'Stream error.'|escapejs %}";
+                        statusLine.classList.add("is-error");
+                        source.close();
+                        return;
+                    }
+                    var text = (data.translation || data.transcript || "").trim();
+                    if (text && text !== lastText) {
+                        lastText = text;
+                        captionBox.textContent = text;
+                        captionBox.classList.remove("interpretation-preview-caption-box--idle");
+                        statusLine.textContent = "{% trans 'Receiving captions.'|escapejs %}";
+                        statusLine.classList.remove("is-error");
+                    }
+                };
 
-                poll();
-                window.setInterval(poll, 2000);
+                source.onerror = function () {
+                    if (source.readyState !== EventSource.CLOSED) {
+                        statusLine.textContent = "{% trans 'Caption stream disconnected.'|escapejs %}";
+                        statusLine.classList.add("is-error");
+                    }
+                };
             })();
         </script>
     {% endif %}

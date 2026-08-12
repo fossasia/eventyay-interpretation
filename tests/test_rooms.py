@@ -4,6 +4,7 @@ import pytest
 
 from interpretation.services import start_stream_session
 from interpretation.utils import (
+    SUSI_SESSION_SOURCE,
     SUSI_STREAM_TYPE,
     get_module_stream_url,
     get_room_stream_url,
@@ -159,37 +160,50 @@ class RecordingClient:
         return None
 
 
-def test_start_stream_session_uses_susi_youtube_source():
+def test_start_stream_session_uses_platform_stream_type():
     client = RecordingClient()
     tenant = start_stream_session(
         client,
         "https://vs-hls-push-ww-live.akamaized.net/x/master.m3u8",
-        transcription_provider="whisper_local",
-        translation_provider="nllb_local",
+        transcription_provider="faster_whisper",
+        translation_provider="nllb_ctranslate2",
         source_language="en",
         target_languages=["de", "fr"],
     )
     assert tenant == "tenant-1"
-    assert client.calls[0] == ("create_session", SUSI_STREAM_TYPE)
+    assert client.calls[0] == ("create_session", SUSI_SESSION_SOURCE)
     name, tenant_id, kwargs = client.calls[1]
     assert name == "configure"
     assert tenant_id == "tenant-1"
     assert kwargs["stream_url"].endswith("master.m3u8")
     assert kwargs["stream_type"] == SUSI_STREAM_TYPE
-    assert kwargs["transcription"] == {"provider_name": "whisper_local"}
+    assert kwargs["transcription"] == {"provider_name": "faster_whisper"}
     assert kwargs["translation"] == {
-        "provider_name": "nllb_local",
+        "provider_name": "nllb_ctranslate2",
         "source_lang": "en",
         "target_lang": "de",
     }
 
 
-def test_start_stream_session_omits_empty_providers():
+def test_start_stream_session_defaults_empty_providers():
     client = RecordingClient()
     start_stream_session(client, "https://www.youtube.com/watch?v=abc")
     _, _, kwargs = client.calls[1]
-    assert kwargs["transcription"] is None
-    assert kwargs["translation"] is None
+    assert kwargs["transcription"] == {"provider_name": "faster_whisper"}
+    assert kwargs["translation"] == {"provider_name": "nllb_ctranslate2"}
+
+
+def test_start_stream_session_maps_legacy_provider_names():
+    client = RecordingClient()
+    start_stream_session(
+        client,
+        "https://www.youtube.com/watch?v=abc",
+        transcription_provider="whisper_local",
+        translation_provider="nllb_local",
+    )
+    _, _, kwargs = client.calls[1]
+    assert kwargs["transcription"] == {"provider_name": "faster_whisper"}
+    assert kwargs["translation"] == {"provider_name": "nllb_ctranslate2"}
 
 
 def test_start_stream_session_requires_stream_url():
@@ -210,7 +224,7 @@ def test_start_stream_session_rolls_back_on_configure_failure():
     client = FailingClient()
     with pytest.raises(SusiError):
         start_stream_session(client, "https://www.youtube.com/watch?v=abc")
-    assert client.calls[0] == ("create_session", SUSI_STREAM_TYPE)
+    assert client.calls[0] == ("create_session", SUSI_SESSION_SOURCE)
     assert ("stop_session", "tenant-1") in client.calls
 
 

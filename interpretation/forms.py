@@ -18,8 +18,12 @@ from .settings import (
 )
 from .susi import SusiClient, SusiError
 from .susi_providers import (
+    DEFAULT_SUSI_TRANSCRIPTION_PROVIDER,
+    DEFAULT_SUSI_TRANSLATION_PROVIDER,
     SUSI_TRANSCRIPTION_PROVIDERS,
     SUSI_TRANSLATION_PROVIDERS,
+    resolve_transcription_provider,
+    resolve_translation_provider,
 )
 
 CONNECT_POST_KEY = "interpretation_connect"
@@ -403,14 +407,21 @@ class CaptionPreviewSettingsForm(forms.Form):
         for field in self.fields.values():
             field.widget.attrs.setdefault("class", "form-control")
         if interpretation:
-            if interpretation.transcription_provider:
-                self.fields[
-                    "transcription_provider"
-                ].initial = interpretation.transcription_provider
-            if interpretation.translation_provider:
-                self.fields[
-                    "translation_provider"
-                ].initial = interpretation.translation_provider
+            self.fields[
+                "transcription_provider"
+            ].initial = resolve_transcription_provider(
+                interpretation.transcription_provider
+            )
+            self.fields["translation_provider"].initial = resolve_translation_provider(
+                interpretation.translation_provider
+            )
+        else:
+            self.fields[
+                "transcription_provider"
+            ].initial = DEFAULT_SUSI_TRANSCRIPTION_PROVIDER
+            self.fields[
+                "translation_provider"
+            ].initial = DEFAULT_SUSI_TRANSLATION_PROVIDER
 
 
 def preview_settings_payload(form: CaptionPreviewSettingsForm) -> dict:
