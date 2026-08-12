@@ -69,6 +69,8 @@ def test_room_settings_renders_table(organizer_client, rooms_url, room):
     assert "Room settings" in content
     assert "Main Stage" in content
     assert "Configure" in content
+    assert "Language streams (video room)" not in content
+    assert "Save language streams" not in content
 
 
 def test_overview_links_to_interpreters(

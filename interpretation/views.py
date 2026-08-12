@@ -1,6 +1,6 @@
 from asgiref.sync import sync_to_async
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -24,8 +24,6 @@ from .forms import (
     CaptionPreviewSettingsForm,
     InterpretationSettingsForm,
     RoomConfigureForm,
-    language_streams_form_prefix,
-    parse_language_streams_post,
     preview_settings_payload,
     room_form_prefix,
 )
@@ -46,7 +44,6 @@ from .room_control import (
     stop_room_session,
     update_room_interpretation,
 )
-from .settings import use_plugin_language_streams
 
 PLUGIN_MODULE = "interpretation"
 
@@ -266,10 +263,6 @@ class InterpretationRoomSettings(
                 return self._handle_room_save(
                     request, room, event, prefix, redirect_url
                 )
-            if action == "save_streams":
-                return self._handle_room_streams_save(
-                    request, room, event, redirect_url
-                )
             if action == "disconnect":
                 return self._handle_room_clear(request, room, event, redirect_url)
             if action == "stop":
@@ -340,29 +333,6 @@ class InterpretationRoomSettings(
         )
         return redirect(redirect_url)
 
-    def _handle_room_streams_save(self, request, room, event, redirect_url):
-        prefix = language_streams_form_prefix(room.pk)
-        try:
-            streams = parse_language_streams_post(request.POST, prefix)
-        except ValidationError as exc:
-            messages.error(request, str(exc))
-            return redirect(f"{redirect_url}?room={room.pk}")
-        try:
-            update_room_interpretation(
-                room,
-                event,
-                {"language_streams": streams},
-            )
-        except ValueError as exc:
-            messages.error(request, str(exc))
-            return redirect(f"{redirect_url}?room={room.pk}")
-        _notify_video_room_config_changed(event)
-        messages.success(
-            request,
-            _("Saved language streams for %(room)s.") % {"room": room.name},
-        )
-        return redirect(f"{redirect_url}?room={room.pk}")
-
     def _handle_room_clear(self, request, room, event, redirect_url):
         try:
             clear_room_interpretation_setup(room, event)
@@ -393,16 +363,10 @@ class InterpretationRoomSettings(
             data = serialize_room_interpretation(room, event, interpretation)
             prefix = room_form_prefix(room.pk)
             selected = data["interpreter"]
-            stored_streams = list(data.get("language_streams") or [])
-            stream_rows = stored_streams + [
-                {"language": "", "youtube_id": "", "use_video": False}
-            ]
             rooms.append(
                 {
                     "room": room,
                     "data": data,
-                    "streams_prefix": language_streams_form_prefix(room.pk),
-                    "stream_rows": stream_rows,
                     "configure_form": RoomConfigureForm(
                         prefix=prefix,
                         event=event,
@@ -426,7 +390,6 @@ class InterpretationRoomSettings(
             "available_interpreters": list_available_interpreters(event),
             "interpreters_url": _interpreters_url(event),
             "susi_connected": is_susi_configured(event),
-            "use_plugin_language_streams": use_plugin_language_streams(event),
             "is_event_settings": True,
             **kwargs,
         }

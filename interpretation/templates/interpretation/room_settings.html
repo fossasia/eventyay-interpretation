@@ -96,7 +96,6 @@
                                     <div id="room-panel-{{ entry.room.pk }}"
                                          class="collapse interpretation-room-panel{% if entry.expanded %} in{% endif %}">
                                         {% include "interpretation/room_configure_panel.html" with entry=entry room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" interpreters_url=interpreters_url %}
-                                        {% include "interpretation/language_streams_panel.html" with entry=entry streams_prefix=entry.streams_prefix room_id_key="interpretation_room_id" room_action_key="interpretation_room_action" stream_rows=entry.stream_rows %}
                                     </div>
                                 </td>
                             </tr>

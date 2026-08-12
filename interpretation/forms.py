@@ -363,31 +363,6 @@ class InterpretationSettingsForm(SettingsForm):
         return result
 
 
-def language_streams_form_prefix(room_id: int) -> str:
-    return f"room-{room_id}-streams"
-
-
-def parse_language_streams_post(post, prefix: str):
-    from .language_streams import validate_language_streams
-
-    count = int(post.get(f"{prefix}-count") or 0)
-    entries = []
-    for index in range(count):
-        language = (post.get(f"{prefix}-{index}-language") or "").strip()
-        audio_source = (post.get(f"{prefix}-{index}-audio_source") or "").strip()
-        use_video = post.get(f"{prefix}-{index}-use_video") == "on"
-        if not language and not audio_source:
-            continue
-        entries.append(
-            {
-                "language": language,
-                "youtube_id": audio_source,
-                "use_video": use_video,
-            }
-        )
-    return validate_language_streams(entries)
-
-
 class CaptionPreviewSettingsForm(forms.Form):
     """SUSI session settings for the temporary caption preview page."""
 
