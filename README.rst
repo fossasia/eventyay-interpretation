@@ -21,6 +21,11 @@ Development setup
 6. Restart your local eventyay server. You can now use the plugin from this repository for your events by enabling it in
    the 'plugins' tab in the settings.
 
+Video room language streams (plugin-owned ``language_streams``) also require the matching
+Eventyay video SPA changes (``feat/video-admin-hook`` or equivalent merged into eventyay).
+Install this plugin with ``uv pip install -e .``; do not copy files from a separate
+``integration/`` tree — the frontend lives in the eventyay repository.
+
 This plugin has CI set up to enforce a few code style rules. To check locally, you need ruff installed::
 
     pip install ruff

@@ -1,7 +1,6 @@
 recursive-include interpretation/static *
 recursive-include interpretation/templates *
 recursive-include interpretation/locale *
-graft integration
 include LICENSE
 include uv.lock
 exclude .gitlab-ci.yml

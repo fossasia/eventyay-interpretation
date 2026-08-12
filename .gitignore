@@ -16,8 +16,6 @@ downloads/
 eggs/
 .eggs/
 lib/
-!integration/eventyay/webapp/video/src/lib/
-!integration/eventyay/webapp/video/src/lib/**
 lib64/
 parts/
 sdist/
