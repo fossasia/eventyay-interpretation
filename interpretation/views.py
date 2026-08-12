@@ -1,8 +1,6 @@
 from asgiref.sync import sync_to_async
 from django.contrib import messages
-from django.core.exceptions import ValidationError
-from django.http import JsonResponse
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -49,7 +47,6 @@ from .room_control import (
     update_room_interpretation,
 )
 from .settings import use_plugin_language_streams
-from .susi import SusiError
 
 PLUGIN_MODULE = "interpretation"
 
