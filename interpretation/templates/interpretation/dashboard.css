@@ -118,10 +118,16 @@
     color: var(--interp-text);
 }
 /* ponytail: commons checkbox skin uses absolute ::before; breaks in flex row */
-.interpretation-event-settings-form .checkbox label::before,
-.interpretation-event-settings-form .checkbox label::after {
-    content: none !important;
-    display: none !important;
+.interpretation-overview-step
+    .interpretation-event-settings-form
+    .checkbox
+    label::before,
+.interpretation-overview-step
+    .interpretation-event-settings-form
+    .checkbox
+    label::after {
+    content: none;
+    display: none;
 }
 .interpretation-event-settings-form .checkbox input[type="checkbox"] {
     position: static;
