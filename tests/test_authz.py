@@ -49,6 +49,28 @@ def test_restricted_user_denied_dashboard(restricted_client, dashboard_url):
     assert response.status_code in {403, 302}
 
 
+def test_restricted_user_denied_interpretation_streams_api(restricted_client, event, room):
+    org = event.organizer.slug
+    slug = event.slug
+    url = (
+        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/streams/"
+    )
+    response = restricted_client.get(url)
+
+    assert response.status_code == 403
+
+
+def test_restricted_user_denied_interpretation_config_api(restricted_client, event, room):
+    org = event.organizer.slug
+    slug = event.slug
+    url = (
+        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
+    )
+    response = restricted_client.get(url)
+
+    assert response.status_code == 403
+
+
 def test_cross_event_room_action_returns_404(
     organizer_client, event, connected_event, rooms_url
 ):

@@ -25,6 +25,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
 
     queryset = RoomInterpretation.objects.none()
     permission_classes = [EventPermission]
+    permission = "can_change_event_settings"
     write_permission = "can_change_event_settings"
     endpoint = "room_interpretation"
 
