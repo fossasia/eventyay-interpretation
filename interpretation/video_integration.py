@@ -21,6 +21,7 @@ def augment_room_config(room, room_config: dict) -> None:
 
 
 def install_video_integration() -> None:
+    """Patch attendee + admin room config builders (no Eventyay core changes)."""
     from eventyay.base.services import event as event_service
     from eventyay.features.live.modules import room as room_module
 
@@ -45,6 +46,7 @@ def install_video_integration() -> None:
             augment_room_config(room_or_rooms, data)
         return data
 
+    # Attendee world.config uses get_room_config; video admin uses serialize_room_config.
     event_service.get_room_config = get_room_config
     room_module.serialize_room_config = serialize_room_config
     install_video_integration._patched = True

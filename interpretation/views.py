@@ -39,6 +39,7 @@ from .room_control import (
     clear_room_interpretation_setup,
     get_interpretation,
     normalize_session_status,
+    notify_video_room_config_changed,
     serialize_room_interpretation,
     start_room_session,
     stop_room_session,
@@ -89,22 +90,11 @@ def _event_settings_form(event, data=None):
     )
 
 
-def _notify_video_room_config_changed(event) -> None:
-    # ponytail: push event.updated so video SPA reloads rooms with plugin streams.
-    try:
-        from asgiref.sync import async_to_sync
-        from eventyay.base.services.event import notify_event_change
-
-        async_to_sync(notify_event_change)(event.id)
-    except Exception:
-        pass
-
-
 def _process_event_settings_post(request, event, redirect_url):
     form = _event_settings_form(event, data=request.POST)
     if form.is_valid():
         form.save()
-        _notify_video_room_config_changed(event)
+        notify_video_room_config_changed(event)
         messages.success(request, _("Your changes have been saved."))
     else:
         messages.error(

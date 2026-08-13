@@ -34,6 +34,17 @@ from .utils import (
 PLUGIN_MODULE = "interpretation"
 
 
+def notify_video_room_config_changed(event) -> None:
+    """Push event.updated so video SPA reloads room config (plugin stream fields)."""
+    try:
+        from asgiref.sync import async_to_sync
+        from eventyay.base.services.event import notify_event_change
+
+        async_to_sync(notify_event_change)(event.id)
+    except Exception:
+        pass
+
+
 def plugin_enabled(event) -> bool:
     return PLUGIN_MODULE in event.get_plugins()
 
@@ -182,6 +193,9 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
 
     _apply_backend_config(interpretation, data)
     interpretation.save()
+
+    if "language_streams" in data:
+        notify_video_room_config_changed(event)
 
     if was_running and (
         not interpretation.room_enabled

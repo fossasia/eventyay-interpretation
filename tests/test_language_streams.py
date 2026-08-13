@@ -91,6 +91,26 @@ def test_serialize_room_config_includes_plugin_flag(event, room):
     assert payload["interpretation_use_plugin_streams"] is True
 
 
+def test_get_room_config_includes_plugin_streams(event, room):
+    from eventyay.base.services.event import get_room_config
+
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
+    event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
+    RoomInterpretation.objects.create(
+        room=room,
+        language_streams=[
+            {"language": "German", "youtube_id": "https://whep.example/de"},
+        ],
+    )
+    config = get_room_config(room, set())
+    assert config["interpretation_use_plugin_streams"] is True
+    assert any(
+        entry["language"] == "German"
+        for entry in config["interpretation_language_streams"]
+    )
+
+
 def test_api_streams_endpoint(organizer_client, event, room):
     event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
     RoomInterpretation.objects.create(
