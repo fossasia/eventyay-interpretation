@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python 3.11
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v7
         with:
           python-version: 3.11
       - uses: actions/cache@v4
@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python 3.11
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v7
         with:
           python-version: 3.11
       - uses: actions/cache@v4
