@@ -46,9 +46,9 @@ jobs:
       EVY_POSTGRES_DB: pretix
       EVY_REDIS_URL: redis://localhost:6379/0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check out eventyay host
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: fossasia/eventyay
           ref: dev
