@@ -8,7 +8,9 @@ from .settings import use_plugin_language_streams
 
 
 def augment_room_config(room, room_config: dict) -> None:
-    event = room.event
+    event = getattr(room, 'event', None)
+    if event is None:
+        return
     if not plugin_enabled(event):
         return
     flag_on = use_plugin_language_streams(event)
@@ -30,8 +32,8 @@ def install_video_integration() -> None:
 
     original_get_room_config = event_service.get_room_config
 
-    def get_room_config(room, permissions):
-        config = original_get_room_config(room, permissions)
+    def get_room_config(room, permissions, **kwargs):
+        config = original_get_room_config(room, permissions, **kwargs)
         augment_room_config(room, config)
         return config
 
