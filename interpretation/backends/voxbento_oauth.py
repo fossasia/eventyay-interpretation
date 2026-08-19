@@ -24,9 +24,10 @@ class VoxbentoReauthorizationRequired(Exception):
 
 def call_voxbento_refresh(refresh_token, base_url):
     url = f"{base_url.rstrip('/')}/oauth/token"
-    from django.conf import settings
-    client_id = getattr(settings, "VOXBENTO_OAUTH_CLIENT_ID", "")
-    client_secret = getattr(settings, "VOXBENTO_OAUTH_CLIENT_SECRET", "")
+    from eventyay.base.settings import GlobalSettingsObject
+    gs = GlobalSettingsObject().settings
+    client_id = gs.get("voxbento_client_id", "")
+    client_secret = gs.get("voxbento_client_secret", "")
 
     try:
         response = requests.post(

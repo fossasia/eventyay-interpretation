@@ -45,3 +45,40 @@ def navbar_entry_common(sender, request=None, **kwargs):
             "icon": "language",
         }
     ]
+
+from collections import OrderedDict
+from django import forms
+from eventyay.base.forms import SecretKeySettingsField
+from eventyay.base.signals import register_global_settings
+
+@receiver(register_global_settings, dispatch_uid="interpretation_global_settings")
+def register_voxbento_global_settings(sender, **kwargs):
+    return OrderedDict(
+        [
+            (
+                "voxbento_base_url",
+                forms.URLField(
+                    label=_("VoxBento Base URL"),
+                    required=False,
+                    help_text=_("The base URL of your VoxBento deployment (e.g. https://voxbento.example.com)."),
+                    widget=forms.URLInput(attrs={"placeholder": "https://voxbento.example.com"}),
+                ),
+            ),
+            (
+                "voxbento_client_id",
+                forms.CharField(
+                    label=_("VoxBento Client ID"),
+                    required=False,
+                    help_text=_("The OAuth Client ID obtained from the VoxBento Developer Dashboard."),
+                ),
+            ),
+            (
+                "voxbento_client_secret",
+                SecretKeySettingsField(
+                    label=_("VoxBento Client Secret"),
+                    required=False,
+                    help_text=_("The OAuth Client Secret obtained from the VoxBento Developer Dashboard."),
+                ),
+            ),
+        ]
+    )

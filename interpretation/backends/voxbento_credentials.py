@@ -23,7 +23,14 @@ class VoxbentoError(Exception):
 
 
 def get_voxbento_base_url(event: Event) -> str:
-    url = event.settings.get(
+    from eventyay.base.settings import GlobalSettingsObject
+    
+    # Check Global Settings first
+    gs = GlobalSettingsObject().settings
+    global_url = gs.get("voxbento_base_url", "")
+    
+    # Fallback to legacy event-level settings
+    url = global_url or event.settings.get(
         SETTING_VOXBENTO_BASE_URL, default="", as_type=str
     ).strip()
     
@@ -44,7 +51,10 @@ def get_voxbento_api_key(event: Event) -> str:
 def is_voxbento_configured(event: Event | None) -> bool:
     if event is None:
         return False
-    return bool(get_voxbento_base_url(event) and get_voxbento_api_key(event))
+    from ..models import VoxbentoOAuthGrant
+    has_oauth = VoxbentoOAuthGrant.objects.filter(event=event).exists()
+    has_legacy = bool(get_voxbento_api_key(event))
+    return bool(get_voxbento_base_url(event) and (has_oauth or has_legacy))
 
 
 def save_voxbento_credentials(event: Event, base_url: str, api_key: str) -> None:

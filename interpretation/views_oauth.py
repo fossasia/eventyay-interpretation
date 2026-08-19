@@ -14,8 +14,8 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         event = self.request.event
-        from django.conf import settings
-        client_id = getattr(settings, "VOXBENTO_OAUTH_CLIENT_ID", "")
+        from eventyay.base.settings import GlobalSettingsObject
+        client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
         kwargs = {"organizer": event.organizer.slug, "event": event.slug}
         redirect_uri = self.request.build_absolute_uri(
             reverse("plugins:interpretation:oauth_callback", kwargs=kwargs)
@@ -46,8 +46,8 @@ class VoxbentoOAuthCallbackView(EventPermissionRequiredMixin, View):
             kwargs = {"organizer": event.organizer.slug, "event": event.slug}
             return redirect(reverse("plugins:interpretation:dashboard", kwargs=kwargs))
 
-        from django.conf import settings
-        client_id = getattr(settings, "VOXBENTO_OAUTH_CLIENT_ID", "")
+        from eventyay.base.settings import GlobalSettingsObject
+        client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
         client_secret = getattr(settings, "VOXBENTO_OAUTH_CLIENT_SECRET", "")
         kwargs = {"organizer": event.organizer.slug, "event": event.slug}
         redirect_uri = self.request.build_absolute_uri(

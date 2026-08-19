@@ -57,6 +57,16 @@
                             </form>
                         </div>
                     {% else %}
+                    {% if entry.id == "voxbento" %}
+                        <div class="interpretation-interpreter-connect-form">
+                            <p>
+                                {% trans "VoxBento is configured globally by the system administrator. Connect your event to VoxBento using OAuth." %}
+                            </p>
+                            <a href="{% url 'plugins:interpretation:oauth_connect' event=request.event.slug organizer=request.event.organizer.slug %}" class="btn btn-primary">
+                                <i class="fa fa-plug"></i> {% trans "Connect with VoxBento" %}
+                            </a>
+                        </div>
+                    {% else %}
                         <form method="post" class="interpretation-interpreter-connect-form">
                             {% csrf_token %}
                             <input type="hidden" name="interpretation_interpreter_id" value="{{ entry.id }}">
@@ -74,6 +84,7 @@
                                 {% trans "Sign in" %}
                             </button>
                         </form>
+                    {% endif %}
                     {% endif %}
                 {% else %}
                     <p class="text-muted">{% trans "No event sign-in required for this interpreter." %}</p>
