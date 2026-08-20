@@ -48,9 +48,7 @@ class SusiLoginResult:
 class SusiClient:
     """Minimal client for talking to a SUSI Translator server."""
 
-    def __init__(
-        self, base_url: str, auth_token: str = "", timeout: int = DEFAULT_TIMEOUT
-    ):
+    def __init__(self, base_url: str, auth_token: str = "", timeout: int = DEFAULT_TIMEOUT):
         if not base_url:
             raise ValueError("base_url is required")
         # Ensure a single trailing slash so urljoin treats it as a directory.

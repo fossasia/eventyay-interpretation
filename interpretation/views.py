@@ -123,19 +123,16 @@ class InterpretationOverview(
             **build_overview_context(event),
         }
 
-        grant = getattr(event, 'voxbento_oauth_grant', None)
+        grant = getattr(event, "voxbento_oauth_grant", None)
         if grant and grant.needs_reauth:
             messages.warning(
-                request,
-                _("VoxBento requires reauthorization. Please reconnect via the Configure interpreters page.")
+                request, _("VoxBento requires reauthorization. Please reconnect via the Configure interpreters page.")
             )
 
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
-        return _process_event_settings_post(
-            request, request.event, redirect_url=_dashboard_url(request.event)
-        )
+        return _process_event_settings_post(request, request.event, redirect_url=_dashboard_url(request.event))
 
 
 class InterpretationInterpreters(
@@ -244,9 +241,7 @@ class InterpretationRoomSettings(
             redirect_url = self.get_success_url(room.pk)
 
             if action == "save":
-                return self._handle_room_save(
-                    request, room, event, prefix, redirect_url
-                )
+                return self._handle_room_save(request, room, event, prefix, redirect_url)
             if action == "disconnect":
                 return self._handle_room_clear(request, room, event, redirect_url)
             if action == "stop":
@@ -255,9 +250,7 @@ class InterpretationRoomSettings(
             messages.error(request, _("Unknown room action."))
             return redirect(redirect_url)
 
-        return _process_event_settings_post(
-            request, event, redirect_url=self.get_success_url()
-        )
+        return _process_event_settings_post(request, event, redirect_url=self.get_success_url())
 
     def _apply_room_configure_form(self, request, room, event, prefix):
         form = RoomConfigureForm(request.POST, prefix=prefix, event=event)
@@ -278,9 +271,7 @@ class InterpretationRoomSettings(
         return interpretation, None
 
     def _handle_room_save(self, request, room, event, prefix, redirect_url):
-        interpretation, error = self._apply_room_configure_form(
-            request, room, event, prefix
-        )
+        interpretation, error = self._apply_room_configure_form(request, room, event, prefix)
         if error is not None:
             if isinstance(error, str):
                 messages.error(request, error)
@@ -298,16 +289,10 @@ class InterpretationRoomSettings(
             backend = get_backend(interpretation.interpreter)
             messages.warning(
                 request,
-                _(
-                    "%(name)s is not configured for this event yet. "
-                    "Open Configure interpreters to sign in."
-                )
+                _("%(name)s is not configured for this event yet. Open Configure interpreters to sign in.")
                 % {"name": backend.label},
             )
-        elif (
-            interpretation
-            and interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO
-        ):
+        elif interpretation and interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO:
             backend = get_backend(interpretation.interpreter)
             try:
                 backend.sync_booths(event, interpretation)
@@ -341,10 +326,7 @@ class InterpretationRoomSettings(
     def get_context_data(self, **kwargs):
         event = self.request.event
         expanded_room = self.request.GET.get("room")
-        existing = {
-            ri.room_id: ri
-            for ri in RoomInterpretation.objects.filter(room__event=event)
-        }
+        existing = {ri.room_id: ri for ri in RoomInterpretation.objects.filter(room__event=event)}
         rooms = []
         for room in event.rooms.filter(deleted=False).order_by("name"):
             interpretation = existing.get(room.pk)
@@ -361,14 +343,10 @@ class InterpretationRoomSettings(
                         initial={
                             "interpreter": data["interpreter"],
                             "room_enabled": data["room_enabled"],
-                            "target_languages": ", ".join(
-                                data.get("target_languages", [])
-                            ),
+                            "target_languages": ", ".join(data.get("target_languages", [])),
                         },
                     ),
-                    "interpreter_configured": is_interpreter_configured(
-                        event, selected
-                    ),
+                    "interpreter_configured": is_interpreter_configured(event, selected),
                     "expanded": str(room.pk) == str(expanded_room),
                 }
             )

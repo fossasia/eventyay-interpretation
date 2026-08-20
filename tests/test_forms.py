@@ -46,9 +46,7 @@ class _FakeEvent:
 
 def _event_form(data, settings=None, prefix="interpretation"):
     post = {f"{prefix}-{key}": value for key, value in data.items()}
-    return InterpretationSettingsForm(
-        obj=_FakeEvent(settings), data=post, prefix=prefix
-    )
+    return InterpretationSettingsForm(obj=_FakeEvent(settings), data=post, prefix=prefix)
 
 
 def test_event_enable_toggle_can_be_saved(monkeypatch):

@@ -46,6 +46,7 @@ def navbar_entry_common(sender, request=None, **kwargs):
         }
     ]
 
+
 from collections import OrderedDict
 
 from django import forms

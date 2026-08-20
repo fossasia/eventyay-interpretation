@@ -30,9 +30,7 @@ def get_voxbento_base_url(event: Event) -> str:
     global_url = gs.get("voxbento_base_url", "")
 
     # Fallback to legacy event-level settings
-    url = global_url or event.settings.get(
-        SETTING_VOXBENTO_BASE_URL, default="", as_type=str
-    ).strip()
+    url = global_url or event.settings.get(SETTING_VOXBENTO_BASE_URL, default="", as_type=str).strip()
 
     if not url:
         return ""
@@ -52,6 +50,7 @@ def is_voxbento_configured(event: Event | None) -> bool:
     if event is None:
         return False
     from ..models import VoxbentoOAuthGrant
+
     has_oauth = VoxbentoOAuthGrant.objects.filter(event=event).exists()
     has_legacy = bool(get_voxbento_api_key(event))
     return bool(get_voxbento_base_url(event) and (has_oauth or has_legacy))
@@ -67,6 +66,7 @@ def clear_voxbento_credentials(event: Event) -> None:
         event.settings.delete(key)
 
     from ..models import VoxbentoOAuthGrant
+
     try:
         grant = VoxbentoOAuthGrant.objects.get(event=event)
     except VoxbentoOAuthGrant.DoesNotExist:
@@ -83,6 +83,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                 VoxbentoTemporarilyUnavailable,
                 get_valid_access_token,
             )
+
             logger = logging.getLogger(__name__)
             try:
                 base_url = get_voxbento_base_url(event)

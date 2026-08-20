@@ -34,6 +34,7 @@ from .backends.voxbento_credentials import (
 def verify_voxbento_connection(event, request) -> None:
     """Verify stored event-level VoxBento credentials."""
     from .models import VoxbentoOAuthGrant
+
     grant = VoxbentoOAuthGrant.objects.filter(event=event).first()
     if grant:
         messages.success(
@@ -62,8 +63,7 @@ def verify_voxbento_connection(event, request) -> None:
     else:
         messages.success(
             request,
-            _("Successfully connected to VoxBento at %(server)s.")
-            % {"server": voxbento_server_host(event)},
+            _("Successfully connected to VoxBento at %(server)s.") % {"server": voxbento_server_host(event)},
         )
 
 
@@ -72,9 +72,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
 
     interpretation_voxbento_base_url = forms.URLField(
         label=_("VoxBento Base URL"),
-        help_text=_(
-            "Base URL of the VoxBento Console, e.g. https://voxbento.example.com"
-        ),
+        help_text=_("Base URL of the VoxBento Console, e.g. https://voxbento.example.com"),
         required=False,
         widget=forms.URLInput(attrs={"placeholder": "https://voxbento.example.com"}),
     )
@@ -91,9 +89,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
         for name in self.fields:
             self.fields[name].widget.attrs.setdefault("class", "form-control")
         if event and get_voxbento_base_url(event):
-            self.fields[
-                "interpretation_voxbento_base_url"
-            ].initial = get_voxbento_base_url(event)
+            self.fields["interpretation_voxbento_base_url"].initial = get_voxbento_base_url(event)
 
     @property
     def is_connected(self) -> bool:
@@ -113,9 +109,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
         base_url = cleaned_data.get("interpretation_voxbento_base_url")
         api_key = cleaned_data.get("interpretation_voxbento_api_key")
         if not base_url or not api_key:
-            raise forms.ValidationError(
-                _("Both Base URL and API Key are required to connect to VoxBento.")
-            )
+            raise forms.ValidationError(_("Both Base URL and API Key are required to connect to VoxBento."))
         return cleaned_data
 
     def run_connect_action(self, request, event) -> bool:
@@ -134,8 +128,7 @@ class VoxbentoInterpreterCredentialsForm(forms.Form):
         save_voxbento_credentials(event, base_url, api_key)
         messages.success(
             request,
-            _("Connected to VoxBento at %(server)s.")
-            % {"server": voxbento_server_host(event)},
+            _("Connected to VoxBento at %(server)s.") % {"server": voxbento_server_host(event)},
         )
         return True
 
@@ -165,9 +158,7 @@ class RoomConfigureForm(forms.Form):
         from .backends import list_available_interpreters
 
         interpreters = list_available_interpreters(event)
-        self.fields["interpreter"].choices = [
-            (item["id"], item["label"]) for item in interpreters
-        ]
+        self.fields["interpreter"].choices = [(item["id"], item["label"]) for item in interpreters]
         for name, field in self.fields.items():
             if name != "room_enabled":
                 field.widget.attrs.setdefault("class", "form-control")
@@ -193,16 +184,9 @@ class InterpretationSettingsForm(SettingsForm):
     def save(self):
         was_enabled = is_interpretation_enabled(self.obj) if self.obj else True
         result = super().save()
-        enable_key = (
-            f"{self.prefix}-{SETTING_IS_ENABLED}" if self.prefix else SETTING_IS_ENABLED
-        )
+        enable_key = f"{self.prefix}-{SETTING_IS_ENABLED}" if self.prefix else SETTING_IS_ENABLED
         settings_saved = enable_key in self.data or EVENT_SETTINGS_SAVE_KEY in self.data
-        if (
-            self.obj
-            and was_enabled
-            and not is_interpretation_enabled(self.obj)
-            and settings_saved
-        ):
+        if self.obj and was_enabled and not is_interpretation_enabled(self.obj) and settings_saved:
             from .room_control import stop_all_event_sessions
 
             stop_all_event_sessions(self.obj)

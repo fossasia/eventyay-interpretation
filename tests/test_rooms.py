@@ -36,9 +36,7 @@ class FakeScheduleManager:
 
     def exclude(self, **kwargs):
         skip = set(kwargs.get("stream_type__in", ()))
-        return FakeScheduleManager(
-            [s for s in self._items if s.stream_type not in skip]
-        )
+        return FakeScheduleManager([s for s in self._items if s.stream_type not in skip])
 
     def __iter__(self):
         return iter(self._items)
@@ -112,9 +110,7 @@ def test_schedule_falls_back_to_latest():
 
 
 def test_schedule_includes_youtube():
-    room = FakeRoom(
-        schedules=[FakeSchedule("https://youtu.be/abc", stream_type="youtube")]
-    )
+    room = FakeRoom(schedules=[FakeSchedule("https://youtu.be/abc", stream_type="youtube")])
     assert get_schedule_stream_url(room) == "https://youtu.be/abc"
 
 
@@ -128,9 +124,7 @@ def test_schedule_skips_iframe():
 
 def test_get_room_stream_url_prefers_module_over_schedule():
     room = FakeRoom(
-        module_config=[
-            {"type": "livestream.native", "config": {"hls_url": "https://mod/x.m3u8"}}
-        ],
+        module_config=[{"type": "livestream.native", "config": {"hls_url": "https://mod/x.m3u8"}}],
         schedules=[FakeSchedule("https://sched/x.m3u8", active=True)],
     )
     assert get_room_stream_url(room) == "https://mod/x.m3u8"

@@ -56,12 +56,8 @@ class VoxbentoWebhookReceiverView(View):
         # Reconstruct the signed payload: {timestamp}.{raw_request_body}
         signed_payload = f"{timestamp}.{request.body.decode('utf-8')}"
 
-        secret = grant.webhook_secret_key.encode('utf-8')
-        computed_signature = hmac.new(
-            secret,
-            signed_payload.encode('utf-8'),
-            hashlib.sha256
-        ).hexdigest()
+        secret = grant.webhook_secret_key.encode("utf-8")
+        computed_signature = hmac.new(secret, signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(computed_signature, signature_v1):
             return JsonResponse({"detail": "Invalid signature"}, status=401)

@@ -14,17 +14,20 @@ logger = logging.getLogger(__name__)
 
 class VoxbentoTemporarilyUnavailable(Exception):
     """Raised when VoxBento API or locking is temporarily unavailable."""
+
     pass
 
 
 class VoxbentoReauthorizationRequired(Exception):
     """Raised when the OAuth token is invalid/revoked and user must re-authenticate."""
+
     pass
 
 
 def call_voxbento_refresh(refresh_token, base_url):
     url = f"{base_url.rstrip('/')}/oauth/token"
     from eventyay.base.settings import GlobalSettingsObject
+
     gs = GlobalSettingsObject().settings
     client_id = gs.get("voxbento_client_id", "")
     client_secret = gs.get("voxbento_client_secret", "")

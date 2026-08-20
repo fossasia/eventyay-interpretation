@@ -15,8 +15,8 @@ from .models import VoxbentoOAuthGrant
 
 def generate_pkce():
     """Generate a random code_verifier and its S256 code_challenge."""
-    verifier = base64.urlsafe_b64encode(os.urandom(64)).decode('utf-8').rstrip('=')
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('utf-8')).digest()).decode('utf-8').rstrip('=')
+    verifier = base64.urlsafe_b64encode(os.urandom(64)).decode("utf-8").rstrip("=")
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("utf-8")).digest()).decode("utf-8").rstrip("=")
     return verifier, challenge
 
 
@@ -26,13 +26,13 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         event = self.request.event
         from eventyay.base.settings import GlobalSettingsObject
+
         client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
         kwargs = {"organizer": event.organizer.slug, "event": event.slug}
-        redirect_uri = self.request.build_absolute_uri(
-            reverse("plugins:interpretation:oauth_callback", kwargs=kwargs)
-        )
+        redirect_uri = self.request.build_absolute_uri(reverse("plugins:interpretation:oauth_callback", kwargs=kwargs))
 
         from .backends.voxbento_credentials import get_voxbento_base_url
+
         voxbento_base = get_voxbento_base_url(event)
         if not voxbento_base:
             messages.error(request, _("Please configure the VoxBento Base URL in Interpreter settings first."))
@@ -42,10 +42,12 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
         request.session["voxbento_oauth_code_verifier"] = verifier
 
         import secrets
+
         state = secrets.token_urlsafe(16)
         request.session["voxbento_oauth_state"] = state
 
         import urllib.parse
+
         scope_str = "events:read rooms:write booths:read booths:write sessions:manage webhooks:manage"
         encoded_scope = urllib.parse.quote(scope_str)
 
@@ -78,13 +80,13 @@ class VoxbentoOAuthCallbackView(EventPermissionRequiredMixin, View):
             return redirect(reverse("plugins:interpretation:dashboard", kwargs=kwargs))
 
         from eventyay.base.settings import GlobalSettingsObject
+
         client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
         client_secret = GlobalSettingsObject().settings.get("voxbento_client_secret", "")
         kwargs = {"organizer": event.organizer.slug, "event": event.slug}
-        redirect_uri = self.request.build_absolute_uri(
-            reverse("plugins:interpretation:oauth_callback", kwargs=kwargs)
-        )
+        redirect_uri = self.request.build_absolute_uri(reverse("plugins:interpretation:oauth_callback", kwargs=kwargs))
         from .backends.voxbento_credentials import get_voxbento_base_url
+
         voxbento_base = get_voxbento_base_url(event)
         if not voxbento_base:
             messages.error(request, _("VoxBento Base URL is not configured."))
@@ -109,6 +111,7 @@ class VoxbentoOAuthCallbackView(EventPermissionRequiredMixin, View):
             from datetime import timedelta
 
             from django.utils import timezone
+
             expires_in = data.get("expires_in", 3600)
             expires_at = timezone.now() + timedelta(seconds=expires_in)
 
@@ -123,6 +126,7 @@ class VoxbentoOAuthCallbackView(EventPermissionRequiredMixin, View):
                 },
             )
             from .tasks import sync_voxbento_connection
+
             sync_voxbento_connection.delay(event.id)
 
             messages.success(request, _("Successfully connected to VoxBento!"))

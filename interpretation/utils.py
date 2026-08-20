@@ -109,33 +109,22 @@ def validate_backend_config(value) -> dict:
     if not isinstance(value, dict):
         raise ValueError(_("backend_config must be an object."))
     if len(value) > MAX_BACKEND_CONFIG_KEYS:
-        raise ValueError(
-            _("backend_config has too many keys (max %(max)d).")
-            % {"max": MAX_BACKEND_CONFIG_KEYS}
-        )
+        raise ValueError(_("backend_config has too many keys (max %(max)d).") % {"max": MAX_BACKEND_CONFIG_KEYS})
     try:
         encoded = json.dumps(value)
     except (TypeError, ValueError) as exc:
         raise ValueError(_("backend_config is not valid JSON.")) from exc
     if len(encoded) > MAX_BACKEND_CONFIG_BYTES:
-        raise ValueError(
-            _("backend_config is too large (max %(max)d bytes).")
-            % {"max": MAX_BACKEND_CONFIG_BYTES}
-        )
+        raise ValueError(_("backend_config is too large (max %(max)d bytes).") % {"max": MAX_BACKEND_CONFIG_BYTES})
     return dict(value)
 
 
 def validate_target_language_codes(codes: list[str]) -> list[str]:
     if len(codes) > MAX_TARGET_LANGUAGES:
-        raise ValueError(
-            _("Too many target languages (max %(max)d).")
-            % {"max": MAX_TARGET_LANGUAGES}
-        )
+        raise ValueError(_("Too many target languages (max %(max)d).") % {"max": MAX_TARGET_LANGUAGES})
     for code in codes:
         if len(code) > MAX_LANGUAGE_CODE_LEN:
-            raise ValueError(
-                _("Language code too long: %(code)s") % {"code": code[:32]}
-            )
+            raise ValueError(_("Language code too long: %(code)s") % {"code": code[:32]})
     return codes
 
 

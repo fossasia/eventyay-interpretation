@@ -29,7 +29,7 @@ def sync_voxbento_connection(self, event_id: int) -> None:
             self.retry(exc=e)
         except MaxRetriesExceededError:
             logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}")
-            grant = getattr(event, 'voxbento_oauth_grant', None)
+            grant = getattr(event, "voxbento_oauth_grant", None)
             if grant:
                 grant.webhook_subscription_failed = True
                 grant.save(update_fields=["webhook_subscription_failed"])
@@ -41,13 +41,13 @@ def sync_voxbento_connection(self, event_id: int) -> None:
                 self.retry(exc=e)
             except MaxRetriesExceededError:
                 logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}")
-                grant = getattr(event, 'voxbento_oauth_grant', None)
+                grant = getattr(event, "voxbento_oauth_grant", None)
                 if grant:
                     grant.webhook_subscription_failed = True
                     grant.save(update_fields=["webhook_subscription_failed"])
         else:
             logger.error(f"Unexpected error syncing VoxBento connection for event {event_id}: {e}", exc_info=True)
-            grant = getattr(event, 'voxbento_oauth_grant', None)
+            grant = getattr(event, "voxbento_oauth_grant", None)
             if grant:
                 grant.webhook_subscription_failed = True
                 grant.save(update_fields=["webhook_subscription_failed"])
