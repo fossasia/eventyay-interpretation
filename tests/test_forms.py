@@ -1,6 +1,5 @@
 """Tests for interpretation forms."""
 
-
 from interpretation.forms import (
     InterpretationSettingsForm,
 )

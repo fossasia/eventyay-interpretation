@@ -1,6 +1,5 @@
 """Tests for plugin settings."""
 
-
 from interpretation.settings import (
     SETTING_IS_ENABLED,
     SETTING_SUSI_AUTH_TOKEN,
