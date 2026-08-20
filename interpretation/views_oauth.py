@@ -56,7 +56,7 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
             f"&client_id={client_id}&redirect_uri={redirect_uri}"
             f"&scope={encoded_scope}"
             f"&code_challenge={challenge}&code_challenge_method=S256"
-            f"&event=testevent2"
+            f"&event={event.slug}"
             f"&state={state}"
         )
         return redirect(auth_url)
