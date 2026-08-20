@@ -1,5 +1,7 @@
 """Tests for RoomConfigureForm."""
 
+import pytest
+
 from interpretation.forms import RoomConfigureForm
 from interpretation.models import RoomInterpretation
 
@@ -11,11 +13,6 @@ class _FakeEvent:
     def __int__(self):
         return self.id
 
-    id = 1
-    pk = 1
-    id = 1
-    pk = 1
-
     def get_plugins(self):
         return ["interpretation"]
 
@@ -25,6 +22,7 @@ class _FakeEvent:
             return default
 
 
+@pytest.mark.django_db
 def test_room_configure_form_lists_interpreters():
     form = RoomConfigureForm(event=_FakeEvent())
     ids = [choice[0] for choice in form.fields["interpreter"].choices]
@@ -32,6 +30,7 @@ def test_room_configure_form_lists_interpreters():
     assert RoomInterpretation.INTERPRETER_SUSI not in ids
 
 
+@pytest.mark.django_db
 def test_room_configure_form_accepts_interpreter_and_enabled():
     form = RoomConfigureForm(
         event=_FakeEvent(),
