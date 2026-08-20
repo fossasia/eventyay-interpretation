@@ -19,10 +19,7 @@ pytestmark = pytest.mark.django_db
 
 def test_normalize_audio_source_youtube_id():
     assert normalize_audio_source("dQw4w9WgXcQ") == "dQw4w9WgXcQ"
-    assert (
-        normalize_audio_source("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-        == "dQw4w9WgXcQ"
-    )
+    assert normalize_audio_source("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
 
 
 def test_normalize_audio_source_whep_url():
@@ -42,9 +39,7 @@ def test_validate_language_streams_rejects_duplicate_language():
 
 
 def test_attendee_language_streams_includes_original():
-    streams = attendee_language_streams(
-        [{"language": "German", "youtube_id": "https://whep.example/de"}]
-    )
+    streams = attendee_language_streams([{"language": "German", "youtube_id": "https://whep.example/de"}])
     assert streams[0]["language"] == "Original"
     assert is_usable_stream_entry(streams[1]) is True
 
@@ -105,10 +100,7 @@ def test_get_room_config_includes_plugin_streams(event, room):
     )
     config = get_room_config(room, set())
     assert config["interpretation_use_plugin_streams"] is True
-    assert any(
-        entry["language"] == "German"
-        for entry in config["interpretation_language_streams"]
-    )
+    assert any(entry["language"] == "German" for entry in config["interpretation_language_streams"])
 
 
 def test_api_streams_endpoint(organizer_client, event, room):
@@ -121,9 +113,7 @@ def test_api_streams_endpoint(organizer_client, event, room):
     )
     org = event.organizer.slug
     slug = event.slug
-    response = organizer_client.get(
-        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/streams/"
-    )
+    response = organizer_client.get(f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/streams/")
     assert response.status_code == 200
     payload = response.json()
     assert payload["use_plugin_language_streams"] is True
@@ -139,9 +129,7 @@ def test_api_config_patch_language_streams(organizer_client, event, room):
     RoomInterpretation.objects.create(room=room)
     org = event.organizer.slug
     slug = event.slug
-    url = (
-        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
-    )
+    url = f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/config/"
     response = organizer_client.patch(
         url,
         {

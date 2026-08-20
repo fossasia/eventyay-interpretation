@@ -15,10 +15,11 @@ def get_fernet():
         import hashlib
 
         from django.conf import settings
+
         # Derive a 32-byte url-safe base64 key from Django's SECRET_KEY
-        secret = getattr(settings, "SECRET_KEY", "fallback-secret-key").encode('utf-8')
+        secret = getattr(settings, "SECRET_KEY", "fallback-secret-key").encode("utf-8")
         derived_key = base64.urlsafe_b64encode(hashlib.sha256(secret).digest())
-        keys_str = derived_key.decode('utf-8')
+        keys_str = derived_key.decode("utf-8")
 
     keys = [k.strip() for k in keys_str.split(",") if k.strip()]
     if not keys:

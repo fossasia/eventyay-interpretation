@@ -46,7 +46,7 @@ class VoxbentoBackend(InterpreterBackend):
         if not base_url:
             return
 
-        grant = getattr(event, 'voxbento_oauth_grant', None)
+        grant = getattr(event, "voxbento_oauth_grant", None)
         try:
             access_token = get_valid_access_token(grant.id) if grant else None
         except VoxbentoReauthorizationRequired:
@@ -80,9 +80,7 @@ class VoxbentoBackend(InterpreterBackend):
                 "room_id": interpretation.room.pk,
             }
             try:
-                response = requests.post(
-                    url, headers=headers, json=payload, timeout=5.0
-                )
+                response = requests.post(url, headers=headers, json=payload, timeout=5.0)
                 if response.ok:
                     data = response.json()
                     booths[lang] = {
@@ -128,6 +126,7 @@ class VoxbentoBackend(InterpreterBackend):
 
     def credentials_account_label(self, event) -> str:
         from ..models import VoxbentoOAuthGrant
+
         if VoxbentoOAuthGrant.objects.filter(event=event).exists():
             return _("VoxBento OAuth Connection")
         return _("VoxBento API Key")

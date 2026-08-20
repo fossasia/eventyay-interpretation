@@ -69,9 +69,7 @@ def _public_session_id(interpretation: RoomInterpretation | None) -> str:
     return interpretation.backend_session_id or ""
 
 
-def is_room_interpretation_ready(
-    room, event, interpretation: RoomInterpretation | None = None
-) -> bool:
+def is_room_interpretation_ready(room, event, interpretation: RoomInterpretation | None = None) -> bool:
     if interpretation is None:
         interpretation = get_interpretation(room)
     if interpretation is None or not interpretation.room_enabled:
@@ -99,30 +97,18 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         interpreter = interpretation.interpreter
         room_enabled = interpretation.room_enabled
     backend = get_backend(interpreter)
-    stored_language_streams = (
-        list(getattr(interpretation, "language_streams", None) or [])
-        if interpretation
-        else []
-    )
+    stored_language_streams = list(getattr(interpretation, "language_streams", None) or []) if interpretation else []
     return {
         "interpreter": interpreter,
         "interpreter_label": str(backend.label),
         "room_enabled": room_enabled,
         "interpreter_ready": is_room_interpretation_ready(room, event, interpretation),
         "available_interpreters": list_available_interpreters(event),
-        "target_languages": list(interpretation.target_languages or [])
-        if interpretation
-        else [],
-        "transcription_provider": interpretation.transcription_provider
-        if interpretation
-        else "",
-        "translation_provider": interpretation.translation_provider
-        if interpretation
-        else "",
+        "target_languages": list(interpretation.target_languages or []) if interpretation else [],
+        "transcription_provider": interpretation.transcription_provider if interpretation else "",
+        "translation_provider": interpretation.translation_provider if interpretation else "",
         "backend_config": _public_backend_config(interpretation),
-        "status": normalize_session_status(
-            interpretation.status if interpretation else RoomInterpretation.STATUS_IDLE
-        ),
+        "status": normalize_session_status(interpretation.status if interpretation else RoomInterpretation.STATUS_IDLE),
         "session_id": _public_session_id(interpretation),
         "stream_url": stream_url or detected_stream_url,
         "detected_stream_url": detected_stream_url,
@@ -134,9 +120,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     }
 
 
-def _merge_public_backend_config(
-    interpretation: RoomInterpretation, incoming: dict
-) -> dict:
+def _merge_public_backend_config(interpretation: RoomInterpretation, incoming: dict) -> dict:
     """Merge non-credential backend_config keys; credentials are sign-in only."""
     config = strip_room_credential_keys(interpretation.backend_config)
     for key, value in validate_backend_config(incoming).items():
@@ -153,13 +137,9 @@ def _apply_backend_config(interpretation: RoomInterpretation, data: dict) -> Non
             data["backend_config"],
         )
     if "transcription_provider" in data:
-        interpretation.transcription_provider = (
-            data.get("transcription_provider") or ""
-        ).strip()
+        interpretation.transcription_provider = (data.get("transcription_provider") or "").strip()
     if "translation_provider" in data:
-        interpretation.translation_provider = (
-            data.get("translation_provider") or ""
-        ).strip()
+        interpretation.translation_provider = (data.get("translation_provider") or "").strip()
 
 
 def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
@@ -168,9 +148,7 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
     old_interpreter = interpretation.interpreter
 
     if "interpreter" in data:
-        interpreter = (
-            data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE
-        ).strip()
+        interpreter = (data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE).strip()
         if not is_known_interpreter(interpreter):
             raise ValueError(_("Unknown interpreter."))
         interpretation.interpreter = interpreter
@@ -185,9 +163,7 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
 
     if "language_streams" in data:
         try:
-            interpretation.language_streams = validate_language_streams(
-                data.get("language_streams")
-            )
+            interpretation.language_streams = validate_language_streams(data.get("language_streams"))
         except ValidationError as exc:
             raise ValueError(str(exc)) from exc
 
@@ -246,10 +222,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
     if not backend.is_configured(event):
         return SessionResult(
             ok=False,
-            error=str(
-                _("Configure %(name)s under Configure interpreters before starting.")
-                % {"name": backend.label}
-            ),
+            error=str(_("Configure %(name)s under Configure interpreters before starting.") % {"name": backend.label}),
             interpretation=interpretation,
         )
 
@@ -264,8 +237,7 @@ def start_room_session(room, event, *, stream_url_override: str = "") -> Session
 
     if (
         interpretation.backend_session_id
-        and normalize_session_status(interpretation.status)
-        == RoomInterpretation.STATUS_RUNNING
+        and normalize_session_status(interpretation.status) == RoomInterpretation.STATUS_RUNNING
     ):
         return SessionResult(ok=True, interpretation=interpretation)
 
@@ -310,9 +282,7 @@ def clear_room_interpretation_setup(room, event) -> RoomInterpretation:
     )
 
 
-def _clear_local_session(
-    interpretation: RoomInterpretation, *, session_id: str = ""
-) -> None:
+def _clear_local_session(interpretation: RoomInterpretation, *, session_id: str = "") -> None:
     if hasattr(interpretation, "log_action") and session_id:
         interpretation.log_action(
             "interpretation.room.stopped",
@@ -347,10 +317,7 @@ def stop_room_session(room, event) -> SessionResult:
         return SessionResult(
             ok=True,
             warning=str(
-                _(
-                    "Stopped interpretation for this room locally, but the "
-                    "interpreter backend reported: %(error)s"
-                )
+                _("Stopped interpretation for this room locally, but the interpreter backend reported: %(error)s")
                 % {"error": remote_error}
             ),
             interpretation=interpretation,
@@ -361,9 +328,7 @@ def stop_room_session(room, event) -> SessionResult:
 def stop_all_event_sessions(event) -> None:
     """Stop every room session for an event (e.g. when interpretation is disabled)."""
     interpretations = (
-        RoomInterpretation.objects.filter(room__event=event)
-        .exclude(backend_session_id="")
-        .select_related("room")
+        RoomInterpretation.objects.filter(room__event=event).exclude(backend_session_id="").select_related("room")
     )
     for interpretation in interpretations:
         stop_room_session(interpretation.room, event)

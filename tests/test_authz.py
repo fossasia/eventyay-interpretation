@@ -11,10 +11,7 @@ User = get_user_model()
 def _room_interpretation_url(event, room, suffix):
     org = event.organizer.slug
     slug = event.slug
-    return (
-        f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}"
-        f"/interpretation/{suffix}/"
-    )
+    return f"/api/v1/organizers/{org}/events/{slug}/rooms/{room.pk}/interpretation/{suffix}/"
 
 
 @pytest.fixture
@@ -58,25 +55,19 @@ def test_restricted_user_denied_dashboard(restricted_client, dashboard_url):
     assert response.status_code in {403, 302}
 
 
-def test_restricted_user_denied_interpretation_streams_api(
-    restricted_client, event, room
-):
+def test_restricted_user_denied_interpretation_streams_api(restricted_client, event, room):
     response = restricted_client.get(_room_interpretation_url(event, room, "streams"))
 
     assert response.status_code == 403
 
 
-def test_restricted_user_denied_interpretation_config_api(
-    restricted_client, event, room
-):
+def test_restricted_user_denied_interpretation_config_api(restricted_client, event, room):
     response = restricted_client.get(_room_interpretation_url(event, room, "config"))
 
     assert response.status_code == 403
 
 
-def test_cross_event_room_action_returns_404(
-    organizer_client, event, connected_event, rooms_url
-):
+def test_cross_event_room_action_returns_404(organizer_client, event, connected_event, rooms_url):
     from eventyay.base.models import Event, Room
 
     other = Event.objects.create(

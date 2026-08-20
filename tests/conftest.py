@@ -165,8 +165,6 @@ VOXBENTO_EVENT_CREDENTIALS = {
 }
 
 
-
-
 def apply_voxbento_event_credentials(event):
     for key, value in VOXBENTO_EVENT_CREDENTIALS.items():
         event.settings.set(key, value)

@@ -47,10 +47,7 @@ class RoomInterpretation(LoggedModel):
     room_enabled = models.BooleanField(
         verbose_name=_("Interpretation enabled for room"),
         default=False,
-        help_text=_(
-            "When enabled, this room can run interpretation using the "
-            "selected interpreter."
-        ),
+        help_text=_("When enabled, this room can run interpretation using the selected interpreter."),
     )
     stream_url = models.URLField(
         verbose_name=_("Stream URL"),
@@ -103,9 +100,7 @@ class RoomInterpretation(LoggedModel):
         verbose_name=_("Language streams"),
         default=list,
         blank=True,
-        help_text=_(
-            "Attendee audio translation channels (YouTube ID or WHEP URL per language)."
-        ),
+        help_text=_("Attendee audio translation channels (YouTube ID or WHEP URL per language)."),
     )
 
     class Meta:
@@ -113,10 +108,7 @@ class RoomInterpretation(LoggedModel):
         verbose_name_plural = _("Room interpretations")
 
     def __str__(self):
-        return (
-            f"RoomInterpretation(room={self.room_id}, "
-            f"interpreter={self.interpreter}, status={self.status})"
-        )
+        return f"RoomInterpretation(room={self.room_id}, interpreter={self.interpreter}, status={self.status})"
 
 
 class VoxbentoOAuthGrant(LoggedModel):

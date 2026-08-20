@@ -68,9 +68,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         stream_url_override = ""
         if isinstance(request.data, dict):
             stream_url_override = (request.data.get("stream_url") or "").strip()
-        result = start_room_session(
-            room, self.event, stream_url_override=stream_url_override
-        )
+        result = start_room_session(room, self.event, stream_url_override=stream_url_override)
         if not result.ok:
             return Response({"detail": result.error}, status=400)
         payload = serialize_room_interpretation(room, self.event, result.interpretation)
@@ -101,7 +99,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
 
         base_url = get_voxbento_base_url(self.event)
 
-        grant = getattr(self.event, 'voxbento_oauth_grant', None)
+        grant = getattr(self.event, "voxbento_oauth_grant", None)
         try:
             api_key = get_valid_access_token(grant.id) if grant else None
         except VoxbentoReauthorizationRequired:
@@ -111,9 +109,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             api_key = get_voxbento_api_key(self.event)
 
         if not base_url or not api_key:
-            return Response(
-                {"detail": "VoxBento is not configured for this event."}, status=400
-            )
+            return Response({"detail": "VoxBento is not configured for this event."}, status=400)
 
         url = f"{base_url.rstrip('/')}/api/v1/tokens/listener"
         headers = {
@@ -126,9 +122,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             if response.ok:
                 return Response({"token": response.json().get("token")})
             else:
-                return Response(
-                    {"detail": f"VoxBento API Error: {response.text}"}, status=400
-                )
+                return Response({"detail": f"VoxBento API Error: {response.text}"}, status=400)
         except requests.RequestException as e:
             return Response({"detail": f"Connection failed: {e}"}, status=400)
 

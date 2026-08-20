@@ -14,12 +14,12 @@ logger = logging.getLogger(__name__)
 def get_webhook_target_url() -> str:
     """Return the webhook receiver URL."""
     if settings.DEBUG:
-        host = getattr(settings, 'INTERPRETATION_WEBHOOK_PUBLIC_HOST', None)
+        host = getattr(settings, "INTERPRETATION_WEBHOOK_PUBLIC_HOST", None)
         if host:
-            return urljoin(host, '/interpretation/voxbento/webhook/')
+            return urljoin(host, "/interpretation/voxbento/webhook/")
 
-    site_url = getattr(settings, 'SITE_URL', 'http://localhost:8000')
-    return urljoin(site_url, '/interpretation/voxbento/webhook/')
+    site_url = getattr(settings, "SITE_URL", "http://localhost:8000")
+    return urljoin(site_url, "/interpretation/voxbento/webhook/")
 
 
 def subscribe_to_voxbento_webhooks(event: Event) -> None:
@@ -30,7 +30,7 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
     from django.db import transaction
 
     with transaction.atomic():
-        grant = getattr(event, 'voxbento_oauth_grant', None)
+        grant = getattr(event, "voxbento_oauth_grant", None)
         if not grant:
             return
 
@@ -71,7 +71,7 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
         target_url = get_webhook_target_url()
         payload = {
             "target_url": target_url,
-            "event_types": ["room.interpretation.started", "room.interpretation.stopped", "room.interpretation.failed"]
+            "event_types": ["room.interpretation.started", "room.interpretation.stopped", "room.interpretation.failed"],
         }
 
         access_token = get_valid_access_token(grant.id)
@@ -108,9 +108,11 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
         grant.webhook_secret_key = data["secret_key"]
         grant.webhook_scope_denied = False
         grant.webhook_subscription_failed = False
-        grant.save(update_fields=[
-            "webhook_subscription_id",
-            "webhook_secret_key",
-            "webhook_scope_denied",
-            "webhook_subscription_failed"
-        ])
+        grant.save(
+            update_fields=[
+                "webhook_subscription_id",
+                "webhook_secret_key",
+                "webhook_scope_denied",
+                "webhook_subscription_failed",
+            ]
+        )

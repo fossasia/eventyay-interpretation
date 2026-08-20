@@ -15,9 +15,7 @@ from django.utils.translation import gettext_lazy as _
 ORIGINAL_LANGUAGE = "Original"
 MAX_LANGUAGE_STREAMS = 20
 
-_YOUTUBE_ID_RE = re.compile(
-    r"(?:youtu\.be/|v=|/embed/|/shorts/|/live/|/v/)([0-9A-Za-z_-]{11})"
-)
+_YOUTUBE_ID_RE = re.compile(r"(?:youtu\.be/|v=|/embed/|/shorts/|/live/|/v/)([0-9A-Za-z_-]{11})")
 
 
 def normalize_youtube_video_id(value: str) -> str | None:
@@ -92,27 +90,20 @@ def validate_language_streams(streams) -> list[dict]:
         if language == ORIGINAL_LANGUAGE:
             raise ValidationError(_("Do not store Original in language streams."))
         if language in seen_languages:
-            raise ValidationError(
-                _("Duplicate language: %(language)s") % {"language": language}
-            )
+            raise ValidationError(_("Duplicate language: %(language)s") % {"language": language})
         if not entry["youtube_id"]:
             raise ValidationError(_("Each language needs a YouTube ID or WHEP URL."))
         seen_languages.add(language)
         cleaned.append(entry)
 
     if len(cleaned) > MAX_LANGUAGE_STREAMS:
-        raise ValidationError(
-            _("At most %(max)s language streams are allowed.")
-            % {"max": MAX_LANGUAGE_STREAMS}
-        )
+        raise ValidationError(_("At most %(max)s language streams are allowed.") % {"max": MAX_LANGUAGE_STREAMS})
     return cleaned
 
 
 def attendee_language_streams(stored_streams: list | None) -> list[dict]:
     """Dropdown payload for the video room, always including Original."""
-    streams = [
-        entry for entry in (stored_streams or []) if is_usable_stream_entry(entry)
-    ]
+    streams = [entry for entry in (stored_streams or []) if is_usable_stream_entry(entry)]
     normalized = [normalize_stream_entry(entry) for entry in streams]
     if not any(entry["language"] == ORIGINAL_LANGUAGE for entry in normalized):
         normalized.insert(

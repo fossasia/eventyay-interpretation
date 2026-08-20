@@ -112,9 +112,7 @@ def test_login_returns_token_from_cookie(monkeypatch):
 
 
 def test_login_rejects_bad_credentials(monkeypatch):
-    monkeypatch.setattr(
-        requests, "post", lambda *a, **k: FakeResponse(401, {"status": "error"})
-    )
+    monkeypatch.setattr(requests, "post", lambda *a, **k: FakeResponse(401, {"status": "error"}))
     with pytest.raises(SusiError):
         SusiClient("https://example.com").login("a@b.c", "wrong")
 

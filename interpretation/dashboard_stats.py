@@ -11,10 +11,7 @@ def build_overview_context(event) -> dict:
     """Return template context for the interpretation overview landing page."""
     rooms_qs = event.rooms.filter(deleted=False).order_by("name")
     interpretations = {
-        ri.room_id: ri
-        for ri in RoomInterpretation.objects.filter(room__event=event).select_related(
-            "room"
-        )
+        ri.room_id: ri for ri in RoomInterpretation.objects.filter(room__event=event).select_related("room")
     }
 
     room_total = rooms_qs.count()
@@ -40,9 +37,7 @@ def build_overview_context(event) -> dict:
             status = normalize_session_status(interpretation.status)
             interpreter_label = str(get_backend(interpretation.interpreter).label)
             target_languages = list(interpretation.target_languages or [])
-            interpreter_ready = is_room_interpretation_ready(
-                room, event, interpretation
-            )
+            interpreter_ready = is_room_interpretation_ready(room, event, interpretation)
 
         if room_on:
             room_enabled += 1
@@ -58,9 +53,7 @@ def build_overview_context(event) -> dict:
         if room_on and not interpreter_ready:
             room_needs_setup += 1
         if room_on and data_interpreter != RoomInterpretation.INTERPRETER_NONE:
-            interpreters_in_use[data_interpreter] = (
-                interpreters_in_use.get(data_interpreter, 0) + 1
-            )
+            interpreters_in_use[data_interpreter] = interpreters_in_use.get(data_interpreter, 0) + 1
 
         if status == RoomInterpretation.STATUS_RUNNING:
             snapshot_status = "running"
