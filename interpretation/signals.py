@@ -85,3 +85,40 @@ def register_voxbento_global_settings(sender, **kwargs):
             ),
         ]
     )
+
+
+from django.db import transaction
+from django.db.models.signals import post_delete, post_save
+from eventyay.base.models import Room
+
+from .models import RoomInterpretation
+from .tasks import sync_single_room_to_voxbento
+
+
+@receiver(post_save, sender=RoomInterpretation, dispatch_uid="interpretation_room_interp_post_save")
+def room_interpretation_post_save(sender, instance, created, **kwargs):
+    if PLUGIN_MODULE not in instance.room.event.get_plugins():
+        return
+
+    def _sync():
+        sync_single_room_to_voxbento.delay(instance.room.id, instance.room.event_id, "upsert")
+
+    transaction.on_commit(_sync)
+
+
+@receiver(post_save, sender=Room, dispatch_uid="interpretation_room_post_save")
+def room_post_save(sender, instance, created, **kwargs):
+    if PLUGIN_MODULE not in instance.event.get_plugins():
+        return
+
+    transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(instance.id, instance.event_id, "upsert"))
+
+
+@receiver(post_delete, sender=Room, dispatch_uid="interpretation_room_post_delete")
+def room_post_delete(sender, instance, **kwargs):
+    if PLUGIN_MODULE not in instance.event.get_plugins():
+        return
+
+    room_id = instance.id
+    event_id = instance.event_id
+    transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, "delete"))

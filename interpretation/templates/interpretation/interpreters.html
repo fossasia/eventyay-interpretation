@@ -39,7 +39,7 @@
                                     <div class="interpretation-account-server">{{ entry.server_host }}</div>
                                 </div>
                             </div>
-                            <form method="post" class="interpretation-interpreter-actions">
+                            <form method="post" class="interpretation-interpreter-actions" id="deleteVoxBentoForm_{{ entry.id }}">
                                 {% csrf_token %}
                                 <input type="hidden" name="interpretation_interpreter_id" value="{{ entry.id }}">
                                 <button type="submit"
@@ -54,6 +54,20 @@
                                         class="btn btn-link btn-sm">
                                     {% trans "Disconnect" %}
                                 </button>
+                                {% if entry.id == "voxbento" %}
+                                <button type="submit"
+                                        id="hiddenDeleteSubmitBtn"
+                                        name="interpretation_interpreter_action"
+                                        value="delete_event"
+                                        style="display: none;">
+                                </button>
+                                <button type="button"
+                                        class="btn btn-danger btn-sm pull-right"
+                                        data-toggle="modal"
+                                        data-target="#deleteVoxBentoEventModal">
+                                    <i class="fa fa-trash"></i> {% trans "Delete Event" %}
+                                </button>
+                                {% endif %}
                             </form>
                         </div>
                     {% else %}
@@ -94,4 +108,76 @@
             <p class="text-muted">{% trans "No interpreter services are available yet." %}</p>
         {% endfor %}
     </div>
+
+<div class="modal fade" id="deleteVoxBentoEventModal" tabindex="-1" role="dialog" aria-labelledby="deleteVoxBentoEventModalLabel">
+  <div class="modal-dialog" role="document" style="margin-top: 100px;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="deleteVoxBentoEventModalLabel"><i class="fa fa-exclamation-triangle"></i> {% trans "Delete Event" %}</h4>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+            {% trans "To permanently delete this event and all associated rooms and transcripts from VoxBento, type the exact event name:" %}
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="deleteEventNameInput" class="control-label" style="font-weight: bold; font-size: 1.1em; margin-bottom: 10px;">{{ event.name }}</label>
+            <input type="text" id="deleteEventNameInput" class="form-control" autocomplete="off" placeholder="{% trans "Event name" %}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">{% trans "Cancel" %}</button>
+        <button type="button" id="confirmDeleteEventBtn" class="btn btn-danger" disabled>
+            <i class="fa fa-trash"></i> {% trans "Delete Event" %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var input = document.getElementById("deleteEventNameInput");
+        var btn = document.getElementById("confirmDeleteEventBtn");
+        var targetName = "{{ event.name|escapejs }}";
+
+        if (input && btn) {
+            input.addEventListener("input", function() {
+                // Ignore case and leading/trailing spaces for better UX
+                btn.disabled = (input.value.trim().toLowerCase() !== targetName.trim().toLowerCase());
+            });
+            btn.addEventListener("click", function() {
+                var form = document.getElementById("deleteVoxBentoForm_voxbento");
+                if (form) {
+                    var submitInput = document.createElement("input");
+                    submitInput.type = "hidden";
+                    submitInput.name = "interpretation_interpreter_action";
+                    submitInput.value = "delete_event";
+                    form.appendChild(submitInput);
+                    form.submit();
+                } else {
+                    console.error("Delete form not found");
+                }
+            });
+            
+            // Clear input when modal is shown (using standard DOM events in case jQuery isn't loaded)
+            var observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.attributeName === "class") {
+                        var modal = document.getElementById('deleteVoxBentoEventModal');
+                        if (modal && modal.classList.contains('in')) {
+                            input.value = "";
+                            btn.disabled = true;
+                            setTimeout(function() { input.focus(); }, 100);
+                        }
+                    }
+                });
+            });
+            var modalEl = document.getElementById('deleteVoxBentoEventModal');
+            if (modalEl) {
+                observer.observe(modalEl, { attributes: true });
+            }
+        }
+    });
+</script>
 {% endblock %}

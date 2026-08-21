@@ -116,3 +116,134 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
                 "webhook_subscription_failed",
             ]
         )
+
+
+def create_voxbento_event(event: Event) -> None:
+    """
+    Auto-provisions the event in VoxBento via POST /api/v1/events/
+    """
+    grant = getattr(event, "voxbento_oauth_grant", None)
+    if not grant:
+        return
+
+    base_url = get_voxbento_base_url(event)
+    if not base_url:
+        logger.warning("No base URL configured for VoxBento (Event %s)", event.id)
+        return
+
+    api_url = f"{base_url.rstrip('/')}/api/v1/events/"
+    access_token = get_valid_access_token(grant.id)
+    if not access_token:
+        return
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "slug": event.slug,
+        "name": str(event.name),
+    }
+
+    resp = requests.post(api_url, headers=headers, json=payload, timeout=5.0)
+
+    if resp.status_code == 409:
+        # Event already exists (idempotent success)
+        logger.info("VoxBento event %s already exists.", event.slug)
+        grant.event_provisioned = True
+        grant.event_provisioning_failed = False
+        grant.save(update_fields=["event_provisioned", "event_provisioning_failed"])
+        return
+
+    try:
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logger.error("Failed to provision VoxBento event %s: %s", event.id, e)
+        grant.event_provisioning_failed = True
+        grant.save(update_fields=["event_provisioning_failed"])
+        raise
+
+    grant.event_provisioned = True
+    grant.event_provisioning_failed = False
+    grant.save(update_fields=["event_provisioned", "event_provisioning_failed"])
+
+
+def delete_voxbento_event(event: Event) -> None:
+    """
+    Permanently wipes the event from VoxBento via DELETE /api/v1/events/{slug}
+    """
+    grant = getattr(event, "voxbento_oauth_grant", None)
+    if not grant:
+        return
+
+    base_url = get_voxbento_base_url(event)
+    if not base_url:
+        return
+
+    api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}"
+    access_token = get_valid_access_token(grant.id)
+    if not access_token:
+        raise ValueError("Cannot delete event: Requires an active OAuth connection.")
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+    }
+
+    resp = requests.delete(api_url, headers=headers, timeout=5.0)
+
+    if resp.status_code == 404:
+        return
+
+    if resp.status_code == 409:
+        raise ValueError("Cannot delete event: Active sessions are running.")
+
+    resp.raise_for_status()
+
+
+def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> None:
+    """
+    Upserts the room in VoxBento via PUT /api/v1/events/{event_slug}/rooms/{room_id}
+    """
+    grant = getattr(event, "voxbento_oauth_grant", None)
+    if not grant:
+        return
+
+    base_url = get_voxbento_base_url(event)
+    if not base_url:
+        return
+
+    api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}"
+    access_token = get_valid_access_token(grant.id)
+    if not access_token:
+        return
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    resp = requests.put(api_url, headers=headers, json=payload, timeout=5.0)
+    resp.raise_for_status()
+
+
+def delete_voxbento_room(event: Event, room_id: int) -> None:
+    """
+    Deletes the room in VoxBento via DELETE /api/v1/events/{event_slug}/rooms/{room_id}
+    """
+    grant = getattr(event, "voxbento_oauth_grant", None)
+    if not grant:
+        return
+
+    base_url = get_voxbento_base_url(event)
+    if not base_url:
+        return
+
+    api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}"
+    access_token = get_valid_access_token(grant.id)
+    if not access_token:
+        return
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.delete(api_url, headers=headers, timeout=5.0)
+    if resp.status_code != 404:
+        resp.raise_for_status()

@@ -128,6 +128,9 @@ class VoxbentoOAuthGrant(LoggedModel):
     needs_reauth = models.BooleanField(default=False)
     webhook_scope_denied = models.BooleanField(default=False)
     webhook_subscription_failed = models.BooleanField(default=False)
+    event_provisioned = models.BooleanField(default=False)
+    event_provisioning_failed = models.BooleanField(default=False)
+    room_sync_failed = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = _("VoxBento OAuth Grant")

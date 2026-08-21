@@ -129,6 +129,7 @@ class InterpretationOverview(
                 request, _("VoxBento requires reauthorization. Please reconnect via the Configure interpreters page.")
             )
 
+        context["voxbento_grant"] = grant
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
@@ -177,6 +178,19 @@ class InterpretationInterpreters(
                 request,
                 _("Disconnected %(name)s for this event.") % {"name": backend.label},
             )
+            return redirect(redirect_url)
+        if action == "delete_event":
+            if backend.id == "voxbento":
+                from .backends.voxbento_api import delete_voxbento_event
+
+                try:
+                    delete_voxbento_event(event)
+                    clear_interpreter_credentials(event, backend.id)
+                    messages.success(request, _("Permanently deleted VoxBento event and disconnected."))
+                except Exception as e:
+                    messages.error(request, _("Could not delete VoxBento event: %(error)s") % {"error": str(e)})
+            else:
+                messages.error(request, _("Delete event not supported for this interpreter."))
             return redirect(redirect_url)
 
         messages.error(request, _("Unknown interpreter action."))
