@@ -1,0 +1,26 @@
+name: Notify Eventyay Main Repo
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  dispatch:
+    if: github.repository_owner == 'fossasia'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch plugin_updated event
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.EVENTYAY_DISPATCH_TOKEN }}
+          repository: fossasia/eventyay
+          event-type: plugin_updated
+          client-payload: |
+            {
+              "plugin": "${{ github.event.repository.name }}",
+              "repo": "${{ github.repository }}",
+              "branch": "${{ github.ref_name }}",
+              "commit_sha": "${{ github.sha }}"
+            }
