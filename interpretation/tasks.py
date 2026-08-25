@@ -51,10 +51,10 @@ def sync_voxbento_connection(self, event_id: int) -> None:
             if isinstance(e, requests.HTTPError) and e.response is not None and e.response.status_code < 500:
                 logger.error(f"VoxBento webhook failed {e.response.status_code}: {e.response.text}")
                 from .models import VoxbentoOAuthGrant
-                VoxbentoOAuthGrant.objects.filter(
-                    id=grant.id,
-                    webhook_subscription_id__isnull=True
-                ).update(webhook_subscription_failed=True)
+
+                VoxbentoOAuthGrant.objects.filter(id=grant.id, webhook_subscription_id__isnull=True).update(
+                    webhook_subscription_failed=True
+                )
             else:
                 self.retry(exc=e)
 
