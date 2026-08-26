@@ -148,21 +148,30 @@ def _do_sync_single_room_to_voxbento(
             "target_languages": [],
         }
 
-        new_lang_set = _extract_langs_from_module_config(room.module_config)
-        payload["target_languages"] = list(new_lang_set)
+        from interpretation.backends.voxbento_api import get_voxbento_room_langs
+        from interpretation.settings import is_plugin_streams_enabled
 
-        # Determine which languages are being removed by comparing the
-        # Eventyay DB state BEFORE the save (old_module_config) with the new state.
-        # This is reliable: no VoxBento internal ID mapping needed.
-        if old_module_config is not None:
-            old_lang_set = _extract_langs_from_module_config(old_module_config)
-            langs_being_removed = old_lang_set - new_lang_set
+        use_plugin_streams = is_plugin_streams_enabled(event)
+        if use_plugin_streams:
+            interpretation = getattr(room, "interpretation", None)
+            if interpretation and interpretation.target_languages:
+                new_lang_set = set(interpretation.target_languages)
+            else:
+                new_lang_set = set()
         else:
-            langs_being_removed = set()
+            new_lang_set = _extract_langs_from_module_config(room.module_config)
+
+        payload["target_languages"] = list(new_lang_set)
 
         response_data = sync_voxbento_room(event, room_id, payload)
 
         if response_data.get("error") == 409:
+            # We got a 409, meaning an active session was found.
+            # To be certain we actually attempted to remove a language, we fetch the
+            # remote state of VoxBento and compare it with what we just sent.
+            old_lang_set = get_voxbento_room_langs(event, room_id)
+            langs_being_removed = old_lang_set - new_lang_set
+
             if langs_being_removed:
                 # A language with an active session is being deleted — block the save.
                 logger.error("VoxBento refused to sync room %s due to active session. Aborting.", room_id)
@@ -178,6 +187,11 @@ def _do_sync_single_room_to_voxbento(
                 )
                 return False
 
+        # On success, clear the sync failure flag if it was previously set
+        if grant.room_sync_failed:
+            grant.room_sync_failed = False
+            grant.save(update_fields=["room_sync_failed"])
+
         if response_data and "booths" in response_data:
             returned_urls = {
                 b["language"]: b.get("whep_url", f"{get_voxbento_base_url(event).rstrip('/')}/{b['whip_path']}/whep")
@@ -187,27 +201,53 @@ def _do_sync_single_room_to_voxbento(
             if not room_instance:
                 room.refresh_from_db()
 
-            needs_save = False
-            if room.module_config:
-                for module in room.module_config:
-                    if module.get("type") in ("livestream.youtube", "livestream.native"):
-                        config = module.get("config", {})
-                        languages = config.get("languageUrls", [])
-                        for lang_entry in languages:
-                            lang_name = lang_entry.get("language")
-                            if lang_name:
-                                lang_code = LANGUAGE_NAME_TO_CODE.get(lang_name.strip(), lang_name.strip().lower())
-                                if lang_code in returned_urls:
-                                    full_url = returned_urls[lang_code]
-                                    existing = lang_entry.get("youtube_id") or ""
-                                    if not existing or "/whep" in existing or "localhost" in existing:
-                                        if existing != full_url:
-                                            lang_entry["youtube_id"] = full_url
-                                            needs_save = True
+            if use_plugin_streams:
+                interpretation = getattr(room, "interpretation", None)
+                if interpretation:
+                    # Update language_streams
+                    new_streams = list(interpretation.language_streams) if interpretation.language_streams else []
 
-            if needs_save:
-                # Use update_fields to avoid re-triggering our pre_save signal.
-                Room.objects.filter(id=room.id).update(module_config=room.module_config)
+                    # Convert to a dict to update/merge urls
+                    stream_dict = {entry["language"]: entry for entry in new_streams if "language" in entry}
+                    needs_save = False
+
+                    for lang, full_url in returned_urls.items():
+                        if lang in stream_dict:
+                            existing = stream_dict[lang].get("youtube_id") or ""
+                            if not existing or "/whep" in existing or "localhost" in existing:
+                                if existing != full_url:
+                                    stream_dict[lang]["youtube_id"] = full_url
+                                    needs_save = True
+                        else:
+                            # Language added but wasn't in streams
+                            stream_dict[lang] = {"language": lang, "youtube_id": full_url}
+                            needs_save = True
+
+                    if needs_save:
+                        interpretation.language_streams = list(stream_dict.values())
+                        interpretation.save(update_fields=["language_streams"])
+            else:
+                needs_save = False
+                if room.module_config:
+                    for module in room.module_config:
+                        if module.get("type") in ("livestream.youtube", "livestream.native"):
+                            config = module.get("config", {})
+                            languages = config.get("languageUrls", [])
+                            for lang_entry in languages:
+                                lang_name = lang_entry.get("language")
+                                if lang_name:
+                                    lang_code = LANGUAGE_NAME_TO_CODE.get(lang_name.strip(), lang_name.strip().lower())
+                                    if lang_code in returned_urls:
+                                        full_url = returned_urls[lang_code]
+                                        existing = lang_entry.get("youtube_id") or ""
+                                        if not existing or "/whep" in existing or "localhost" in existing:
+                                            if existing != full_url:
+                                                lang_entry["youtube_id"] = full_url
+                                                needs_save = True
+
+                if needs_save:
+                    # Use update_fields to avoid re-triggering our pre_save signal.
+                    Room.objects.filter(id=room.id).update(module_config=room.module_config)
 
         return False
     except (Event.DoesNotExist, Room.DoesNotExist):
