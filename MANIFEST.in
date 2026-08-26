@@ -3,6 +3,7 @@ recursive-include interpretation/templates *
 recursive-include interpretation/locale *
 include LICENSE
 include uv.lock
+include *.yml
 exclude .gitlab-ci.yml
 exclude AGENTS.md
 recursive-exclude .agents *

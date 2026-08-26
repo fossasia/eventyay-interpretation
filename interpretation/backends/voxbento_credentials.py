@@ -104,7 +104,10 @@ def clear_voxbento_credentials(event: Event) -> None:
                     str(e),
                 )
 
-        grant.delete()
+        grant.access_token = ""
+        grant.refresh_token = ""
+        grant.is_disconnected = True
+        grant.save(update_fields=["access_token", "refresh_token", "is_disconnected"])
 
 
 def voxbento_server_host(event: Event) -> str:

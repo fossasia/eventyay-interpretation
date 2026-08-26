@@ -49,6 +49,7 @@ def list_available_interpreters(event=None) -> list[dict]:
             "id": backend.id,
             "label": str(backend.label),
             "configured": backend.is_configured(event),
+            "is_disconnected": backend.is_disconnected(event),
             "uses_event_credentials": backend.uses_event_credentials,
         }
         for backend in _BACKENDS.values()

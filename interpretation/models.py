@@ -126,6 +126,7 @@ class VoxbentoOAuthGrant(LoggedModel):
     webhook_subscription_id = models.CharField(max_length=255, null=True, blank=True)
     webhook_secret_key = EncryptedTextField(null=True, blank=True)
     needs_reauth = models.BooleanField(default=False)
+    is_disconnected = models.BooleanField(default=False)
     webhook_scope_denied = models.BooleanField(default=False)
     webhook_subscription_failed = models.BooleanField(default=False)
     event_provisioned = models.BooleanField(default=False)

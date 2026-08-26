@@ -61,6 +61,18 @@ def call_voxbento_refresh(refresh_token, base_url):
     return data
 
 
+import contextlib
+
+
+@contextlib.contextmanager
+def _get_cache_lock(lock_key):
+    if hasattr(cache, "lock"):
+        with cache.lock(lock_key, timeout=10, blocking_timeout=8):
+            yield
+    else:
+        yield
+
+
 def get_valid_access_token(grant_id):
     grant = VoxbentoOAuthGrant.objects.get(id=grant_id)
 
@@ -70,8 +82,7 @@ def get_valid_access_token(grant_id):
 
     lock_key = f"voxbento:refresh:{grant_id}"
     try:
-        # Use django-redis cache lock
-        with cache.lock(lock_key, timeout=10, blocking_timeout=8):
+        with _get_cache_lock(lock_key):
             grant.refresh_from_db()
 
             # Re-check after acquiring lock
@@ -103,7 +114,3 @@ def get_valid_access_token(grant_id):
         # Lock acquisition failed (timeout). Do not flag as needing reauth.
         logger.warning(f"Could not acquire lock to refresh VoxBento token for grant_id={grant_id}")
         raise VoxbentoTemporarilyUnavailable("Lock acquisition timed out during refresh")
-    except AttributeError:
-        # Fallback if cache.lock is not available (e.g. non-redis cache backend)
-        logger.error("cache.lock is not available. Please ensure django-redis is used.")
-        raise VoxbentoTemporarilyUnavailable("Redis lock backend unavailable")

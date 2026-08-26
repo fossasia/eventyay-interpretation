@@ -87,12 +87,36 @@ def register_voxbento_global_settings(sender, **kwargs):
     )
 
 
+import inspect
+import threading
+
+from asgiref.sync import async_to_sync
 from django.db import transaction
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from eventyay.base.models import Room
+from eventyay.base.services.event import notify_event_change
+from rest_framework.exceptions import ValidationError
 
 from .models import RoomInterpretation
-from .tasks import sync_single_room_to_voxbento
+from .tasks import ActiveSessionConflict, _do_sync_single_room_to_voxbento, sync_single_room_to_voxbento
+
+
+def _raise_appropriate_exception(msg: str, event_id: int = None):
+    short_msg = msg or "Booth is currently live. Refresh to restore."
+
+    if event_id is not None:
+        threading.Timer(1.0, lambda: async_to_sync(notify_event_change)(event_id)).start()
+
+    try:
+        from eventyay.features.live.exceptions import ConsumerException
+
+        for frame_record in inspect.stack():
+            if "channels/db.py" in frame_record.filename:
+                raise ConsumerException(short_msg, short_msg)
+    except ImportError:
+        pass
+
+    raise ValidationError({"module_config": [short_msg]})
 
 
 @receiver(post_save, sender=RoomInterpretation, dispatch_uid="interpretation_room_interp_post_save")
@@ -100,18 +124,64 @@ def room_interpretation_post_save(sender, instance, created, **kwargs):
     if PLUGIN_MODULE not in instance.room.event.get_plugins():
         return
 
-    def _sync():
-        sync_single_room_to_voxbento.delay(instance.room.id, instance.room.event_id, "upsert")
+    from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
 
-    transaction.on_commit(_sync)
+    needs_retry = False
+    try:
+        needs_retry = _do_sync_single_room_to_voxbento(
+            instance.room.id,
+            instance.room.event_id,
+            "upsert",
+            room_instance=instance.room,
+            old_module_config=None,  # RoomInterpretation changes are additive; no removal guard needed
+        )
+    except ActiveSessionConflict as e:
+        _raise_appropriate_exception(str(e), instance.room.event_id)
+    except VoxbentoReauthorizationRequired:
+        _raise_appropriate_exception(
+            "VoxBento authorization expired. Please reconnect your account in settings.", instance.room.event_id
+        )
+
+    if needs_retry:
+        transaction.on_commit(
+            lambda: sync_single_room_to_voxbento.delay(instance.room.id, instance.room.event_id, "upsert")
+        )
 
 
-@receiver(post_save, sender=Room, dispatch_uid="interpretation_room_post_save")
-def room_post_save(sender, instance, created, **kwargs):
+@receiver(pre_save, sender=Room, dispatch_uid="interpretation_room_pre_save")
+def room_pre_save(sender, instance, **kwargs):
     if PLUGIN_MODULE not in instance.event.get_plugins():
         return
 
-    transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(instance.id, instance.event_id, "upsert"))
+    # Fetch the CURRENT (pre-save) DB state so we can detect which languages
+    # are being removed. For new rooms (no PK yet), there is no old state.
+    old_module_config = None
+    if instance.pk:
+        try:
+            old_module_config = Room.objects.filter(pk=instance.pk).values_list("module_config", flat=True).first()
+        except Exception:
+            old_module_config = None
+
+    from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
+
+    needs_retry = False
+    try:
+        needs_retry = _do_sync_single_room_to_voxbento(
+            instance.id,
+            instance.event_id,
+            "upsert",
+            room_instance=instance,
+            old_module_config=old_module_config,
+        )
+    except ActiveSessionConflict as e:
+        _raise_appropriate_exception(str(e), instance.event_id)
+    except VoxbentoReauthorizationRequired:
+        _raise_appropriate_exception(
+            "VoxBento authorization expired. Please reconnect your account in settings.", instance.event_id
+        )
+
+    if needs_retry:
+        transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(instance.id, instance.event_id, "upsert"))
 
 
 @receiver(post_delete, sender=Room, dispatch_uid="interpretation_room_post_delete")

@@ -124,6 +124,15 @@ class VoxbentoBackend(InterpreterBackend):
     def disconnect(self, event) -> None:
         clear_voxbento_credentials(event)
 
+    def is_disconnected(self, event) -> bool:
+        from ..models import VoxbentoOAuthGrant
+
+        try:
+            grant = VoxbentoOAuthGrant.objects.get(event=event)
+            return grant.is_disconnected or not bool(grant.access_token)
+        except VoxbentoOAuthGrant.DoesNotExist:
+            return False
+
     def credentials_account_label(self, event) -> str:
         from ..models import VoxbentoOAuthGrant
 

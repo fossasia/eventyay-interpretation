@@ -186,6 +186,11 @@ class InterpretationInterpreters(
                 try:
                     delete_voxbento_event(event)
                     clear_interpreter_credentials(event, backend.id)
+
+                    from .models import VoxbentoOAuthGrant
+
+                    VoxbentoOAuthGrant.objects.filter(event=event).delete()
+
                     messages.success(request, _("Permanently deleted VoxBento event and disconnected."))
                 except Exception as e:
                     messages.error(request, _("Could not delete VoxBento event: %(error)s") % {"error": str(e)})
@@ -206,6 +211,7 @@ class InterpretationInterpreters(
                 "id": item["id"],
                 "label": item["label"],
                 "configured": item["configured"],
+                "is_disconnected": item.get("is_disconnected", False),
                 "uses_event_credentials": item["uses_event_credentials"],
             }
             if backend.uses_event_credentials:

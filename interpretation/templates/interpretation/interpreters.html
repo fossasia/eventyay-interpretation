@@ -33,27 +33,41 @@
                     {% if entry.configured %}
                         <div class="interpretation-account-card">
                             <div class="interpretation-account-main">
-                                <span class="interpretation-status-dot" aria-hidden="true"></span>
-                                <div>
-                                    <div class="interpretation-account-name">{{ entry.account }}</div>
-                                    <div class="interpretation-account-server">{{ entry.server_host }}</div>
-                                </div>
+                                {% if entry.is_disconnected %}
+                                    <span class="interpretation-status-dot" style="background-color: #ccc;" aria-hidden="true"></span>
+                                    <div>
+                                        <div class="interpretation-account-name">{{ entry.account }} <span class="text-muted">({% trans "Disconnected" %})</span></div>
+                                        <div class="interpretation-account-server">{{ entry.server_host }}</div>
+                                    </div>
+                                {% else %}
+                                    <span class="interpretation-status-dot" aria-hidden="true"></span>
+                                    <div>
+                                        <div class="interpretation-account-name">{{ entry.account }}</div>
+                                        <div class="interpretation-account-server">{{ entry.server_host }}</div>
+                                    </div>
+                                {% endif %}
                             </div>
                             <form method="post" class="interpretation-interpreter-actions" id="deleteVoxBentoForm_{{ entry.id }}">
                                 {% csrf_token %}
                                 <input type="hidden" name="interpretation_interpreter_id" value="{{ entry.id }}">
-                                <button type="submit"
-                                        name="interpretation_interpreter_action"
-                                        value="test"
-                                        class="btn btn-default btn-sm">
-                                    {% trans "Test connection" %}
-                                </button>
-                                <button type="submit"
-                                        name="interpretation_interpreter_action"
-                                        value="disconnect"
-                                        class="btn btn-link btn-sm">
-                                    {% trans "Disconnect" %}
-                                </button>
+                                {% if entry.is_disconnected and entry.id == "voxbento" %}
+                                    <a href="{% url 'plugins:interpretation:oauth_connect' event=request.event.slug organizer=request.event.organizer.slug %}" class="btn btn-primary btn-sm" style="margin-right: 10px;">
+                                        <i class="fa fa-plug"></i> {% trans "Reconnect" %}
+                                    </a>
+                                {% else %}
+                                    <button type="submit"
+                                            name="interpretation_interpreter_action"
+                                            value="test"
+                                            class="btn btn-default btn-sm">
+                                        {% trans "Test connection" %}
+                                    </button>
+                                    <button type="submit"
+                                            name="interpretation_interpreter_action"
+                                            value="disconnect"
+                                            class="btn btn-link btn-sm">
+                                        {% trans "Disconnect" %}
+                                    </button>
+                                {% endif %}
                                 {% if entry.id == "voxbento" %}
                                 <button type="submit"
                                         id="hiddenDeleteSubmitBtn"

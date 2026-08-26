@@ -41,7 +41,7 @@ urlpatterns = [
         name="oauth_connect",
     ),
     path(
-        _PREFIX + "voxbento/callback/",
+        "interpretation/voxbento/oauth/callback/",
         VoxbentoOAuthCallbackView.as_view(),
         name="oauth_callback",
     ),

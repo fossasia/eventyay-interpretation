@@ -71,7 +71,7 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
         target_url = get_webhook_target_url()
         payload = {
             "target_url": target_url,
-            "event_types": ["room.interpretation.started", "room.interpretation.stopped", "room.interpretation.failed"],
+            "event_types": ["booth.transcription.started", "booth.transcription.stopped", "booth.interpreter.joined"],
         }
 
         access_token = get_valid_access_token(grant.id)
@@ -200,22 +200,25 @@ def delete_voxbento_event(event: Event) -> None:
     resp.raise_for_status()
 
 
-def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> None:
+def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> dict:
     """
     Upserts the room in VoxBento via PUT /api/v1/events/{event_slug}/rooms/{room_id}
+    Returns the JSON response from VoxBento on success.
+    Raises RequestException on HTTP errors (except 409).
+    If 409 is returned (e.g. active session blocking sync), returns {"error": 409}.
     """
     grant = getattr(event, "voxbento_oauth_grant", None)
     if not grant:
-        return
+        return {}
 
     base_url = get_voxbento_base_url(event)
     if not base_url:
-        return
+        return {}
 
     api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}"
     access_token = get_valid_access_token(grant.id)
     if not access_token:
-        return
+        return {}
 
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -223,7 +226,17 @@ def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> None:
     }
 
     resp = requests.put(api_url, headers=headers, json=payload, timeout=5.0)
+
+    if resp.status_code == 409:
+        logger.error("VoxBento returned 409 Conflict for room sync on event %s room %s", event.id, room_id)
+        try:
+            detail = resp.json().get("detail", "Active session conflict")
+        except Exception:
+            detail = resp.text or "Active session conflict"
+        return {"error": 409, "detail": detail}
+
     resp.raise_for_status()
+    return resp.json()
 
 
 def delete_voxbento_room(event: Event, room_id: int) -> None:
@@ -247,3 +260,35 @@ def delete_voxbento_room(event: Event, room_id: int) -> None:
     resp = requests.delete(api_url, headers=headers, timeout=5.0)
     if resp.status_code != 404:
         resp.raise_for_status()
+
+
+def get_voxbento_room_langs(event: Event, room_id: int) -> set[str]:
+    """
+    Returns the set of language codes currently registered in VoxBento for this room.
+    Used to detect which languages are being removed during a sync, so we can
+    correctly scope the ActiveSessionConflict guard only to actual deletions.
+    Returns an empty set on any error (fail-open: no false positives).
+    """
+    try:
+        grant = getattr(event, "voxbento_oauth_grant", None)
+        if not grant:
+            return set()
+
+        base_url = get_voxbento_base_url(event)
+        if not base_url:
+            return set()
+
+        api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}/booths"
+        access_token = get_valid_access_token(grant.id)
+        if not access_token:
+            return set()
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+        resp = requests.get(api_url, headers=headers, timeout=5.0)
+        if resp.status_code != 200:
+            return set()
+
+        booths_data = resp.json()
+        return {b["language_code"] for b in booths_data if b.get("language_code")}
+    except Exception:
+        return set()

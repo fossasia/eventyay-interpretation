@@ -44,6 +44,10 @@ class InterpreterBackend:
     def disconnect(self, event: Event) -> None:
         raise NotImplementedError
 
+    def is_disconnected(self, event: Event) -> bool:
+        """Returns True if the interpreter has a preserved but disconnected state."""
+        return False
+
     def credentials_account_label(self, event: Event) -> str:
         return ""
 
