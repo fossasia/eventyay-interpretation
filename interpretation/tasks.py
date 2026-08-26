@@ -1,9 +1,7 @@
 import logging
-from importlib.resources import files
 
 import redis
 import requests
-import yaml
 from celery import shared_task
 from celery.exceptions import MaxRetriesExceededError
 from eventyay.base.models import Event, Room
@@ -15,6 +13,7 @@ from .backends.voxbento_api import (
     sync_voxbento_room,
 )
 from .backends.voxbento_credentials import get_voxbento_base_url
+from .language_map import language_code_for_name
 
 logger = logging.getLogger(__name__)
 
@@ -88,21 +87,6 @@ def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
         logger.error(f"Failed to bulk sync rooms for event {event_id}: {e}", exc_info=True)
 
 
-LANGUAGE_MAP_RESOURCE = files(__package__).joinpath("language_map.yml")
-
-
-def _load_language_map():
-    try:
-        with LANGUAGE_MAP_RESOURCE.open("r", encoding="utf-8") as handle:
-            return yaml.safe_load(handle) or {}
-    except OSError as e:
-        logger.error("Failed to load language_map.yml: %s", e)
-        return {}
-
-
-LANGUAGE_NAME_TO_CODE = _load_language_map()
-
-
 class ActiveSessionConflict(Exception):
     pass
 
@@ -117,8 +101,7 @@ def _extract_langs_from_module_config(module_config) -> set:
             for lang_entry in module.get("config", {}).get("languageUrls", []):
                 lang_name = lang_entry.get("language")
                 if lang_name:
-                    lang_code = LANGUAGE_NAME_TO_CODE.get(lang_name.strip(), lang_name.strip().lower())
-                    langs.add(lang_code)
+                    langs.add(language_code_for_name(lang_name))
     return langs
 
 
@@ -236,7 +219,7 @@ def _do_sync_single_room_to_voxbento(
                             for lang_entry in languages:
                                 lang_name = lang_entry.get("language")
                                 if lang_name:
-                                    lang_code = LANGUAGE_NAME_TO_CODE.get(lang_name.strip(), lang_name.strip().lower())
+                                    lang_code = language_code_for_name(lang_name)
                                     if lang_code in returned_urls:
                                         full_url = returned_urls[lang_code]
                                         existing = lang_entry.get("youtube_id") or ""
