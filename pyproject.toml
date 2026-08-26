@@ -36,6 +36,9 @@ repository = "https://github.com/fossasia/eventyay-interpretation"
 [tool.setuptools]
 include-package-data = true
 
+[tool.setuptools.package-data]
+interpretation = ["language_map.yml"]
+
 [tool.setuptools.dynamic]
 version = {attr = "interpretation.__version__"}
 

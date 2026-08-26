@@ -1,5 +1,5 @@
 import logging
-import os
+from importlib.resources import files
 
 import redis
 import requests
@@ -88,15 +88,15 @@ def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
         logger.error(f"Failed to bulk sync rooms for event {event_id}: {e}", exc_info=True)
 
 
-LANGUAGE_MAP_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "language_map.yml")
+LANGUAGE_MAP_RESOURCE = files(__package__).joinpath("language_map.yml")
 
 
 def _load_language_map():
     try:
-        with open(LANGUAGE_MAP_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    except Exception as e:
-        logger.error(f"Failed to load language_map.yml: {e}")
+        with LANGUAGE_MAP_RESOURCE.open("r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    except OSError as e:
+        logger.error("Failed to load language_map.yml: %s", e)
         return {}
 
 
