@@ -38,13 +38,13 @@ class VoxbentoBackend(InterpreterBackend):
         # So starting the session here just marks the room as active.
         return f"{event.slug}-{interpretation.room_id}"
 
-    def sync_booths(self, event, interpretation) -> None:
+    def sync_booths(self, event, interpretation) -> int:
         if not interpretation.target_languages:
-            return
+            return 0
 
         base_url = get_voxbento_base_url(event)
         if not base_url:
-            return
+            return 0
 
         grant = getattr(event, "voxbento_oauth_grant", None)
         try:
@@ -65,7 +65,7 @@ class VoxbentoBackend(InterpreterBackend):
             }
         else:
             logger.error("event=%s has no VoxBento credentials configured", event.slug)
-            return
+            return 0
 
         url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/booths"
 
@@ -74,6 +74,9 @@ class VoxbentoBackend(InterpreterBackend):
 
         import requests
 
+        from .voxbento_oauth import VoxbentoTemporarilyUnavailable
+
+        synced_count = 0
         for lang in interpretation.target_languages:
             payload = {
                 "language_code": lang,
@@ -83,18 +86,22 @@ class VoxbentoBackend(InterpreterBackend):
                 response = requests.post(url, headers=headers, json=payload, timeout=5.0)
                 if response.ok:
                     data = response.json()
+                    synced_count += 1
                     booths[lang] = {
                         "invite_url": data.get("interpreter_invite_url"),
                         "caption_url": data.get("caption_url"),
                         "whip_url": data.get("whip_url"),
                         "whep_url": data.get("whep_url"),
                     }
-            except requests.RequestException:
-                pass
+                else:
+                    raise VoxbentoTemporarilyUnavailable(f"VoxBento API returned {response.status_code}")
+            except requests.RequestException as e:
+                raise VoxbentoTemporarilyUnavailable(f"Network error connecting to VoxBento: {e}") from e
 
         config["booths"] = booths
         interpretation.backend_config = config
         interpretation.save(update_fields=["backend_config"])
+        return synced_count
 
     def stop(self, event, interpretation) -> None:
         # Stopping just marks it inactive on Eventyay side.

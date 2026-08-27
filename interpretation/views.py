@@ -133,6 +133,31 @@ class InterpretationOverview(
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
+        if request.POST.get("action") == "sync_all_rooms":
+            from .backends.registry import get_backend
+            from .backends.voxbento_oauth import VoxbentoTemporarilyUnavailable
+            from .models import RoomInterpretation
+
+            backend = get_backend(RoomInterpretation.INTERPRETER_VOXBENTO)
+            interpretations = RoomInterpretation.objects.filter(
+                room__event=request.event, interpreter=RoomInterpretation.INTERPRETER_VOXBENTO, room_enabled=True
+            )
+            synced = 0
+            for interp in interpretations:
+                try:
+                    synced += backend.sync_booths(request.event, interp)
+                except VoxbentoTemporarilyUnavailable:
+                    messages.error(request, _("VoxBento is temporarily unavailable."))
+                    return redirect(_dashboard_url(request.event))
+                except Exception as e:
+                    messages.error(request, _("Sync failed for room {r}: {e}").format(r=interp.room.name, e=str(e)))
+
+            if synced > 0:
+                messages.success(request, _("Successfully synced {c} interpretation booths.").format(c=synced))
+            else:
+                messages.warning(request, _("No interpretation booths were synced."))
+
+            return redirect(_dashboard_url(request.event))
         return _process_event_settings_post(request, request.event, redirect_url=_dashboard_url(request.event))
 
 
