@@ -92,7 +92,8 @@ def validate_language_streams(streams) -> list[dict]:
         if language in seen_languages:
             raise ValidationError(_("Duplicate language: %(language)s") % {"language": language})
         if not entry["youtube_id"]:
-            raise ValidationError(_("Each language needs a YouTube ID or WHEP URL."))
+            # Allow blank youtube_id so VoxBento can auto-populate it
+            pass
         seen_languages.add(language)
         cleaned.append(entry)
 

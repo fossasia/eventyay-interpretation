@@ -137,12 +137,18 @@ def _do_sync_single_room_to_voxbento(
         use_plugin_streams = use_plugin_language_streams(event)
         if use_plugin_streams:
             interpretation = getattr(room, "interpretation", None)
-            if interpretation and interpretation.target_languages:
+            if (
+                interpretation
+                and interpretation.room_enabled
+                and interpretation.interpreter == "voxbento"
+                and interpretation.target_languages
+            ):
                 new_lang_set = set(interpretation.target_languages)
             else:
                 new_lang_set = set()
         else:
-            new_lang_set = _extract_langs_from_module_config(room.module_config)
+            # Do not hijack normal Eventyay language streams
+            new_lang_set = set()
 
         payload["target_languages"] = list(new_lang_set)
 

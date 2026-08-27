@@ -148,10 +148,6 @@ class RoomConfigureForm(forms.Form):
         label=_("Enable interpretation for this room"),
         required=False,
     )
-    target_languages = forms.CharField(
-        label=_("Target Languages (comma-separated codes, e.g. es, fr)"),
-        required=False,
-    )
 
     def __init__(self, *args, event=None, **kwargs):
         super().__init__(*args, **kwargs)

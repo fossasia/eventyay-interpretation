@@ -85,7 +85,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             return Response({"detail": "VoxBento is temporarily unavailable."}, status=503)
         except Exception as e:
             return Response({"detail": str(e)}, status=500)
-        return Response({"status": "synced"})
+        return Response({"status": "synced", "synced_count": synced_count})
 
     @action(detail=False, methods=["post"], url_path="start")
     def start(self, request, room_pk=None, **kwargs):

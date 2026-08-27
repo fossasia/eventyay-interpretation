@@ -67,7 +67,7 @@ class VoxbentoBackend(InterpreterBackend):
             logger.error("event=%s has no VoxBento credentials configured", event.slug)
             return 0
 
-        url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/booths"
+        url = f"{base_url.rstrip('/')}/api/events/{event.slug}/booths"
 
         config = interpretation.backend_config.copy()
         booths = config.get("booths", {})

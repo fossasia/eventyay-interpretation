@@ -21,13 +21,6 @@
         {% endif %}
 
         <div class="form-group">
-            <label for="{{ entry.configure_form.target_languages.id_for_label }}">
-                {{ entry.configure_form.target_languages.label }}
-            </label>
-            {{ entry.configure_form.target_languages }}
-        </div>
-
-        <div class="form-group">
             <div class="checkbox">
                 <label>
                     {{ entry.configure_form.room_enabled }}
@@ -54,16 +47,48 @@
         </button>
     </div>
 
-    {% if entry.data.interpreter == "voxbento" and entry.data.backend_config.booths %}
-    <hr>
-    <h4>{% trans "Interpreter Links" %}</h4>
-    <ul class="list-group" style="margin-top: 10px;">
-        {% for lang, urls in entry.data.backend_config.booths.items %}
-            <li class="list-group-item">
-                <strong>{{ lang }}</strong>:
-                <a href="{{ urls.invite_url }}" target="_blank">{{ urls.invite_url }}</a>
-            </li>
-        {% endfor %}
-    </ul>
+    {% if entry.data.interpreter == "voxbento" %}
+        <hr>
+        <h4>{% trans "Configured Booths" %}</h4>
+        {% if entry.data.backend_config.booths %}
+            <div class="table-responsive" style="margin-top: 15px;">
+                <table class="table table-bordered table-sm">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Language" %}</th>
+                            <th>{% trans "VoxBento (Interpreter)" %}</th>
+                            <th>{% trans "Eventyay Video (Audio & Captions)" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lang, urls in entry.data.backend_config.booths.items %}
+                            <tr>
+                                <td><strong>{{ lang }}</strong></td>
+                                <td>
+                                    {% if urls.invite_url %}
+                                        <a href="{{ urls.invite_url }}" target="_blank" class="btn btn-default btn-xs">
+                                            <i class="fa fa-external-link"></i> {% trans "Open Booth" %}
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">{% trans "N/A" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if urls.whep_url and urls.caption_url %}
+                                        <span class="text-success"><i class="fa fa-check-circle"></i> {% trans "Synced" %}</span>
+                                    {% else %}
+                                        <span class="text-danger"><i class="fa fa-exclamation-triangle"></i> {% trans "Incomplete" %}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted" style="margin-top: 10px;">
+                {% trans "No booths created yet. Add languages in the Video Room editor and click Sync." %}
+            </p>
+        {% endif %}
     {% endif %}
 </form>

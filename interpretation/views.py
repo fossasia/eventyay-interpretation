@@ -308,7 +308,6 @@ class InterpretationRoomSettings(
                 {
                     "interpreter": form.cleaned_data["interpreter"],
                     "room_enabled": form.cleaned_data.get("room_enabled"),
-                    "target_languages": form.cleaned_data.get("target_languages"),
                 },
             )
         except ValueError as exc:
@@ -388,7 +387,6 @@ class InterpretationRoomSettings(
                         initial={
                             "interpreter": data["interpreter"],
                             "room_enabled": data["room_enabled"],
-                            "target_languages": ", ".join(data.get("target_languages", [])),
                         },
                     ),
                     "interpreter_configured": is_interpreter_configured(event, selected),
