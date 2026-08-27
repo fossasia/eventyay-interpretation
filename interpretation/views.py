@@ -285,7 +285,7 @@ class InterpretationRoomSettings(
             prefix = room_form_prefix(room.pk)
             redirect_url = self.get_success_url(room.pk)
 
-            if action == "save":
+            if action in ("save", "sync"):
                 return self._handle_room_save(request, room, event, prefix, redirect_url)
             if action == "disconnect":
                 return self._handle_room_clear(request, room, event, redirect_url)

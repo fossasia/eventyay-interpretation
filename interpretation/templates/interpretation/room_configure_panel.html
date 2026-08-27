@@ -41,6 +41,9 @@
         <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-default">
             {% trans "Save" %}
         </button>
+        <button type="submit" name="{{ room_action_key }}" value="sync" class="btn btn-primary">
+            <span class="fa fa-refresh"></span> {% trans "Sync with VoxBento" %}
+        </button>
         {% if entry.data.status == "running" %}
             <button type="submit" name="{{ room_action_key }}" value="stop" class="btn btn-warning">
                 {% trans "Stop session" %}
