@@ -168,7 +168,9 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
             if interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO:
                 from .language_map import language_code_for_name
 
-                langs = [language_code_for_name(s["language"]) for s in validated_streams if s["language"] != "Original"]
+                langs = [
+                    language_code_for_name(s["language"]) for s in validated_streams if s["language"] != "Original"
+                ]
                 interpretation.target_languages = [lang_code for lang_code in langs if lang_code]
         except ValidationError as exc:
             raise ValueError(str(exc)) from exc
