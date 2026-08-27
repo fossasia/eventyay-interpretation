@@ -44,3 +44,11 @@ LANGUAGE_NAME_TO_CODE = load_language_map()
 def language_code_for_name(name):
     cleaned = str(name).strip()
     return LANGUAGE_NAME_TO_CODE.get(cleaned, cleaned.lower())
+
+
+def language_name_for_code(code):
+    cleaned_code = str(code).strip().lower()
+    for name, c in LANGUAGE_NAME_TO_CODE.items():
+        if str(c).strip().lower() == cleaned_code:
+            return name
+    return cleaned_code
