@@ -8,14 +8,8 @@ from ..models import RoomInterpretation
 from .base import InterpreterBackend
 from .voxbento_credentials import (
     clear_voxbento_credentials,
-    get_voxbento_api_key,
-    get_voxbento_base_url,
     is_voxbento_configured,
     voxbento_server_host,
-)
-from .voxbento_oauth import (
-    VoxbentoReauthorizationRequired,
-    get_valid_access_token,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,15 +33,13 @@ class VoxbentoBackend(InterpreterBackend):
         return f"{event.slug}-{interpretation.room_id}"
 
     def sync_booths(self, event, interpretation) -> int:
-        from interpretation.tasks import _do_sync_single_room_to_voxbento, ActiveSessionConflict
+        from interpretation.tasks import ActiveSessionConflict, _do_sync_single_room_to_voxbento
+
         from .voxbento_oauth import VoxbentoTemporarilyUnavailable
-        
+
         try:
             needs_retry = _do_sync_single_room_to_voxbento(
-                interpretation.room_id,
-                event.id,
-                "upsert",
-                room_instance=interpretation.room
+                interpretation.room_id, event.id, "upsert", room_instance=interpretation.room
             )
             if needs_retry:
                 raise VoxbentoTemporarilyUnavailable("Network error connecting to VoxBento API")
