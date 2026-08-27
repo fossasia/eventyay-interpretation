@@ -8,7 +8,7 @@ from .backends.susi_credentials import EVENT_SETTINGS_KEYS as SUSI_EVENT_SETTING
 from .backends.voxbento_credentials import (
     EVENT_SETTINGS_KEYS as VOXBENTO_EVENT_SETTINGS_KEYS,
 )
-from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS
+from .settings import SETTING_IS_ENABLED, SETTING_USE_PLUGIN_STREAMS, is_interpretation_enabled
 
 PLUGIN_MODULE = "interpretation"
 
@@ -123,6 +123,8 @@ def _raise_appropriate_exception(msg: str, event_id: int = None):
 def room_interpretation_post_save(sender, instance, created, **kwargs):
     if PLUGIN_MODULE not in instance.room.event.get_plugins():
         return
+    if not is_interpretation_enabled(instance.room.event):
+        return
 
     from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
 
@@ -151,6 +153,8 @@ def room_interpretation_post_save(sender, instance, created, **kwargs):
 @receiver(pre_save, sender=Room, dispatch_uid="interpretation_room_pre_save")
 def room_pre_save(sender, instance, **kwargs):
     if PLUGIN_MODULE not in instance.event.get_plugins():
+        return
+    if not is_interpretation_enabled(instance.event):
         return
 
     # Fetch the CURRENT (pre-save) DB state so we can detect which languages
