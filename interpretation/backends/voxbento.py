@@ -39,69 +39,23 @@ class VoxbentoBackend(InterpreterBackend):
         return f"{event.slug}-{interpretation.room_id}"
 
     def sync_booths(self, event, interpretation) -> int:
-        if not interpretation.target_languages:
-            return 0
-
-        base_url = get_voxbento_base_url(event)
-        if not base_url:
-            return 0
-
-        grant = getattr(event, "voxbento_oauth_grant", None)
-        try:
-            access_token = get_valid_access_token(grant.id) if grant else None
-        except VoxbentoReauthorizationRequired:
-            access_token = None
-
-        if access_token:
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            }
-        elif legacy_key := get_voxbento_api_key(event):
-            logger.warning("event=%s using deprecated VoxBento API key auth — reconnect via OAuth", event.slug)
-            headers = {
-                "Authorization": f"Bearer {legacy_key}",
-                "Content-Type": "application/json",
-            }
-        else:
-            logger.error("event=%s has no VoxBento credentials configured", event.slug)
-            return 0
-
-        url = f"{base_url.rstrip('/')}/api/events/{event.slug}/booths"
-
-        config = interpretation.backend_config.copy()
-        booths = config.get("booths", {})
-
-        import requests
-
+        from interpretation.tasks import _do_sync_single_room_to_voxbento, ActiveSessionConflict
         from .voxbento_oauth import VoxbentoTemporarilyUnavailable
-
-        synced_count = 0
-        for lang in interpretation.target_languages:
-            payload = {
-                "language_code": lang,
-                "room_id": interpretation.room.pk,
-            }
-            try:
-                response = requests.post(url, headers=headers, json=payload, timeout=5.0)
-                if response.ok:
-                    data = response.json()
-                    synced_count += 1
-                    booths[lang] = {
-                        "invite_url": data.get("interpreter_invite_url"),
-                        "caption_url": data.get("caption_url"),
-                        "whip_url": data.get("whip_url"),
-                        "whep_url": data.get("whep_url"),
-                    }
-                else:
-                    raise VoxbentoTemporarilyUnavailable(f"VoxBento API returned {response.status_code}")
-            except requests.RequestException as e:
-                raise VoxbentoTemporarilyUnavailable(f"Network error connecting to VoxBento: {e}") from e
-
-        config["booths"] = booths
-        interpretation.backend_config = config
-        interpretation.save(update_fields=["backend_config"])
-        return synced_count
+        
+        try:
+            needs_retry = _do_sync_single_room_to_voxbento(
+                interpretation.room_id,
+                event.id,
+                "upsert",
+                room_instance=interpretation.room
+            )
+            if needs_retry:
+                raise VoxbentoTemporarilyUnavailable("Network error connecting to VoxBento API")
+            return len(interpretation.target_languages) if interpretation.target_languages else 1
+        except ActiveSessionConflict as e:
+            raise Exception(str(e)) from e
+        except Exception as e:
+            raise Exception(str(e)) from e
 
     def stop(self, event, interpretation) -> None:
         # Stopping just marks it inactive on Eventyay side.

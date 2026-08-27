@@ -50,34 +50,26 @@
     {% if entry.data.interpreter == "voxbento" %}
         <hr>
         <h4>{% trans "Configured Booths" %}</h4>
-        {% if entry.data.backend_config.booths %}
+        {% if entry.data.language_streams %}
             <div class="table-responsive" style="margin-top: 15px;">
                 <table class="table table-bordered table-sm">
                     <thead>
                         <tr>
                             <th>{% trans "Language" %}</th>
-                            <th>{% trans "VoxBento (Interpreter)" %}</th>
-                            <th>{% trans "Eventyay Video (Audio & Captions)" %}</th>
+                            <th>{% trans "Stream Source" %}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for lang, urls in entry.data.backend_config.booths.items %}
+                        {% for stream in entry.data.language_streams %}
                             <tr>
-                                <td><strong>{{ lang }}</strong></td>
+                                <td><strong>{{ stream.language }}</strong></td>
                                 <td>
-                                    {% if urls.invite_url %}
-                                        <a href="{{ urls.invite_url }}" target="_blank" class="btn btn-default btn-xs">
-                                            <i class="fa fa-external-link"></i> {% trans "Open Booth" %}
-                                        </a>
+                                    {% if stream.youtube_id and "localhost" in stream.youtube_id or "whep" in stream.youtube_id %}
+                                        <span class="text-success"><i class="fa fa-check-circle"></i> {% trans "VoxBento WHEP" %}</span>
+                                    {% elif stream.youtube_id %}
+                                        <span class="text-info"><i class="fa fa-link"></i> {% trans "External" %}</span>
                                     {% else %}
-                                        <span class="text-muted">{% trans "N/A" %}</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if urls.whep_url and urls.caption_url %}
-                                        <span class="text-success"><i class="fa fa-check-circle"></i> {% trans "Synced" %}</span>
-                                    {% else %}
-                                        <span class="text-danger"><i class="fa fa-exclamation-triangle"></i> {% trans "Incomplete" %}</span>
+                                        <span class="text-danger"><i class="fa fa-exclamation-triangle"></i> {% trans "No stream" %}</span>
                                     {% endif %}
                                 </td>
                             </tr>
@@ -87,7 +79,7 @@
             </div>
         {% else %}
             <p class="text-muted" style="margin-top: 10px;">
-                {% trans "No booths created yet. Add languages in the Video Room editor and click Sync." %}
+                {% trans "No languages configured for this room." %}
             </p>
         {% endif %}
     {% endif %}
