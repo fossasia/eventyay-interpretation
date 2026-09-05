@@ -54,7 +54,10 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
             "timestamp": time.time(),
         }
 
-        scope_str = "events:read events:write rooms:write booths:read booths:write sessions:manage webhooks:manage"
+        scope_str = (
+            "events:read events:write rooms:write booths:read booths:write "
+            "sessions:manage webhooks:manage listeners:provision"
+        )
 
         params = {
             "response_type": "code",

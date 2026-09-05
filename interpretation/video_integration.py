@@ -19,7 +19,7 @@ def augment_room_config(room, room_config: dict) -> None:
         return
     interpretation = get_interpretation(room)
     stored = interpretation.language_streams if interpretation else []
-    room_config["interpretation_language_streams"] = attendee_language_streams(stored)
+    room_config["interpretation_language_streams"] = attendee_language_streams(stored, event, room)
 
 
 def install_video_integration() -> None:

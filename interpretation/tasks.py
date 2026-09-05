@@ -135,8 +135,8 @@ def _do_sync_single_room_to_voxbento(
         from interpretation.settings import use_plugin_language_streams
 
         use_plugin_streams = use_plugin_language_streams(event)
+        interpretation = getattr(room, "interpretation", None)
         if use_plugin_streams:
-            interpretation = getattr(room, "interpretation", None)
             if (
                 interpretation
                 and interpretation.room_enabled
@@ -153,6 +153,11 @@ def _do_sync_single_room_to_voxbento(
         payload["target_languages"] = list(new_lang_set)
 
         response_data = sync_voxbento_room(event, room_id, payload)
+
+        voxbento_room_id = response_data.get("room_id")
+        if voxbento_room_id and interpretation:
+            # Use update() to avoid triggering post_save signals which cause RecursionError
+            type(interpretation).objects.filter(pk=interpretation.pk).update(backend_session_id=str(voxbento_room_id))
 
         if response_data.get("error") == 409:
             # We got a 409, meaning an active session was found.
@@ -183,7 +188,9 @@ def _do_sync_single_room_to_voxbento(
 
         if response_data and "booths" in response_data:
             returned_urls = {
-                b["language"]: b.get("whep_url", f"{get_voxbento_base_url(event).rstrip('/')}/{b['whip_path']}/whep")
+                b.get("language", b.get("language_code")): b.get(
+                    "whep_url", f"{get_voxbento_base_url(event).rstrip('/')}/{b.get('whip_path', '')}/whep"
+                )
                 for b in response_data["booths"]
             }
 
