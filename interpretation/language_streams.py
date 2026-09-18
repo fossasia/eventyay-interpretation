@@ -68,8 +68,10 @@ def is_usable_stream_entry(entry: dict | None, allow_blank: bool = False) -> boo
 
 def stream_type_of(entry: dict | None) -> str:
     """Return ``"ai"`` for VoxBento TTS entries and ``"human"`` for everything else."""
-    raw = ((entry or {}).get("stream_type") or "").strip().lower()
-    return STREAM_TYPE_AI if raw == STREAM_TYPE_AI else STREAM_TYPE_HUMAN
+    raw = (entry or {}).get("stream_type")
+    if not isinstance(raw, str):
+        return STREAM_TYPE_HUMAN
+    return STREAM_TYPE_AI if raw.strip().lower() == STREAM_TYPE_AI else STREAM_TYPE_HUMAN
 
 
 def normalize_stream_entry(entry: dict) -> dict:
@@ -100,8 +102,8 @@ def validate_language_streams(streams) -> list[dict]:
     for raw in streams:
         if not isinstance(raw, dict):
             raise ValidationError(_("Each language stream must be an object."))
-        raw_stream_type = (raw.get("stream_type") or STREAM_TYPE_HUMAN).strip().lower()
-        if raw_stream_type not in STREAM_TYPES:
+        raw_stream_type = raw.get("stream_type") or STREAM_TYPE_HUMAN
+        if not isinstance(raw_stream_type, str) or raw_stream_type.strip().lower() not in STREAM_TYPES:
             raise ValidationError(_("Stream type must be either human or ai."))
         entry = normalize_stream_entry(raw)
         language = entry["language"]
@@ -197,6 +199,4 @@ def attendee_language_streams(stored_streams: list | None, event=None, room=None
                             entry["tts_ws_url"] = f"{ws_base}/ws/tts/{voxbento_room_id}/{lang_code}/{floor_booth_id}"
 
     # An AI entry is only playable once VoxBento has given us a TTS endpoint.
-    return [
-        entry for entry in normalized if entry.get("stream_type") != STREAM_TYPE_AI or entry.get("tts_ws_url")
-    ]
+    return [entry for entry in normalized if entry.get("stream_type") != STREAM_TYPE_AI or entry.get("tts_ws_url")]
