@@ -189,3 +189,73 @@ def test_api_config_patch_language_streams(organizer_client, event, room, monkey
     payload = response.json()
     assert payload["language_streams"][0]["language"] == "Spanish"
     assert payload["language_streams"][0]["use_video"] is True
+
+
+def test_validate_language_streams_defaults_and_checks_stream_type():
+    cleaned = validate_language_streams(
+        [
+            {"language": "German", "youtube_id": "https://whep.example/de"},
+            {"language": "Spanish", "stream_type": "AI", "youtube_id": "https://whep.example/es", "use_video": True},
+        ]
+    )
+    assert cleaned[0]["stream_type"] == "human"
+    # AI audio never uses a WHEP or YouTube source, so both are cleared.
+    assert cleaned[1] == {"language": "Spanish", "youtube_id": "", "use_video": False, "stream_type": "ai"}
+
+    with pytest.raises(ValidationError):
+        validate_language_streams([{"language": "German", "stream_type": "robot"}])
+
+
+def _connected_voxbento_room(event, room, monkeypatch, language_streams, backend_session_id="42"):
+    monkeypatch.setattr("interpretation.signals._do_sync_single_room_to_voxbento", lambda *args, **kwargs: False)
+    event.plugins = "interpretation"
+    event.save(update_fields=["plugins"])
+    event.settings.set(SETTING_USE_PLUGIN_STREAMS, True)
+    from interpretation.models import VoxbentoOAuthGrant
+
+    event.settings.set("interpretation_voxbento_base_url", "https://v.example")
+    VoxbentoOAuthGrant.objects.get_or_create(event=event, defaults={"access_token": "t", "is_disconnected": False})
+    RoomInterpretation.objects.create(
+        interpreter="voxbento",
+        room_enabled=True,
+        room=room,
+        backend_session_id=backend_session_id,
+        language_streams=language_streams,
+    )
+    room.refresh_from_db()
+
+
+def test_attendee_streams_expose_tts_url_for_ai_languages(event, room, monkeypatch):
+    _connected_voxbento_room(
+        event,
+        room,
+        monkeypatch,
+        [
+            {"language": "German", "stream_type": "ai", "youtube_id": ""},
+            {"language": "Spanish", "youtube_id": "https://v.example/demo-42-es/whep"},
+        ],
+    )
+    streams = attendee_language_streams(room.interpretation.language_streams, event, room)
+    by_language = {entry["language"]: entry for entry in streams}
+
+    assert by_language["German"]["tts_ws_url"] == f"wss://v.example/ws/tts/42/de/{event.slug}-42-floor"
+    assert by_language["German"]["youtube_id"] == ""
+    assert "tts_ws_url" not in by_language["Spanish"]
+    assert by_language["Spanish"]["youtube_id"] == "https://v.example/demo-42-es/whep"
+
+
+def test_attendee_streams_drop_ai_languages_until_room_is_synced(event, room, monkeypatch):
+    _connected_voxbento_room(
+        event,
+        room,
+        monkeypatch,
+        [{"language": "German", "stream_type": "ai", "youtube_id": ""}],
+        backend_session_id=None,
+    )
+    streams = attendee_language_streams(room.interpretation.language_streams, event, room)
+    assert [entry["language"] for entry in streams] == ["Original"]
+
+
+def test_attendee_streams_drop_ai_languages_without_voxbento_grant():
+    streams = attendee_language_streams([{"language": "German", "stream_type": "ai", "youtube_id": ""}])
+    assert [entry["language"] for entry in streams] == ["Original"]

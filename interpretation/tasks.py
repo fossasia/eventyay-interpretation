@@ -226,6 +226,7 @@ def _do_sync_single_room_to_voxbento(
                     needs_save = False
 
                     from .language_map import language_code_for_name, language_name_for_code
+                    from .language_streams import STREAM_TYPE_AI, stream_type_of
 
                     # Create a reverse lookup for code -> Name
                     code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
@@ -233,6 +234,9 @@ def _do_sync_single_room_to_voxbento(
                     for lang_code, full_url in returned_urls.items():
                         lang_name = code_to_name.get(lang_code)
                         if lang_name and lang_name in stream_dict:
+                            if stream_type_of(stream_dict[lang_name]) == STREAM_TYPE_AI:
+                                # AI languages play VoxBento TTS, never the booth's WHEP feed.
+                                continue
                             existing = stream_dict[lang_name].get("youtube_id") or ""
                             if not existing or "/whep" in existing or "localhost" in existing:
                                 if existing != full_url:
