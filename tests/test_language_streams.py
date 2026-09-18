@@ -8,6 +8,7 @@ from interpretation.language_streams import (
     is_usable_stream_entry,
     is_whep_or_url_source,
     normalize_audio_source,
+    stream_type_of,
     validate_language_streams,
 )
 from interpretation.models import RoomInterpretation
@@ -204,6 +205,13 @@ def test_validate_language_streams_defaults_and_checks_stream_type():
 
     with pytest.raises(ValidationError):
         validate_language_streams([{"language": "German", "stream_type": "robot"}])
+
+
+def test_non_string_stream_type_is_rejected_not_crashing():
+    with pytest.raises(ValidationError):
+        validate_language_streams([{"language": "German", "stream_type": 1}])
+    # Malformed stored data falls back to a human stream instead of raising.
+    assert stream_type_of({"language": "German", "stream_type": 1}) == "human"
 
 
 def _connected_voxbento_room(event, room, monkeypatch, language_streams, backend_session_id="42"):
