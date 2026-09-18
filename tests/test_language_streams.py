@@ -223,6 +223,10 @@ def _connected_voxbento_room(event, room, monkeypatch, language_streams, backend
         language_streams=language_streams,
     )
     room.refresh_from_db()
+    # A global VoxBento URL (if one is configured) wins over the event setting; pin it.
+    monkeypatch.setattr(
+        "interpretation.backends.voxbento_credentials.get_voxbento_base_url", lambda event: "https://v.example"
+    )
 
 
 def test_attendee_streams_expose_tts_url_for_ai_languages(event, room, monkeypatch):
@@ -250,7 +254,7 @@ def test_attendee_streams_drop_ai_languages_until_room_is_synced(event, room, mo
         room,
         monkeypatch,
         [{"language": "German", "stream_type": "ai", "youtube_id": ""}],
-        backend_session_id=None,
+        backend_session_id="",
     )
     streams = attendee_language_streams(room.interpretation.language_streams, event, room)
     assert [entry["language"] for entry in streams] == ["Original"]
