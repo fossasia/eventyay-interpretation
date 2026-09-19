@@ -14,6 +14,7 @@ from .backends.voxbento_api import (
 )
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .language_map import language_code_for_name
+from .language_streams import ai_language_codes
 from .models import RoomInterpretation
 
 logger = logging.getLogger(__name__)
@@ -152,7 +153,14 @@ def _do_sync_single_room_to_voxbento(
             # so VoxBento creates the necessary WHEP endpoint booths for them.
             new_lang_set = _extract_langs_from_module_config(room.module_config)
 
-        payload["target_languages"] = list(new_lang_set)
+        # Human languages become interpreter booths in VoxBento; AI languages become AI (TTS) booths
+        # fed by the floor translation. VoxBento versions without AI booths ignore ai_languages.
+        ai_lang_set = set()
+        if use_plugin_streams and interpretation:
+            ai_lang_set = new_lang_set & ai_language_codes(interpretation.language_streams)
+        human_lang_set = new_lang_set - ai_lang_set
+        payload["target_languages"] = sorted(human_lang_set)
+        payload["ai_languages"] = sorted(ai_lang_set)
 
         response_data = sync_voxbento_room(event, room_id, payload)
 
@@ -169,8 +177,9 @@ def _do_sync_single_room_to_voxbento(
             # We got a 409, meaning an active session was found.
             # To be certain we actually attempted to remove a language, we fetch the
             # remote state of VoxBento and compare it with what we just sent.
+            # VoxBento lists human booths only, so a language moving to AI counts as removed.
             old_lang_set = get_voxbento_room_langs(event, room_id)
-            langs_being_removed = old_lang_set - new_lang_set
+            langs_being_removed = old_lang_set - human_lang_set
 
             if langs_being_removed:
                 # A language with an active session is being deleted — block the save.
