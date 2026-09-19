@@ -64,7 +64,9 @@
                             <tr>
                                 <td><strong>{{ stream.language }}</strong></td>
                                 <td>
-                                    {% if stream.youtube_id and "localhost" in stream.youtube_id or "whep" in stream.youtube_id %}
+                                    {% if stream.stream_type == "ai" %}
+                                        <span class="text-success"><i class="fa fa-magic"></i> {% trans "VoxBento AI voice" %}</span>
+                                    {% elif stream.youtube_id and "localhost" in stream.youtube_id or "whep" in stream.youtube_id %}
                                         <span class="text-success"><i class="fa fa-check-circle"></i> {% trans "VoxBento WHEP" %}</span>
                                     {% elif stream.youtube_id %}
                                         <span class="text-info"><i class="fa fa-link"></i> {% trans "External" %}</span>
