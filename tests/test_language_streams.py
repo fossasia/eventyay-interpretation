@@ -196,20 +196,23 @@ def test_validate_language_streams_defaults_and_checks_stream_type():
     cleaned = validate_language_streams(
         [
             {"language": "German", "youtube_id": "https://whep.example/de"},
+            {"language": "French", "stream_type": None, "youtube_id": "https://whep.example/fr"},
             {"language": "Spanish", "stream_type": "AI", "youtube_id": "https://whep.example/es", "use_video": True},
         ]
     )
     assert cleaned[0]["stream_type"] == "human"
+    assert cleaned[1]["stream_type"] == "human"
     # AI audio never uses a WHEP or YouTube source, so both are cleared.
-    assert cleaned[1] == {"language": "Spanish", "youtube_id": "", "use_video": False, "stream_type": "ai"}
+    assert cleaned[2] == {"language": "Spanish", "youtube_id": "", "use_video": False, "stream_type": "ai"}
 
     with pytest.raises(ValidationError):
         validate_language_streams([{"language": "German", "stream_type": "robot"}])
 
 
-def test_non_string_stream_type_is_rejected_not_crashing():
+@pytest.mark.parametrize("stream_type", [1, 0, False, "", ["ai"]])
+def test_invalid_stream_type_is_rejected_not_crashing(stream_type):
     with pytest.raises(ValidationError):
-        validate_language_streams([{"language": "German", "stream_type": 1}])
+        validate_language_streams([{"language": "German", "stream_type": stream_type}])
     # Malformed stored data falls back to a human stream instead of raising.
     assert stream_type_of({"language": "German", "stream_type": 1}) == "human"
 
