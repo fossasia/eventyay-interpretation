@@ -74,6 +74,24 @@ def stream_type_of(entry: dict | None) -> str:
     return STREAM_TYPE_AI if raw.strip().lower() == STREAM_TYPE_AI else STREAM_TYPE_HUMAN
 
 
+def ai_language_codes(streams: list | None) -> set[str]:
+    """Language codes of the stored streams that play VoxBento AI audio."""
+    from .language_map import language_code_for_name
+
+    codes = set()
+    for entry in streams or []:
+        if stream_type_of(entry) == STREAM_TYPE_AI:
+            code = language_code_for_name((entry.get("language") or "").strip())
+            if code:
+                codes.add(code)
+    return codes
+
+
+def voxbento_ai_booth_id(event_slug: str, voxbento_room_id, language_code: str) -> str:
+    """ID of a VoxBento AI booth; its audio streams from ``/ws/tts/{booth_id}``."""
+    return f"{event_slug}-{voxbento_room_id}-ai-{language_code}"
+
+
 def normalize_stream_entry(entry: dict) -> dict:
     language = (entry.get("language") or "").strip()
     stream_type = stream_type_of(entry)
@@ -196,9 +214,9 @@ def attendee_language_streams(stored_streams: list | None, event=None, room=None
                         booth_id = f"{event.slug}-{v_room_id}-{lang_code}"
                         entry["caption_ws_url"] = f"{ws_base}/ws/captions/{booth_id}"
                         if entry.get("stream_type") == STREAM_TYPE_AI and voxbento_room_id:
-                            # VoxBento broadcasts floor TTS keyed by its own room ID,
-                            # the target language and the floor booth that produced it.
-                            entry["tts_ws_url"] = f"{ws_base}/ws/tts/{voxbento_room_id}/{lang_code}/{floor_booth_id}"
+                            # VoxBento serves each AI language as its own booth, keyed by its room ID.
+                            ai_booth_id = voxbento_ai_booth_id(event.slug, voxbento_room_id, lang_code)
+                            entry["tts_ws_url"] = f"{ws_base}/ws/tts/{ai_booth_id}"
 
     # An AI entry is only playable once VoxBento has given us a TTS endpoint.
     return [entry for entry in normalized if entry.get("stream_type") != STREAM_TYPE_AI or entry.get("tts_ws_url")]
