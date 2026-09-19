@@ -102,7 +102,9 @@ def validate_language_streams(streams) -> list[dict]:
     for raw in streams:
         if not isinstance(raw, dict):
             raise ValidationError(_("Each language stream must be an object."))
-        raw_stream_type = raw.get("stream_type") or STREAM_TYPE_HUMAN
+        raw_stream_type = raw.get("stream_type")
+        if raw_stream_type is None:
+            raw_stream_type = STREAM_TYPE_HUMAN
         if not isinstance(raw_stream_type, str) or raw_stream_type.strip().lower() not in STREAM_TYPES:
             raise ValidationError(_("Stream type must be either human or ai."))
         entry = normalize_stream_entry(raw)
