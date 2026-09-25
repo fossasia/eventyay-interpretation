@@ -1,5 +1,8 @@
 name: Tests
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main, master, dev ]
@@ -12,66 +15,79 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     name: Tests
+
     services:
       postgres:
-        image: postgres:16
+        image: postgres:15
         env:
-          POSTGRES_DB: pretix
-          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
+          POSTGRES_DB: eventyay-db
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      redis:
-        image: redis:7
         ports:
-          - 6379:6379
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      EVY_RUNNING_ENVIRONMENT: testing
-      EVY_POSTGRES_HOST: localhost
-      EVY_POSTGRES_PORT: "5432"
-      EVY_POSTGRES_USER: postgres
-      EVY_POSTGRES_PASSWORD: postgres
-      EVY_POSTGRES_DB: pretix
-      EVY_REDIS_URL: redis://localhost:6379/0
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check out eventyay host
-        uses: actions/checkout@v7
-        with:
-          repository: fossasia/eventyay
-          ref: dev
-          path: eventyay-host
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - name: Install system dependencies
-        run: sudo apt update && sudo apt install -y gettext
-      - name: Install eventyay host and test tools
-        run: |
-          python -m pip install -U pip wheel setuptools
-          sed -i '/"pydantic-core>=2.48.0",/d' ./eventyay-host/app/pyproject.toml
+        ports:
+          - 6379:6379
 
-          # The published wheel only lists `packages = ["eventyay"]`, so
-          # subpackages such as eventyay.config are missing unless we install
-          # from the source tree (editable) or set PYTHONPATH manually.
-          python -m pip install -e "./eventyay-host/app"
-          python -m pip install pytest pytest-django pytest-env coverage
-      - name: Install plugin
-        run: python -m pip install -e .
-      - name: Verify eventyay is importable
-        run: python -c "import eventyay.config.settings; print('eventyay OK')"
-      - name: Run tests
-        run: python -m pytest tests -v
+    steps:
+      - name: Checkout eventyay-interpretation plugin
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Clone eventyay
+        run: |
+          git clone --depth 1 --branch dev https://github.com/fossasia/eventyay.git ../eventyay
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y gettext libjpeg-dev zlib1g-dev libpq-dev
+
+      - name: Set up eventyay environment
+        run: |
+          cd ../eventyay/app
+          uv sync --all-extras --all-groups
+          uv pip install -e "../../$(basename "$GITHUB_WORKSPACE")"
+
+      - name: Compile translations
+        run: |
+          . ../eventyay/app/.venv/bin/activate
+          make
+
+      - name: Run checks
+        env:
+          EVY_RUNNING_ENVIRONMENT: testing
+          EVY_POSTGRES_HOST: localhost
+          EVY_POSTGRES_PORT: 5432
+          EVY_POSTGRES_USER: postgres
+          EVY_POSTGRES_PASSWORD: postgres
+          EVY_POSTGRES_DB: eventyay-db
+          EVY_REDIS_URL: redis://localhost:6379/0
+          DJANGO_SETTINGS_MODULE: eventyay.config.settings
+          PYTHONPATH: ${{ github.workspace }}/../eventyay/app
+        run: |
+          cd ../eventyay/app
+          . .venv/bin/activate
+          cd ../../eventyay-interpretation
+          pytest tests
