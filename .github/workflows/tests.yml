@@ -85,9 +85,9 @@ jobs:
           EVY_POSTGRES_DB: eventyay-db
           EVY_REDIS_URL: redis://localhost:6379/0
           DJANGO_SETTINGS_MODULE: eventyay.config.settings
-          PYTHONPATH: ${{ github.workspace }}/../eventyay/app
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/../eventyay/app
         run: |
           cd ../eventyay/app
           . .venv/bin/activate
-          cd ../../eventyay-interpretation
+          cd "$GITHUB_WORKSPACE"
           pytest tests
