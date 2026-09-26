@@ -262,9 +262,10 @@ class RoomConfigureForm(forms.Form):
         label=_("Groq API Key"), required=False, widget=forms.PasswordInput(render_value=False)
     )
 
-    def __init__(self, *args, event=None, **kwargs):
+    def __init__(self, *args, event=None, invalid_api_keys=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.event = event
+        self.invalid_api_keys = invalid_api_keys or {}
         from .backends import list_available_interpreters
 
         interpreters = list_available_interpreters(event)

@@ -11,6 +11,8 @@
             {{ entry.configure_form.interpreter }}
         </div>
 
+
+
         {% if entry.data.interpreter != "none" and not entry.interpreter_configured %}
             <p class="text-warning interpretation-section-hint">
                 {% blocktrans trimmed %}
@@ -68,7 +70,10 @@
                     <div class="api-key-input" style="display: none;">
                         <p style="margin-bottom: 10px;"><i class="fa fa-exclamation-triangle"></i> {% trans "This provider requires an API key." %}</p>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="">
+                            <div style="position: relative; flex-grow: 1;">
+                                <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="" style="padding-right: 30px;">
+                                <i class="fa fa-eye toggle-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #999;" title="{% trans 'Show API Key' %}"></i>
+                            </div>
                             <button type="button" class="btn btn-default btn-cancel-update" style="display: none;">{% trans "Cancel" %}</button>
                             <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-primary btn-save-key-inline" style="display: none;">{% trans "Update" %}</button>
                         </div>
@@ -111,7 +116,10 @@
                     <div class="api-key-input" style="display: none;">
                         <p style="margin-bottom: 10px;"><i class="fa fa-exclamation-triangle"></i> {% trans "This provider requires an API key." %}</p>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="">
+                            <div style="position: relative; flex-grow: 1;">
+                                <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="" style="padding-right: 30px;">
+                                <i class="fa fa-eye toggle-password" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #999;" title="{% trans 'Show API Key' %}"></i>
+                            </div>
                             <button type="button" class="btn btn-default btn-cancel-update" style="display: none;">{% trans "Cancel" %}</button>
                             <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-primary btn-save-key-inline" style="display: none;">{% trans "Update" %}</button>
                         </div>
@@ -199,6 +207,18 @@
                 'gemini': {{ entry.configure_form.configured_api_keys.gemini|yesno:"true,false" }},
                 'anthropic': {{ entry.configure_form.configured_api_keys.anthropic|yesno:"true,false" }},
                 'groq': {{ entry.configure_form.configured_api_keys.groq|yesno:"true,false" }}
+            };
+
+            var invalidKeys = {
+                'openai': {% if entry.configure_form.invalid_api_keys.openai %}true{% else %}false{% endif %},
+                'deepgram': {% if entry.configure_form.invalid_api_keys.deepgram %}true{% else %}false{% endif %},
+                'nvidia': {% if entry.configure_form.invalid_api_keys.nvidia %}true{% else %}false{% endif %},
+                'elevenlabs': {% if entry.configure_form.invalid_api_keys.elevenlabs %}true{% else %}false{% endif %},
+                'translation_openai': {% if entry.configure_form.invalid_api_keys.translation_openai %}true{% else %}false{% endif %},
+                'openrouter': {% if entry.configure_form.invalid_api_keys.openrouter %}true{% else %}false{% endif %},
+                'gemini': {% if entry.configure_form.invalid_api_keys.gemini %}true{% else %}false{% endif %},
+                'anthropic': {% if entry.configure_form.invalid_api_keys.anthropic %}true{% else %}false{% endif %},
+                'groq': {% if entry.configure_form.invalid_api_keys.groq %}true{% else %}false{% endif %}
             };
 
             function updateVisibility() {
@@ -374,6 +394,7 @@
                     inputField.name = prefix + keyMapName + '_api_key';
                     
                     var isConfigured = configuredKeys[keyMapName];
+                    var isInvalid = invalidKeys[keyMapName];
                     var cancelButton = inputDiv.querySelector('.btn-cancel-update');
                     var updateInlineButton = inputDiv.querySelector('.btn-save-key-inline');
                     
@@ -381,6 +402,28 @@
                         statusDiv.style.display = 'block';
                         inputDiv.style.display = 'none';
                         inputField.required = false;
+
+                        var wellDiv = container.querySelector('.well');
+                        var iconEl = statusDiv.querySelector('i.fa');
+                        var textEl = statusDiv.querySelector('strong');
+
+                        {% trans "API Key is invalid, expired, or revoked. Please update it." as msg_invalid %}
+                        {% trans "API Key is already configured for this provider." as msg_valid %}
+                        if (isInvalid) {
+                            wellDiv.style.backgroundColor = '#f2dede';
+                            wellDiv.style.borderColor = '#ebccd1';
+                            wellDiv.style.color = '#a94442';
+                            iconEl.className = 'fa fa-times text-danger';
+                            textEl.textContent = '{{ msg_invalid|escapejs }}';
+                            textEl.style.color = '#a94442';
+                        } else {
+                            wellDiv.style.backgroundColor = '#fcf8e3';
+                            wellDiv.style.borderColor = '#faebcc';
+                            wellDiv.style.color = '#8a6d3b';
+                            iconEl.className = 'fa fa-check text-success';
+                            textEl.textContent = '{{ msg_valid|escapejs }}';
+                            textEl.style.color = '';
+                        }
                     } else {
                         statusDiv.style.display = 'none';
                         inputDiv.style.display = 'block';
@@ -443,6 +486,28 @@
                 });
                 updateAPIKeys(transProviderSelect, 'transcription');
             }
+
+            // Password toggle logic
+            var toggleBtns = form.querySelectorAll('.toggle-password');
+            {% trans "Hide API Key" as hide_msg %}
+            {% trans "Show API Key" as show_msg %}
+            toggleBtns.forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var input = this.previousElementSibling;
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        this.classList.remove('fa-eye');
+                        this.classList.add('fa-eye-slash');
+                        this.title = '{{ hide_msg|escapejs }}';
+                    } else {
+                        input.type = 'password';
+                        this.classList.remove('fa-eye-slash');
+                        this.classList.add('fa-eye');
+                        this.title = '{{ show_msg|escapejs }}';
+                    }
+                });
+            });
 
         })();
     </script>
