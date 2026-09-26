@@ -7,3 +7,4 @@ include uv.lock
 exclude .gitlab-ci.yml
 exclude AGENTS.md
 recursive-exclude .agents *
+include *.md
