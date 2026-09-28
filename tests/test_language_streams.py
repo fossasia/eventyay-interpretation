@@ -342,3 +342,102 @@ def test_room_sync_blocks_moving_a_live_booth_to_ai(event, room, monkeypatch):
 
     with pytest.raises(ActiveSessionConflict):
         _sync_room(event, room, monkeypatch, response={"error": 409, "detail": "active session"})
+
+
+def _interpretation_url(event, room, suffix):
+    org = event.organizer.slug
+    return f"/api/v1/organizers/{org}/events/{event.slug}/rooms/{room.pk}/interpretation/{suffix}"
+
+
+def test_api_config_patch_normalizes_human_and_ai_streams(organizer_client, event, room, monkeypatch):
+    _connected_voxbento_room(event, room, monkeypatch, [])
+
+    response = organizer_client.patch(
+        _interpretation_url(event, room, "config/"),
+        {
+            "language_streams": [
+                # An AI language carries no playable source of its own, even if one is sent.
+                {
+                    "language": "German",
+                    "stream_type": "ai",
+                    "youtube_id": "https://whep.example/de",
+                    "use_video": True,
+                },
+                {"language": "Spanish", "youtube_id": "https://v.example/demo-42-es/whep"},
+            ]
+        },
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    stored = {entry["language"]: entry for entry in response.json()["language_streams"]}
+    assert stored["German"] == {"language": "German", "youtube_id": "", "use_video": False, "stream_type": "ai"}
+    assert stored["Spanish"]["stream_type"] == "human"
+    assert stored["Spanish"]["youtube_id"] == "https://v.example/demo-42-es/whep"
+
+    attendee = {entry["language"]: entry for entry in response.json()["attendee_language_streams"]}
+    assert attendee["German"]["tts_ws_url"] == f"wss://v.example/ws/tts/{event.slug}-42-ai-de"
+    assert "tts_ws_url" not in attendee["Spanish"]
+
+
+def test_api_config_patch_rejects_unknown_stream_type(organizer_client, event, room, monkeypatch):
+    _connected_voxbento_room(event, room, monkeypatch, [{"language": "Spanish", "youtube_id": ""}])
+
+    response = organizer_client.patch(
+        _interpretation_url(event, room, "config/"),
+        {"language_streams": [{"language": "German", "stream_type": "robot"}]},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    # The rejected request leaves the stored streams alone.
+    stored = RoomInterpretation.objects.get(room=room).language_streams
+    assert [entry["language"] for entry in stored] == ["Spanish"]
+
+
+def test_api_streams_endpoint_reports_stream_types(organizer_client, event, room, monkeypatch):
+    _connected_voxbento_room(
+        event,
+        room,
+        monkeypatch,
+        [
+            {"language": "German", "stream_type": "ai", "youtube_id": ""},
+            {"language": "Spanish", "stream_type": "human", "youtube_id": "https://v.example/demo-42-es/whep"},
+        ],
+    )
+
+    response = organizer_client.get(_interpretation_url(event, room, "streams/"))
+
+    assert response.status_code == 200
+    payload = response.json()
+    stored = {entry["language"]: entry for entry in payload["language_streams"]}
+    assert stored["German"]["stream_type"] == "ai"
+    assert stored["Spanish"]["stream_type"] == "human"
+
+    attendee = {entry["language"]: entry for entry in payload["attendee_language_streams"]}
+    assert attendee["German"]["stream_type"] == "ai"
+    assert attendee["German"]["tts_ws_url"] == f"wss://v.example/ws/tts/{event.slug}-42-ai-de"
+    assert attendee["Spanish"]["stream_type"] == "human"
+    assert attendee["Spanish"]["youtube_id"] == "https://v.example/demo-42-es/whep"
+
+
+def test_room_config_gives_the_video_app_both_stream_types(event, room, monkeypatch):
+    from eventyay.base.services.event import get_room_config
+
+    _connected_voxbento_room(
+        event,
+        room,
+        monkeypatch,
+        [
+            {"language": "German", "stream_type": "ai", "youtube_id": ""},
+            {"language": "Spanish", "stream_type": "human", "youtube_id": "https://v.example/demo-42-es/whep"},
+        ],
+    )
+
+    config = get_room_config(room, set())
+
+    streams = {entry["language"]: entry for entry in config["interpretation_language_streams"]}
+    assert streams["German"]["stream_type"] == "ai"
+    assert streams["German"]["tts_ws_url"] == f"wss://v.example/ws/tts/{event.slug}-42-ai-de"
+    assert streams["Spanish"]["stream_type"] == "human"
+    assert "tts_ws_url" not in streams["Spanish"]
