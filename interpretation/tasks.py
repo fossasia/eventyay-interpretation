@@ -193,6 +193,19 @@ def _do_sync_single_room_to_voxbento(
             # remote state of VoxBento and compare it with what we just sent.
             # VoxBento lists human booths only, so a language moving to AI counts as removed.
             old_lang_set = get_voxbento_room_langs(event, room_id)
+            if old_lang_set is None:
+                # The booth lookup failed, so we cannot tell whether a language with a
+                # live session is being removed. Keep the 409 instead of assuming the
+                # registry is stale, which would drop a real conflict.
+                logger.error(
+                    "VoxBento returned 409 for room %s and its booth list could not be read. Aborting.",
+                    room_id,
+                )
+                grant.room_sync_failed = True
+                grant.save(update_fields=["room_sync_failed"])
+                detail = response_data.get("detail", "Cannot verify active sessions right now. Please try again.")
+                raise ActiveSessionConflict(detail)
+
             langs_being_removed = old_lang_set - human_lang_set
 
             if langs_being_removed:

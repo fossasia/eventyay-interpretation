@@ -330,33 +330,36 @@ def delete_voxbento_room(event: Event, room_id: int) -> None:
         resp.raise_for_status()
 
 
-def get_voxbento_room_langs(event: Event, room_id: int) -> set[str]:
+def get_voxbento_room_langs(event: Event, room_id: int) -> set[str] | None:
     """
     Returns the set of language codes currently registered in VoxBento for this room.
     Used to detect which languages are being removed during a sync, so we can
     correctly scope the ActiveSessionConflict guard only to actual deletions.
-    Returns an empty set on any error (fail-open: no false positives).
+
+    Returns ``None`` when the remote state could not be read at all. An empty set
+    means VoxBento really has no booths, and callers must not confuse the two:
+    treating a failed lookup as "nothing registered" would hide a live session.
     """
     try:
         grant = getattr(event, "voxbento_oauth_grant", None)
         if not grant:
-            return set()
+            return None
 
         base_url = get_voxbento_base_url(event)
         if not base_url:
-            return set()
+            return None
 
         api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}/booths"
         access_token = get_valid_access_token(grant.id)
         if not access_token:
-            return set()
+            return None
 
         headers = {"Authorization": f"Bearer {access_token}"}
         resp = requests.get(api_url, headers=headers, timeout=5.0)
         if resp.status_code != 200:
-            return set()
+            return None
 
         booths_data = resp.json()
         return {b["language_code"] for b in booths_data if b.get("language_code")}
     except Exception:
-        return set()
+        return None

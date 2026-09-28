@@ -441,3 +441,23 @@ def test_room_config_gives_the_video_app_both_stream_types(event, room, monkeypa
     assert streams["German"]["tts_ws_url"] == f"wss://v.example/ws/tts/{event.slug}-42-ai-de"
     assert streams["Spanish"]["stream_type"] == "human"
     assert "tts_ws_url" not in streams["Spanish"]
+
+
+def test_room_sync_keeps_the_conflict_when_booths_cannot_be_read(event, room, monkeypatch):
+    from interpretation.tasks import ActiveSessionConflict
+
+    _connected_voxbento_room(
+        event,
+        room,
+        monkeypatch,
+        [
+            {"language": "German", "stream_type": "ai", "youtube_id": ""},
+            {"language": "Spanish", "youtube_id": ""},
+        ],
+    )
+    RoomInterpretation.objects.filter(room=room).update(target_languages=["de", "es"])
+    # The booth lookup failed, so a live German booth cannot be ruled out.
+    monkeypatch.setattr("interpretation.backends.voxbento_api.get_voxbento_room_langs", lambda event, room_id: None)
+
+    with pytest.raises(ActiveSessionConflict):
+        _sync_room(event, room, monkeypatch, response={"error": 409, "detail": "active session"})
