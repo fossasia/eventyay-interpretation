@@ -23,6 +23,8 @@ from urllib.parse import urljoin
 
 import requests
 
+from interpretation.operational_log import logged_request
+
 DEFAULT_TIMEOUT = 10
 
 
@@ -72,7 +74,7 @@ class SusiClient:
         kwargs.setdefault("timeout", self.timeout)
         kwargs.setdefault("headers", self._headers())
         try:
-            resp = requests.request(method, url, **kwargs)
+            resp = logged_request("interpretation", method, url, **kwargs)
         except requests.RequestException as exc:
             raise SusiError(f"Could not reach SUSI server at {url}: {exc}") from exc
 
@@ -120,7 +122,7 @@ class SusiClient:
         """
         url = self._url("/auth/api/login")
         try:
-            resp = requests.post(
+            resp = logged_request("interpretation", "POST",
                 url,
                 json={"email": email, "password": password},
                 timeout=self.timeout,
@@ -210,7 +212,7 @@ class SusiClient:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         url = self._url("/api/v1/translate/stream")
         try:
-            resp = requests.get(
+            resp = logged_request("interpretation", "GET",
                 url,
                 headers=headers,
                 params=params,

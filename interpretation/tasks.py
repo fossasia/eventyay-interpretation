@@ -14,11 +14,13 @@ from .backends.voxbento_api import (
 )
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .language_map import language_code_for_name
+from .operational_log import OUTCOME_FAILURE, log_operation, traced_job
 
 logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_connection")
 def sync_voxbento_connection(self, event_id: int) -> None:
     """
     Background task to sync the VoxBento OAuth connection.
@@ -68,10 +70,19 @@ def sync_voxbento_connection(self, event_id: int) -> None:
         try:
             self.retry(exc=e)
         except MaxRetriesExceededError:
-            logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}")
+            logger.error("Max retries exceeded syncing VoxBento connection for event %s", event_id)
+            log_operation(
+                "job.fail",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                job_name="interpretation.sync_connection",
+                error_code="max_retries",
+                event_id=event_id,
+            )
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_rooms")
 def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
     try:
         event = Event._base_manager.get(pk=event_id)
@@ -295,6 +306,7 @@ def _do_sync_single_room_to_voxbento(
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_room")
 def sync_single_room_to_voxbento(self, room_id: int, event_id: int, action: str) -> None:
     try:
         needs_retry = _do_sync_single_room_to_voxbento(room_id, event_id, action)

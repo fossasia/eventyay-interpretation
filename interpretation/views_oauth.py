@@ -14,6 +14,8 @@ from eventyay.base.models import Event
 from eventyay.base.settings import GlobalSettingsObject
 from eventyay.control.permissions import EventPermissionRequiredMixin
 
+from interpretation.operational_log import logged_request
+
 from .models import VoxbentoOAuthGrant
 
 
@@ -140,10 +142,9 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
             messages.error(request, _("VoxBento Base URL is not configured."))
             return redirect(dashboard_url)
 
-        import requests
 
         try:
-            resp = requests.post(
+            resp = logged_request("interpretation", "POST",
                 f"{voxbento_base}/oauth/token",
                 data={
                     "grant_type": "authorization_code",
