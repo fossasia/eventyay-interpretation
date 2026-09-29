@@ -104,3 +104,21 @@ def test_logged_request_records_status_without_url(captured, monkeypatch):
     assert extra["outcome"] == "success"
     assert "example.invalid" not in str(extra)
     assert "raw" not in str(extra)
+
+
+def test_logged_request_honors_requests_request_patch(captured, monkeypatch):
+    class Response:
+        status_code = 204
+
+    def fake_request(method, url, **kwargs):
+        assert method == "GET"
+        assert url == "https://example.invalid/status"
+        return Response()
+
+    import requests
+
+    monkeypatch.setattr(requests, "request", fake_request)
+    logged_request("interpretation", "GET", "https://example.invalid/status")
+    extra = captured[-1][2]
+    assert extra["status"] == 204
+    assert extra["outcome"] == "success"
