@@ -11,8 +11,20 @@ from django.views.generic import View
 from eventyay.base.models import Room
 
 from .models import VoxbentoOAuthGrant
+from .operational_log import OUTCOME_FAILURE, OUTCOME_SUCCESS, log_operation
 
 logger = logging.getLogger(__name__)
+
+
+def _log_webhook(outcome, error_code=None, status=None, event_id=None):
+    log_operation(
+        "webhook.inbound",
+        outcome,
+        backend="interpretation",
+        error_code=error_code,
+        status=status,
+        event_id=event_id,
+    )
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -24,6 +36,7 @@ class VoxbentoWebhookReceiverView(View):
     def post(self, request, *args, **kwargs):
         signature_header = request.headers.get("X-VoxBento-Signature")
         if not signature_header:
+            _log_webhook(OUTCOME_FAILURE, "missing_signature", status=401)
             return JsonResponse({"detail": "Missing X-VoxBento-Signature header"}, status=401)
 
         try:
@@ -31,18 +44,22 @@ class VoxbentoWebhookReceiverView(View):
             timestamp = int(parts.get("t", 0))
             signature_v1 = parts.get("v1", "")
         except ValueError:
+            _log_webhook(OUTCOME_FAILURE, "invalid_signature_header", status=401)
             return JsonResponse({"detail": "Invalid signature header format"}, status=401)
 
         current_time = int(time.time())
         if abs(current_time - timestamp) > 300:
+            _log_webhook(OUTCOME_FAILURE, "stale_timestamp", status=401)
             return JsonResponse({"detail": "Webhook timestamp too old"}, status=401)
 
         try:
             payload = json.loads(request.body)
         except json.JSONDecodeError:
+            _log_webhook(OUTCOME_FAILURE, "invalid_payload", status=400)
             return JsonResponse({"detail": "Invalid JSON body"}, status=400)
 
         if not isinstance(payload, dict):
+            _log_webhook(OUTCOME_FAILURE, "invalid_payload", status=400)
             return JsonResponse({"detail": "Payload must be a JSON object"}, status=400)
 
         data = payload.get("data")
@@ -60,14 +77,17 @@ class VoxbentoWebhookReceiverView(View):
 
         if not event_slug:
             logger.error("Webhook payload missing event_slug. Event identification failed.")
+            _log_webhook(OUTCOME_FAILURE, "missing_event", status=400)
             return JsonResponse({"detail": "Missing event_slug in payload"}, status=400)
 
         try:
             grant = VoxbentoOAuthGrant.objects.get(event__slug=event_slug)
         except VoxbentoOAuthGrant.DoesNotExist:
+            _log_webhook(OUTCOME_FAILURE, "unknown_event", status=404)
             return JsonResponse({"detail": "Event not found or not connected to VoxBento"}, status=404)
 
         if not grant.webhook_secret_key:
+            _log_webhook(OUTCOME_FAILURE, "missing_secret", status=401, event_id=grant.event_id)
             return JsonResponse({"detail": "Webhook secret key not found"}, status=401)
 
         # Reconstruct the signed payload: {timestamp}.{raw_request_body}
@@ -77,11 +97,13 @@ class VoxbentoWebhookReceiverView(View):
         computed_signature = hmac.new(secret, signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
         if not hmac.compare_digest(computed_signature, signature_v1):
+            _log_webhook(OUTCOME_FAILURE, "signature_invalid", status=401, event_id=grant.event_id)
             return JsonResponse({"detail": "Invalid signature"}, status=401)
 
         event_type = payload.get("event_type")
         data = payload.get("data", {})
         logger.info("Received valid VoxBento webhook for event %s: %s", event_slug, event_type)
+        _log_webhook(OUTCOME_SUCCESS, status=200, event_id=grant.event_id)
 
         handlers = {
             "booth.transcription.started": self.handle_transcription_started,
