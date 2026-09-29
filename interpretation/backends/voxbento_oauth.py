@@ -35,7 +35,9 @@ def call_voxbento_refresh(refresh_token, base_url):
     client_secret = gs.get("voxbento_client_secret", "")
 
     try:
-        response = logged_request("interpretation", "POST",
+        response = logged_request(
+            "interpretation",
+            "POST",
             url,
             data={
                 "grant_type": "refresh_token",

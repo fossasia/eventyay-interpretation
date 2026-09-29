@@ -225,7 +225,9 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
         old_webhook_id = None
 
         try:
-            resp = logged_request("interpretation", "POST",
+            resp = logged_request(
+                "interpretation",
+                "POST",
                 f"{voxbento_base}/oauth/token",
                 data={
                     "grant_type": "authorization_code",
