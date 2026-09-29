@@ -22,6 +22,9 @@ class InterpretationApp(PluginConfig):
         category = "FEATURE"
 
     def ready(self):
+        from .operational_log import log_plugin_loaded
+
+        log_plugin_loaded("interpretation")
         from . import signals  # NOQA
         from .video_integration import install_video_integration
 

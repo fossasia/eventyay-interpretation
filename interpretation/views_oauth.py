@@ -21,6 +21,8 @@ from eventyay.base.models import Event
 from eventyay.base.settings import GlobalSettingsObject
 from eventyay.control.permissions import EventPermissionRequiredMixin
 
+from interpretation.operational_log import logged_request
+
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .backends.voxbento_oauth import _get_cache_lock
 from .models import VoxbentoOAuthGrant
@@ -223,7 +225,7 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
         old_webhook_id = None
 
         try:
-            resp = requests.post(
+            resp = logged_request("interpretation", "POST",
                 f"{voxbento_base}/oauth/token",
                 data={
                     "grant_type": "authorization_code",
