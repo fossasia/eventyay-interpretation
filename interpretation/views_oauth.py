@@ -142,9 +142,10 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
             messages.error(request, _("VoxBento Base URL is not configured."))
             return redirect(dashboard_url)
 
-
         try:
-            resp = logged_request("interpretation", "POST",
+            resp = logged_request(
+                "interpretation",
+                "POST",
                 f"{voxbento_base}/oauth/token",
                 data={
                     "grant_type": "authorization_code",

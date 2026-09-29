@@ -122,7 +122,9 @@ class SusiClient:
         """
         url = self._url("/auth/api/login")
         try:
-            resp = logged_request("interpretation", "POST",
+            resp = logged_request(
+                "interpretation",
+                "POST",
                 url,
                 json={"email": email, "password": password},
                 timeout=self.timeout,
@@ -212,7 +214,9 @@ class SusiClient:
             headers["Authorization"] = f"Bearer {self.auth_token}"
         url = self._url("/api/v1/translate/stream")
         try:
-            resp = logged_request("interpretation", "GET",
+            resp = logged_request(
+                "interpretation",
+                "GET",
                 url,
                 headers=headers,
                 params=params,

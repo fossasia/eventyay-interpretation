@@ -53,7 +53,14 @@ def subscribe_to_voxbento_webhooks(event: Event) -> None:
                 headers = {"Authorization": f"Bearer {access_token}"}
                 delete_url = f"{api_url}/{grant.webhook_subscription_id}"
 
-                resp = logged_request("interpretation", "DELETE", delete_url, headers=headers, timeout=5.0)
+                resp = logged_request(
+                    "interpretation",
+                    "DELETE",
+                    delete_url,
+                    headers=headers,
+                    timeout=5.0,
+                    ok_statuses=(404,),
+                )
 
                 if resp.status_code == 404 or resp.status_code == 204:
                     # Treat 404 as successful no-op (already gone)
