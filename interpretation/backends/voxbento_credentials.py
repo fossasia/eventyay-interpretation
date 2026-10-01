@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 import requests
 from eventyay.base.models import Event
 
+from interpretation.operational_log import logged_request
+
 SETTING_VOXBENTO_BASE_URL = "interpretation_voxbento_base_url"
 SETTING_VOXBENTO_API_KEY = "interpretation_voxbento_api_key"
 
@@ -93,7 +95,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                     if access_token:
                         headers = {"Authorization": f"Bearer {access_token}"}
                         delete_url = f"{api_url}/{grant.webhook_subscription_id}"
-                        resp = requests.delete(delete_url, headers=headers, timeout=5.0)
+                        resp = logged_request("interpretation", "DELETE", delete_url, headers=headers, timeout=5.0)
                         if resp.status_code not in (204, 404):
                             resp.raise_for_status()
             except (requests.RequestException, VoxbentoReauthorizationRequired, VoxbentoTemporarilyUnavailable) as e:
@@ -127,7 +129,7 @@ def test_voxbento_connection(base_url: str, api_key: str, event_slug: str) -> No
     payload = {"event_slug": event_slug}
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=5.0)
+        response = logged_request("interpretation", "POST", url, headers=headers, json=payload, timeout=5.0)
     except requests.RequestException as e:
         raise VoxbentoError(f"Connection failed: {e}")
 

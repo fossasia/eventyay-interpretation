@@ -6,6 +6,8 @@ import requests
 from django.core.cache import cache
 from django.utils import timezone
 
+from interpretation.operational_log import logged_request
+
 from ..models import VoxbentoOAuthGrant
 from .voxbento_credentials import get_voxbento_base_url
 
@@ -33,7 +35,9 @@ def call_voxbento_refresh(refresh_token, base_url):
     client_secret = gs.get("voxbento_client_secret", "")
 
     try:
-        response = requests.post(
+        response = logged_request(
+            "interpretation",
+            "POST",
             url,
             data={
                 "grant_type": "refresh_token",

@@ -11,6 +11,8 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
+from interpretation.operational_log import logged_request
+
 from .backends.registry import get_backend
 from .models import RoomInterpretation
 from .room_control import (
@@ -202,7 +204,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             headers.setdefault("Accept", "application/json")
 
         try:
-            response = requests.request(method, url, headers=headers, timeout=5.0, **kwargs)
+            response = logged_request("interpretation", method, url, headers=headers, timeout=5.0, **kwargs)
 
             if response.status_code == 401 and is_oauth and grant:
                 from datetime import timedelta
@@ -219,7 +221,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
                 if not new_api_key:
                     return None, False, {"detail": "VoxBento authorization expired.", "status": 401}
                 headers["Authorization"] = f"Bearer {new_api_key}"
-                response = requests.request(method, url, headers=headers, timeout=5.0, **kwargs)
+                response = logged_request("interpretation", method, url, headers=headers, timeout=5.0, **kwargs)
 
             return response, is_oauth, None
         except requests.RequestException as e:
