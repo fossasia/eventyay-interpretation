@@ -14,6 +14,7 @@ from .backends.voxbento_api import (
 )
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .language_map import language_code_for_name
+from .language_streams import ai_language_codes
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +167,14 @@ def _do_sync_single_room_to_voxbento(
             # so VoxBento creates the necessary WHEP endpoint booths for them.
             new_lang_set = _extract_langs_from_module_config(room.module_config)
 
-        payload["target_languages"] = list(new_lang_set)
+        # Human languages become interpreter booths in VoxBento; AI languages become AI (TTS) booths
+        # fed by the floor translation. VoxBento versions without AI booths ignore ai_languages.
+        ai_lang_set = set()
+        if use_plugin_streams and interpretation:
+            ai_lang_set = new_lang_set & ai_language_codes(interpretation.language_streams)
+        human_lang_set = new_lang_set - ai_lang_set
+        payload["target_languages"] = sorted(human_lang_set)
+        payload["ai_languages"] = sorted(ai_lang_set)
 
         response_data = sync_voxbento_room(event, room_id, payload)
 
@@ -183,8 +191,22 @@ def _do_sync_single_room_to_voxbento(
             # We got a 409, meaning an active session was found.
             # To be certain we actually attempted to remove a language, we fetch the
             # remote state of VoxBento and compare it with what we just sent.
+            # VoxBento lists human booths only, so a language moving to AI counts as removed.
             old_lang_set = get_voxbento_room_langs(event, room_id)
-            langs_being_removed = old_lang_set - new_lang_set
+            if old_lang_set is None:
+                # The booth lookup failed, so we cannot tell whether a language with a
+                # live session is being removed. Keep the 409 instead of assuming the
+                # registry is stale, which would drop a real conflict.
+                logger.error(
+                    "VoxBento returned 409 for room %s and its booth list could not be read. Aborting.",
+                    room_id,
+                )
+                grant.room_sync_failed = True
+                grant.save(update_fields=["room_sync_failed"])
+                detail = response_data.get("detail", "Cannot verify active sessions right now. Please try again.")
+                raise ActiveSessionConflict(detail)
+
+            langs_being_removed = old_lang_set - human_lang_set
 
             if langs_being_removed:
                 # A language with an active session is being deleted — block the save.
@@ -240,6 +262,7 @@ def _do_sync_single_room_to_voxbento(
                     needs_save = False
 
                     from .language_map import language_code_for_name, language_name_for_code
+                    from .language_streams import STREAM_TYPE_AI, stream_type_of
 
                     # Create a reverse lookup for code -> Name
                     code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
@@ -247,6 +270,9 @@ def _do_sync_single_room_to_voxbento(
                     for lang_code, full_url in returned_urls.items():
                         lang_name = code_to_name.get(lang_code)
                         if lang_name and lang_name in stream_dict:
+                            if stream_type_of(stream_dict[lang_name]) == STREAM_TYPE_AI:
+                                # AI languages play VoxBento TTS, never the booth's WHEP feed.
+                                continue
                             existing = stream_dict[lang_name].get("youtube_id") or ""
                             if not existing or "/whep" in existing or "localhost" in existing:
                                 if existing != full_url:

@@ -14,6 +14,9 @@ from django.utils.translation import gettext_lazy as _
 
 ORIGINAL_LANGUAGE = "Original"
 MAX_LANGUAGE_STREAMS = 20
+STREAM_TYPE_HUMAN = "human"
+STREAM_TYPE_AI = "ai"
+STREAM_TYPES = (STREAM_TYPE_HUMAN, STREAM_TYPE_AI)
 
 _YOUTUBE_ID_RE = re.compile(r"(?:youtu\.be/|v=|/embed/|/shorts/|/live/|/v/)([0-9A-Za-z_-]{11})")
 
@@ -63,14 +66,46 @@ def is_usable_stream_entry(entry: dict | None, allow_blank: bool = False) -> boo
     return bool(normalize_audio_source(source))
 
 
+def stream_type_of(entry: dict | None) -> str:
+    """Return ``"ai"`` for VoxBento TTS entries and ``"human"`` for everything else."""
+    raw = (entry or {}).get("stream_type")
+    if not isinstance(raw, str):
+        return STREAM_TYPE_HUMAN
+    return STREAM_TYPE_AI if raw.strip().lower() == STREAM_TYPE_AI else STREAM_TYPE_HUMAN
+
+
+def ai_language_codes(streams: list | None) -> set[str]:
+    """Language codes of the stored streams that play VoxBento AI audio."""
+    from .language_map import language_code_for_name
+
+    codes = set()
+    for entry in streams or []:
+        if stream_type_of(entry) == STREAM_TYPE_AI:
+            code = language_code_for_name((entry.get("language") or "").strip())
+            if code:
+                codes.add(code)
+    return codes
+
+
+def voxbento_ai_booth_id(event_slug: str, voxbento_room_id, language_code: str) -> str:
+    """ID of a VoxBento AI booth; its audio streams from ``/ws/tts/{booth_id}``."""
+    return f"{event_slug}-{voxbento_room_id}-ai-{language_code}"
+
+
 def normalize_stream_entry(entry: dict) -> dict:
     language = (entry.get("language") or "").strip()
-    raw_source = (entry.get("youtube_id") or entry.get("audio_source") or "").strip()
-    normalized_source = normalize_audio_source(raw_source) or ""
+    stream_type = stream_type_of(entry)
+    if stream_type == STREAM_TYPE_AI:
+        # AI audio is served over VoxBento's TTS WebSocket, built per request.
+        normalized_source = ""
+    else:
+        raw_source = (entry.get("youtube_id") or entry.get("audio_source") or "").strip()
+        normalized_source = normalize_audio_source(raw_source) or ""
     return {
         "language": language,
         "youtube_id": normalized_source,
-        "use_video": bool(entry.get("use_video")),
+        "use_video": bool(entry.get("use_video")) and stream_type == STREAM_TYPE_HUMAN,
+        "stream_type": stream_type,
     }
 
 
@@ -85,6 +120,11 @@ def validate_language_streams(streams) -> list[dict]:
     for raw in streams:
         if not isinstance(raw, dict):
             raise ValidationError(_("Each language stream must be an object."))
+        raw_stream_type = raw.get("stream_type")
+        if raw_stream_type is None:
+            raw_stream_type = STREAM_TYPE_HUMAN
+        if not isinstance(raw_stream_type, str) or raw_stream_type.strip().lower() not in STREAM_TYPES:
+            raise ValidationError(_("Stream type must be either human or ai."))
         entry = normalize_stream_entry(raw)
         language = entry["language"]
         if not language:
@@ -158,18 +198,25 @@ def attendee_language_streams(stored_streams: list | None, event=None, room=None
 
             # Use the VoxBento room ID if we have it saved, otherwise fallback to Eventyay's room ID
             v_room_id = str(room.id)
+            voxbento_room_id = None
             if hasattr(room, "interpretation") and room.interpretation.backend_session_id:
-                v_room_id = room.interpretation.backend_session_id
+                voxbento_room_id = room.interpretation.backend_session_id
+                v_room_id = voxbento_room_id
+            floor_booth_id = f"{event.slug}-{v_room_id}-floor"
 
             for entry in normalized:
                 if entry["language"] == ORIGINAL_LANGUAGE:
-                    booth_id = f"{event.slug}-{v_room_id}-floor"
-                    entry["caption_ws_url"] = f"{ws_base}/ws/captions/{booth_id}"
+                    entry["caption_ws_url"] = f"{ws_base}/ws/captions/{floor_booth_id}"
                 else:
                     lang_code = language_code_for_name(entry["language"])
                     if lang_code:
                         entry["language_code"] = lang_code
                         booth_id = f"{event.slug}-{v_room_id}-{lang_code}"
                         entry["caption_ws_url"] = f"{ws_base}/ws/captions/{booth_id}"
+                        if entry.get("stream_type") == STREAM_TYPE_AI and voxbento_room_id:
+                            # VoxBento serves each AI language as its own booth, keyed by its room ID.
+                            ai_booth_id = voxbento_ai_booth_id(event.slug, voxbento_room_id, lang_code)
+                            entry["tts_ws_url"] = f"{ws_base}/ws/tts/{ai_booth_id}"
 
-    return normalized
+    # An AI entry is only playable once VoxBento has given us a TTS endpoint.
+    return [entry for entry in normalized if entry.get("stream_type") != STREAM_TYPE_AI or entry.get("tts_ws_url")]
