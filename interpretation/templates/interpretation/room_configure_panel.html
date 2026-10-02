@@ -1,6 +1,7 @@
 {% load i18n static %}
 <form method="post" class="interpretation-room-form" id="room-form-{{ entry.room.pk }}"
-      data-configured-keys='{"openai": {{ entry.configure_form.configured_api_keys.openai|yesno:"true,false" }}, "deepgram": {{ entry.configure_form.configured_api_keys.deepgram|yesno:"true,false" }}, "nvidia": {{ entry.configure_form.configured_api_keys.nvidia|yesno:"true,false" }}, "elevenlabs": {{ entry.configure_form.configured_api_keys.elevenlabs|yesno:"true,false" }}, "translation_openai": {{ entry.configure_form.configured_api_keys.translation_openai|yesno:"true,false" }}, "openrouter": {{ entry.configure_form.configured_api_keys.openrouter|yesno:"true,false" }}, "gemini": {{ entry.configure_form.configured_api_keys.gemini|yesno:"true,false" }}, "anthropic": {{ entry.configure_form.configured_api_keys.anthropic|yesno:"true,false" }}, "groq": {{ entry.configure_form.configured_api_keys.groq|yesno:"true,false" }}}'>
+      data-configured-keys='{"openai": {{ entry.configure_form.configured_api_keys.openai|yesno:"true,false" }}, "deepgram": {{ entry.configure_form.configured_api_keys.deepgram|yesno:"true,false" }}, "nvidia": {{ entry.configure_form.configured_api_keys.nvidia|yesno:"true,false" }}, "elevenlabs": {{ entry.configure_form.configured_api_keys.elevenlabs|yesno:"true,false" }}, "translation_openai": {{ entry.configure_form.configured_api_keys.translation_openai|yesno:"true,false" }}, "openrouter": {{ entry.configure_form.configured_api_keys.openrouter|yesno:"true,false" }}, "gemini": {{ entry.configure_form.configured_api_keys.gemini|yesno:"true,false" }}, "anthropic": {{ entry.configure_form.configured_api_keys.anthropic|yesno:"true,false" }}, "groq": {{ entry.configure_form.configured_api_keys.groq|yesno:"true,false" }}}'
+      data-invalid-keys='{"openai": {{ entry.configure_form.invalid_api_keys.openai|yesno:"true,false" }}, "deepgram": {{ entry.configure_form.invalid_api_keys.deepgram|yesno:"true,false" }}, "nvidia": {{ entry.configure_form.invalid_api_keys.nvidia|yesno:"true,false" }}, "elevenlabs": {{ entry.configure_form.invalid_api_keys.elevenlabs|yesno:"true,false" }}, "translation_openai": {{ entry.configure_form.invalid_api_keys.translation_openai|yesno:"true,false" }}, "openrouter": {{ entry.configure_form.invalid_api_keys.openrouter|yesno:"true,false" }}, "gemini": {{ entry.configure_form.invalid_api_keys.gemini|yesno:"true,false" }}, "anthropic": {{ entry.configure_form.invalid_api_keys.anthropic|yesno:"true,false" }}, "groq": {{ entry.configure_form.invalid_api_keys.groq|yesno:"true,false" }}}'>
     {% csrf_token %}
     <input type="hidden" name="{{ room_id_key }}" value="{{ entry.room.pk }}">
 
@@ -11,6 +12,8 @@
             </label>
             {{ entry.configure_form.interpreter }}
         </div>
+
+
 
         {% if entry.data.interpreter != "none" and not entry.interpreter_configured %}
             <p class="text-warning interpretation-section-hint">
@@ -69,7 +72,12 @@
                     <div class="api-key-input" style="display: none;">
                         <p style="margin-bottom: 10px;"><i class="fa fa-exclamation-triangle"></i> {% trans "This provider requires an API key." %}</p>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="">
+                            <div style="position: relative; flex-grow: 1;">
+                                <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="" style="padding-right: 30px;">
+                                <button type="button" class="btn btn-link toggle-password" style="position: absolute; right: 0; top: 0; bottom: 0; padding: 0 10px; color: #999; border: none; background: transparent;" title="{% trans 'Show API Key' %}">
+                                    <i class="fa fa-eye"></i>
+                                </button>
+                            </div>
                             <button type="button" class="btn btn-default btn-cancel-update" style="display: none;">{% trans "Cancel" %}</button>
                             <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-primary btn-save-key-inline" style="display: none;">{% trans "Update" %}</button>
                         </div>
@@ -112,7 +120,12 @@
                     <div class="api-key-input" style="display: none;">
                         <p style="margin-bottom: 10px;"><i class="fa fa-exclamation-triangle"></i> {% trans "This provider requires an API key." %}</p>
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="">
+                            <div style="position: relative; flex-grow: 1;">
+                                <input type="password" class="form-control" placeholder="{% trans 'Enter API Key' %}" name="" style="padding-right: 30px;">
+                                <button type="button" class="btn btn-link toggle-password" style="position: absolute; right: 0; top: 0; bottom: 0; padding: 0 10px; color: #999; border: none; background: transparent;" title="{% trans 'Show API Key' %}">
+                                    <i class="fa fa-eye"></i>
+                                </button>
+                            </div>
                             <button type="button" class="btn btn-default btn-cancel-update" style="display: none;">{% trans "Cancel" %}</button>
                             <button type="submit" name="{{ room_action_key }}" value="save" class="btn btn-primary btn-save-key-inline" style="display: none;">{% trans "Update" %}</button>
                         </div>

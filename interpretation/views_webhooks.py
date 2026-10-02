@@ -114,10 +114,24 @@ class VoxbentoWebhookReceiverView(View):
         if not room or not hasattr(room, "interpretation"):
             return
 
-        interp = room.interpretation
+        from django.db import transaction
+
+        from interpretation.models import RoomInterpretation
+
+        with transaction.atomic():
+            interp = RoomInterpretation.objects.select_for_update().get(id=room.interpretation.id)
         interp.status = interp.STATUS_RUNNING
         interp.backend_session_id = data.get("session_id", "")
-        interp.save(update_fields=["status", "backend_session_id"])
+        if interp.backend_config and (
+            "last_error" in interp.backend_config or "last_error_code" in interp.backend_config
+        ):
+            config = dict(interp.backend_config)
+            config.pop("last_error", None)
+            config.pop("last_error_code", None)
+            interp.backend_config = config
+            interp.save(update_fields=["status", "backend_session_id", "backend_config"])
+        else:
+            interp.save(update_fields=["status", "backend_session_id"])
 
         from .video_integration import notify_video_room_config_changed
 
@@ -128,10 +142,36 @@ class VoxbentoWebhookReceiverView(View):
         if not room or not hasattr(room, "interpretation"):
             return
 
-        interp = room.interpretation
+        from django.db import transaction
+
+        from interpretation.models import RoomInterpretation
+
+        with transaction.atomic():
+            interp = RoomInterpretation.objects.select_for_update().get(id=room.interpretation.id)
         interp.status = interp.STATUS_IDLE
         interp.backend_session_id = ""
-        interp.save(update_fields=["status", "backend_session_id"])
+
+        error_code = data.get("error_code")
+        error_detail = data.get("error_detail")
+        if error_code:
+            logger.error("VoxBento session crashed for room %s: %s (%s)", room.id, error_detail, error_code)
+            config = dict(interp.backend_config) if interp.backend_config else {}
+            config["last_error"] = error_detail or error_code
+            config["last_error_code"] = error_code
+            interp.backend_config = config
+            interp.save(update_fields=["status", "backend_session_id", "backend_config"])
+        else:
+            # Clear previous errors on normal shutdown
+            if interp.backend_config and (
+                "last_error" in interp.backend_config or "last_error_code" in interp.backend_config
+            ):
+                config = dict(interp.backend_config)
+                config.pop("last_error", None)
+                config.pop("last_error_code", None)
+                interp.backend_config = config
+                interp.save(update_fields=["status", "backend_session_id", "backend_config"])
+            else:
+                interp.save(update_fields=["status", "backend_session_id"])
 
         from .video_integration import notify_video_room_config_changed
 
@@ -142,7 +182,12 @@ class VoxbentoWebhookReceiverView(View):
         if not room or not hasattr(room, "interpretation"):
             return
 
-        interp = room.interpretation
+        from django.db import transaction
+
+        from interpretation.models import RoomInterpretation
+
+        with transaction.atomic():
+            interp = RoomInterpretation.objects.select_for_update().get(id=room.interpretation.id)
         config = interp.backend_config
         active = config.get("active_interpreters", [])
 
