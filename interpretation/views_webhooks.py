@@ -119,7 +119,7 @@ class VoxbentoWebhookReceiverView(View):
         interp.backend_session_id = data.get("session_id", "")
         interp.save(update_fields=["status", "backend_session_id"])
 
-        from .video_integration import notify_video_room_config_changed
+        from .room_control import notify_video_room_config_changed
 
         notify_video_room_config_changed(event)
 
@@ -133,7 +133,7 @@ class VoxbentoWebhookReceiverView(View):
         interp.backend_session_id = ""
         interp.save(update_fields=["status", "backend_session_id"])
 
-        from .video_integration import notify_video_room_config_changed
+        from .room_control import notify_video_room_config_changed
 
         notify_video_room_config_changed(event)
 
