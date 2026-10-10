@@ -3,6 +3,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django.views import View
+from csp.decorators import csp_update
+from django.utils.decorators import method_decorator
 from eventyay.control.permissions import EventPermissionRequiredMixin
 from eventyay.control.views.event import EventSettingsViewMixin
 
@@ -63,7 +65,7 @@ def _rooms_url(event):
 
 def _interpreters_url(event):
     return reverse(
-        "plugins:interpretation:interpreters",
+        "plugins:interpretation:dashboard",
         kwargs={"organizer": event.organizer.slug, "event": event.slug},
     )
 
@@ -101,9 +103,20 @@ class InterpretationEnabledMixin:
         return super().dispatch(request, *args, **kwargs)
 
 
+class XFrameOptionsSameOriginMixin:
+    def dispatch(self, *args, **kwargs):
+        response = super().dispatch(*args, **kwargs)
+        if hasattr(response, "setdefault"):
+            response.setdefault("X-Frame-Options", "SAMEORIGIN")
+        else:
+            response["X-Frame-Options"] = "SAMEORIGIN"
+        return response
+
+
+@method_decorator(csp_update({'SCRIPT_SRC': "'self' 'unsafe-eval' https://js.stripe.com"}), name='dispatch')
 class InterpretationOverview(
+    XFrameOptionsSameOriginMixin,
     InterpretationEnabledMixin,
-    EventSettingsViewMixin,
     EventPermissionRequiredMixin,
     View,
 ):
@@ -123,16 +136,43 @@ class InterpretationOverview(
             **build_overview_context(event),
         }
 
+        interpreter_view = InterpretationInterpreters()
+        interpreter_view.request = request
+        interpreter_view.args = args
+        interpreter_view.kwargs = kwargs
+        context.update(interpreter_view._context(event))
+
         grant = getattr(event, "voxbento_oauth_grant", None)
         if grant and grant.needs_reauth:
             messages.warning(
                 request, _("VoxBento requires reauthorization. Please reconnect via the Configure interpreters page.")
             )
 
+        
+        room_view = InterpretationRoomSettings()
+        room_view.request = request
+        room_view.args = args
+        room_view.kwargs = kwargs
+        room_context = room_view.get_context_data()
+        context.update(room_context)
         context["voxbento_grant"] = grant
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
+
+        if INTERPRETER_ACTION_KEY in request.POST:
+            interpreter_view = InterpretationInterpreters()
+            interpreter_view.request = request
+            interpreter_view.args = args
+            interpreter_view.kwargs = kwargs
+            return interpreter_view.post(request, *args, **kwargs)
+        if ROOM_ID_KEY in request.POST:
+            room_view = InterpretationRoomSettings()
+            room_view.request = request
+            room_view.args = args
+            room_view.kwargs = kwargs
+            return room_view.post(request, *args, **kwargs)
+
         if request.POST.get("action") == "sync_all_rooms":
             from .backends.registry import get_backend
             from .backends.voxbento_oauth import VoxbentoTemporarilyUnavailable
@@ -162,8 +202,8 @@ class InterpretationOverview(
 
 
 class InterpretationInterpreters(
+    XFrameOptionsSameOriginMixin,
     InterpretationEnabledMixin,
-    EventSettingsViewMixin,
     EventPermissionRequiredMixin,
     View,
 ):
@@ -176,10 +216,11 @@ class InterpretationInterpreters(
         return render(request, self.template_name, self._context(request.event))
 
     def post(self, request, *args, **kwargs):
+
         event = request.event
         backend_id = request.POST.get(INTERPRETER_ID_KEY)
         action = request.POST.get(INTERPRETER_ACTION_KEY)
-        redirect_url = _interpreters_url(event)
+        redirect_url = _dashboard_url(event)
         backend = get_backend(backend_id or "")
 
         if not backend.uses_event_credentials:
@@ -244,27 +285,29 @@ class InterpretationInterpreters(
                 entry["account"] = backend.credentials_account_label(event)
                 entry["server_host"] = backend.credentials_server_label(event)
             interpreters.append(entry)
+        grant = getattr(event, "voxbento_oauth_grant", None)
         return {
             "event": event,
             "interpreters": interpreters,
             "rooms_url": _rooms_url(event),
             "is_event_settings": True,
+            "voxbento_grant": grant,
         }
 
 
 class InterpretationRoomSettings(
+    XFrameOptionsSameOriginMixin,
     InterpretationEnabledMixin,
-    EventSettingsViewMixin,
     EventPermissionRequiredMixin,
     View,
 ):
     """Per-room interpreter selection and session control."""
 
-    template_name = "interpretation/room_settings.html"
+    template_name = "interpretation/overview.html"
     permission = "can_change_event_settings"
 
     def get_success_url(self, room_id=None):
-        url = _rooms_url(self.request.event)
+        url = _dashboard_url(self.request.event)
         if room_id:
             return f"{url}?room={room_id}#room-{room_id}"
         return url
@@ -273,6 +316,9 @@ class InterpretationRoomSettings(
         return render(request, self.template_name, self.get_context_data())
 
     def post(self, request, *args, **kwargs):
+
+
+
         event = request.event
         room_id = request.POST.get(ROOM_ID_KEY)
         action = request.POST.get(ROOM_ACTION_KEY)
@@ -470,7 +516,8 @@ class InterpretationRoomSettings(
         event = self.request.event
         expanded_room = self.request.GET.get("room")
         existing = {ri.room_id: ri for ri in RoomInterpretation.objects.filter(room__event=event)}
-        getattr(event, "voxbento_oauth_grant", None)
+
+        grant = getattr(event, "voxbento_oauth_grant", None)
         rooms = []
         for room in event.rooms.filter(deleted=False).order_by("name"):
             interpretation = existing.get(room.pk)
@@ -512,5 +559,6 @@ class InterpretationRoomSettings(
             "available_interpreters": list_available_interpreters(event),
             "interpreters_url": _interpreters_url(event),
             "is_event_settings": True,
+            "voxbento_grant": grant,
             **kwargs,
         }

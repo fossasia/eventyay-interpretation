@@ -1,0 +1,120 @@
+/* Match Vue Config Tabs Styling */
+html.embedded-view .interpretation-content .nav-tabs {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 20px;
+    padding: 0;
+    gap: 8px;
+    list-style: none;
+}
+html.embedded-view .interpretation-content .nav-tabs > li {
+    float: none;
+    margin-bottom: -1px;
+}
+html.embedded-view .interpretation-content .nav-tabs > li > a {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+    transition: color 0.15s ease, border-bottom-color 0.15s ease !important;
+    text-decoration: none !important;
+}
+html.embedded-view .interpretation-content .nav-tabs > li > a:hover {
+    color: #0f172a !important;
+}
+html.embedded-view .interpretation-content .nav-tabs > li.active > a,
+html.embedded-view .interpretation-content .nav-tabs > li.active > a:hover,
+html.embedded-view .interpretation-content .nav-tabs > li.active > a:focus {
+    color: #2185d0 !important;
+    border-bottom-color: #2185d0 !important;
+}
+
+.interpretation-service-card {
+    display: flex;
+    align-items: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 15px;
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.interpretation-service-icon {
+    width: 60px;
+    height: 60px;
+    background-color: #e0f2fe;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 20px;
+    flex-shrink: 0;
+}
+.interpretation-service-icon .fa {
+    font-size: 28px;
+    color: #0284c7;
+}
+.interpretation-service-info {
+    flex-grow: 1;
+}
+.interpretation-service-title {
+    margin: 0 0 5px 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+.interpretation-service-badge {
+    margin-left: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+.badge-connected {
+    background-color: #dcfce7;
+    color: #166534;
+}
+.badge-disconnected {
+    background-color: #f1f5f9;
+    color: #475569;
+}
+.interpretation-service-desc {
+    margin: 0;
+    color: #64748b;
+    font-size: 14px;
+}
+.interpretation-service-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 160px;
+    flex-shrink: 0;
+    margin-left: 20px;
+}
+.interpretation-service-actions .btn {
+    width: 100%;
+    text-align: center;
+}
+
+.tab-content {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+.interpretation-content {
+    border: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+/* Ensure the form-group for search doesn't stretch */
+.search-container {
+    max-width: 400px;
+    margin-bottom: 25px;
+}

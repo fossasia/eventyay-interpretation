@@ -1,3 +1,4 @@
+{% load static %}
 {% load i18n static %}
 <form method="post" class="interpretation-room-form" id="room-form-{{ entry.room.pk }}"
       data-configured-keys='{"openai": {{ entry.configure_form.configured_api_keys.openai|yesno:"true,false" }}, "deepgram": {{ entry.configure_form.configured_api_keys.deepgram|yesno:"true,false" }}, "nvidia": {{ entry.configure_form.configured_api_keys.nvidia|yesno:"true,false" }}, "elevenlabs": {{ entry.configure_form.configured_api_keys.elevenlabs|yesno:"true,false" }}, "translation_openai": {{ entry.configure_form.configured_api_keys.translation_openai|yesno:"true,false" }}, "openrouter": {{ entry.configure_form.configured_api_keys.openrouter|yesno:"true,false" }}, "gemini": {{ entry.configure_form.configured_api_keys.gemini|yesno:"true,false" }}, "anthropic": {{ entry.configure_form.configured_api_keys.anthropic|yesno:"true,false" }}, "groq": {{ entry.configure_form.configured_api_keys.groq|yesno:"true,false" }}}'>
@@ -5,7 +6,7 @@
     <input type="hidden" name="{{ room_id_key }}" value="{{ entry.room.pk }}">
 
     <div class="interpretation-room-panel-grid">
-        <div class="form-group">
+        <div class="form-group" style="display: none;">
             <label for="{{ entry.configure_form.interpreter.id_for_label }}">
                 {{ entry.configure_form.interpreter.label }}
             </label>
@@ -23,7 +24,7 @@
             </p>
         {% endif %}
 
-        <div class="form-group">
+        <div class="form-group" style="display: none;">
             <div class="checkbox">
                 <label>
                     {{ entry.configure_form.room_enabled }}

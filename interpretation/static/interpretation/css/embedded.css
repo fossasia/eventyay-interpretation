@@ -1,0 +1,80 @@
+/* CSS for embedded interpretation views inside the Vue SPA */
+
+/* Hide global eventyay navigation when embedded or used in video SPA context */
+html.embedded-view #wrapper > nav.navbar { display: none !important; }
+html.embedded-view #wrapper > .navbar-default.sidebar { display: none !important; }
+
+/* Reset wrappers but KEEP horizontal padding to prevent Bootstrap .row horizontal scrolling */
+html.embedded-view #wrapper { padding-top: 0 !important; margin-top: 0 !important; }
+html.embedded-view #page-wrapper { margin: 0 !important; padding: 0 !important; border-left: none !important; }
+#page-wrapper > .container-fluid { margin-top: 0 !important; padding-top: 5px !important; padding-left: 15px !important; padding-right: 15px !important; }
+
+html.embedded-view #page-wrapper > html.embedded-view footer { display: none !important; }
+html.embedded-view footer { display: none !important; }
+
+/* Remove padding/margin from body and html if any, and force white background so there's no grey box at the bottom */
+html, body, #wrapper, #page-wrapper { padding-top: 0 !important; margin-top: 0 !important; background-color: #fff !important; }
+
+/* Hide the breadcrumb section if it's taking up space */
+html.embedded-view .header-breadcrumb { display: none !important; }
+html.embedded-view .page-header { display: none !important; }
+
+/* Ensure the iframe body doesn't add mysterious top gaps */
+#page-wrapper > .container-fluid > * { margin-top: 0 !important; }
+
+/* Adjust font sizes as requested by user and remove the dashed line */
+.interpretation-hero-title { font-size: 1.8rem !important; margin-bottom: 0.2rem !important; }
+.interpretation-hero-lead { font-size: 1.25rem !important; }
+.interpretation-hero { padding: 0 0 1rem !important; margin: 0 0 1rem !important; border-bottom: none !important; }
+
+/* Responsive layout fix for columns inside the embedded iframe */
+@media (max-width: 1200px) {
+    .col-md-4 {
+        width: 100% !important;
+        float: none !important;
+        margin-bottom: 2rem !important;
+    }
+}
+
+/* Styling Interpretation Tabs to match Vue's .config-tabs */
+html.embedded-view .interpretation-content {
+    margin-bottom: 20px;
+}
+html.embedded-view .interpretation-content .nav-tabs {
+    display: flex;
+    border-bottom: 1px solid #e2e8f0;
+    margin: 0;
+    padding: 0;
+    gap: 8px;
+    list-style: none;
+}
+html.embedded-view .interpretation-content .nav-tabs > li {
+    float: none;
+    margin-bottom: -1px; /* To overlap the border-bottom of the ul */
+}
+html.embedded-view .interpretation-content .nav-tabs > li > a {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #64748b !important;
+    cursor: pointer;
+    transition: color 0.15s ease, border-bottom-color 0.15s ease;
+    border-radius: 0 !important;
+    margin-right: 0 !important;
+}
+html.embedded-view .interpretation-content .nav-tabs > li > a:hover {
+    color: #0f172a !important;
+    background: transparent !important;
+    border-bottom: 2px solid transparent !important;
+}
+html.embedded-view .interpretation-content .nav-tabs > li.active > a,
+html.embedded-view .interpretation-content .nav-tabs > li.active > a:hover,
+html.embedded-view .interpretation-content .nav-tabs > li.active > a:focus {
+    color: #2185d0 !important;
+    border: none !important;
+    border-bottom: 2px solid #2185d0 !important;
+    background: transparent !important;
+}

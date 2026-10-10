@@ -92,6 +92,11 @@ def _public_backend_config(interpretation: RoomInterpretation | None) -> dict:
     return strip_room_credential_keys(interpretation.backend_config)
 
 
+
+def get_language_display_names(codes):
+    lang_map = {"ab": "Abkhaz", "aa": "Afar", "af": "Afrikaans", "ak": "Akan", "sq": "Albanian", "am": "Amharic", "ar": "Arabic", "an": "Aragonese", "hy": "Armenian", "as": "Assamese", "av": "Avaric", "ae": "Avestan", "ay": "Aymara", "az": "Azerbaijani", "bm": "Bambara", "ba": "Bashkir", "eu": "Basque", "be": "Belarusian", "bn": "Bengali", "bi": "Bislama", "bs": "Bosnian", "br": "Breton", "bg": "Bulgarian", "my": "Burmese", "ca": "Catalan", "ch": "Chamorro", "ce": "Chechen", "ny": "Chichewa", "zh": "Chinese", "cv": "Chuvash", "kw": "Cornish", "co": "Corsican", "cr": "Cree", "hr": "Croatian", "cs": "Czech", "da": "Danish", "dv": "Divehi", "nl": "Dutch", "dz": "Dzongkha", "en": "English", "eo": "Esperanto", "et": "Estonian", "ee": "Ewe", "fo": "Faroese", "fj": "Fijian", "fi": "Finnish", "fr": "French", "ff": "Fula", "gl": "Galician", "lg": "Ganda", "ka": "Georgian", "de": "German", "el": "Greek", "gn": "Guaran\u00ed", "gu": "Gujarati", "ht": "Haitian", "ha": "Hausa", "he": "Hebrew", "hz": "Herero", "hi": "Hindi", "ho": "Hiri Motu", "hu": "Hungarian", "is": "Icelandic", "io": "Ido", "ig": "Igbo", "id": "Indonesian", "ia": "Interlingua", "ie": "Interlingue", "iu": "Inuktitut", "ik": "Inupiaq", "ga": "Irish", "it": "Italian", "ja": "Japanese", "jv": "Javanese", "kl": "Kalaallisut", "kn": "Kannada", "kr": "Kanuri", "ks": "Kashmiri", "kk": "Kazakh", "km": "Khmer", "ki": "Kikuyu", "rw": "Kinyarwanda", "rn": "Kirundi", "kv": "Komi", "kg": "Kongo", "ko": "Korean", "ku": "Kurdish", "kj": "Kwanyama", "ky": "Kyrgyz", "lo": "Lao", "la": "Latin", "lv": "Latvian", "li": "Limburgish", "ln": "Lingala", "lt": "Lithuanian", "lu": "Luba-Katanga", "lb": "Luxembourgish", "mi": "M\u0101ori", "mk": "Macedonian", "mg": "Malagasy", "ms": "Malay", "ml": "Malayalam", "mt": "Maltese", "gv": "Manx", "mr": "Marathi", "mh": "Marshallese", "mn": "Mongolian", "na": "Nauru", "nv": "Navajo", "ng": "Ndonga", "ne": "Nepali", "nd": "Northern Ndebele", "se": "Northern Sami", "no": "Norwegian", "nb": "Norwegian Bokm\u00e5l", "nn": "Norwegian Nynorsk", "ii": "Nuosu", "oc": "Occitan", "oj": "Ojibwe", "cu": "Old Church Slavonic", "or": "Oriya", "om": "Oromo", "os": "Ossetian", "pi": "P\u0101li", "pa": "Panjabi", "ps": "Pashto", "fa": "Persian", "pl": "Polish", "pt": "Portuguese", "qu": "Quechua", "ro": "Romanian", "rm": "Romansh", "ru": "Russian", "sm": "Samoan", "sg": "Sango", "sa": "Sanskrit", "sc": "Sardinian", "gd": "Scottish Gaelic", "sr": "Serbian", "sn": "Shona", "sd": "Sindhi", "si": "Sinhala", "sk": "Slovak", "sl": "Slovenian", "so": "Somali", "nr": "Southern Ndebele", "st": "Southern Sotho", "es": "Spanish", "su": "Sundanese", "sw": "Swahili", "ss": "Swati", "sv": "Swedish", "tl": "Tagalog", "ty": "Tahitian", "tg": "Tajik", "ta": "Tamil", "tt": "Tatar", "te": "Telugu", "th": "Thai", "bo": "Tibetan", "ti": "Tigrinya", "to": "Tonga", "ts": "Tsonga", "tn": "Tswana", "tr": "Turkish", "tk": "Turkmen", "tw": "Twi", "uk": "Ukrainian", "ur": "Urdu", "ug": "Uyghur", "uz": "Uzbek", "ve": "Venda", "vi": "Vietnamese", "vo": "Volap\u00fck", "wa": "Walloon", "cy": "Welsh", "fy": "Western Frisian", "wo": "Wolof", "xh": "Xhosa", "yi": "Yiddish", "yo": "Yoruba", "za": "Zhuang", "zu": "Zulu"}
+    return [lang_map.get(c, c.title()) for c in codes]
+
 def serialize_room_interpretation(room, event, interpretation=None) -> dict:
     if interpretation is None:
         interpretation = get_interpretation(room)
@@ -113,6 +118,7 @@ def serialize_room_interpretation(room, event, interpretation=None) -> dict:
         "interpreter_ready": is_room_interpretation_ready(room, event, interpretation),
         "available_interpreters": list_available_interpreters(event),
         "target_languages": list(interpretation.target_languages or []) if interpretation else [],
+        "target_languages_display": get_language_display_names(interpretation.target_languages or []) if interpretation else [],
         "transcription_provider": interpretation.transcription_provider if interpretation else "",
         "transcription_model": interpretation.transcription_model if interpretation else "",
         "enable_transcription": interpretation.enable_transcription if interpretation else False,
@@ -363,6 +369,7 @@ def clear_room_interpretation_setup(room, event) -> RoomInterpretation:
             "translation_provider": "",
             "translation_model": "",
             "target_languages": [],
+            "target_languages_display": [],
             "language_streams": [],
         },
     )

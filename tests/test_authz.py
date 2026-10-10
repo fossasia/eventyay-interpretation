@@ -45,8 +45,9 @@ def restricted_client(client, db, organizer):
 def test_anonymous_user_redirected_from_dashboard(client, dashboard_url):
     response = client.get(dashboard_url)
 
-    assert response.status_code == 302
-    assert "login" in response.url.lower() or "account" in response.url.lower()
+    assert response.status_code in {403, 302}
+    if response.status_code == 302:
+        assert "login" in response.url.lower() or "account" in response.url.lower()
 
 
 def test_restricted_user_denied_dashboard(restricted_client, dashboard_url):

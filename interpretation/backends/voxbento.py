@@ -22,6 +22,8 @@ class VoxbentoBackend(InterpreterBackend):
     room_credential_keys = frozenset()
 
     def is_configured(self, event) -> bool:
+        if self.is_disconnected(event):
+            return False
         return is_voxbento_configured(event)
 
     def start(self, event, interpretation, *, stream_url: str) -> str:

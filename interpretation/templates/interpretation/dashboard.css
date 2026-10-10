@@ -639,3 +639,126 @@
 .interpretation-room-name {
     font-weight: 600;
 }
+
+
+/* Services Grid Redesign */
+.interpretation-services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 24px;
+    margin-top: 20px;
+    margin-bottom: 30px;
+}
+
+.interpretation-service-card {
+    background: #ffffff;
+    border: 1px solid #e3e8ee;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.interpretation-service-card:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+    border-color: #ced6e0;
+}
+
+.interpretation-service-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid #f1f4f8;
+    display: flex;
+    align-items: center;
+    background: #fcfdfe;
+}
+
+.interpretation-service-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: #eef2f7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 16px;
+    font-size: 22px;
+    color: #475569;
+}
+
+.interpretation-service-icon.voxbento {
+    background: #e0f2fe;
+    color: #0284c7;
+}
+
+.interpretation-service-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.interpretation-service-body {
+    padding: 24px;
+    flex: 1;
+}
+
+.interpretation-service-footer {
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #f1f4f8;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.interpretation-service-status {
+    display: flex;
+    align-items: center;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border: 1px solid #f1f4f8;
+}
+
+.interpretation-service-status-icon {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 12px;
+}
+
+.interpretation-service-status-icon.connected {
+    background: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.interpretation-service-status-icon.disconnected {
+    background: #94a3b8;
+}
+
+.interpretation-service-status-text {
+    font-weight: 500;
+    font-size: 1.1rem;
+    color: #334155;
+    flex: 1;
+}
+
+.interpretation-service-status-sub {
+    font-size: 0.95rem;
+    color: #64748b;
+    display: block;
+    margin-top: 2px;
+}
+
+.interpretation-service-desc {
+    font-size: 1.05rem;
+    color: #475569;
+    line-height: 1.5;
+    margin-bottom: 16px;
+}
+

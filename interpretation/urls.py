@@ -18,7 +18,7 @@ room_router.register(
 )
 
 
-_PREFIX = "common/event/<orgslug:organizer>/<slug:event>/interpretation/"
+_PREFIX = "video/plugins/<orgslug:organizer>/<slug:event>/interpretation/"
 
 urlpatterns = [
     path(
