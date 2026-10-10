@@ -5,27 +5,20 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-import hashlib
-
-from django.core.cache import cache
+class APIKeyNetworkError(Exception):
+    pass
 
 
 def validate_provider_key(provider: str, api_key: str) -> bool:
     """
     Validates a third-party AI provider API key by making a lightweight
     authenticated request to their models or auth endpoint.
-    Returns True if valid (or if we can't definitively prove it's invalid due to network).
+    Returns True if valid.
     Returns False if the provider explicitly rejects the key (401/403).
+    Raises APIKeyNetworkError on network timeouts or 5xx errors.
     """
     if not api_key:
         return False
-
-    key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
-    cache_key = f"interpretation_api_key_{provider}_{key_hash}"
-
-    cached_result = cache.get(cache_key)
-    if cached_result is not None:
-        return cached_result
 
     try:
         resp = None
@@ -88,29 +81,19 @@ def validate_provider_key(provider: str, api_key: str) -> bool:
 
         if resp is not None:
             # Explicit auth rejection
-            if resp.status_code in (401, 403):
-                cache.set(cache_key, False, timeout=300)
+            if resp.status_code in (401, 403, 400):
                 return False
             # Valid response
             if 200 <= resp.status_code < 300:
-                cache.set(cache_key, True, timeout=300)
                 return True
-            # Transient failures (rate limits, server errors) - fail open so users aren't locked out
+            # Transient failures (rate limits, server errors)
             if resp.status_code == 429 or resp.status_code >= 500:
-                cache.set(cache_key, True, timeout=300)
-                return True
-            # For 400, 404s or other unexpected client errors, assume invalid endpoint/config
-            # but fail open so a provider-side change cannot prevent saving room settings.
-            logger.warning("Unexpected status %s from %s during key validation", resp.status_code, provider)
-            cache.set(cache_key, True, timeout=60)
-            return True
+                raise APIKeyNetworkError(f"Provider {provider} returned {resp.status_code}")
+            # For 404s or other unexpected client errors, treat the validation request itself as inconclusive
+            raise APIKeyNetworkError(f"Unexpected provider response: {resp.status_code}")
 
     except requests.RequestException as e:
         logger.warning(f"Failed to reach {provider} API for key validation: {e}")
-        # Default to True on network error to avoid blocking the user from saving
-        # Cache for a shorter time on network error
-        cache.set(cache_key, True, timeout=60)
-        return True
+        raise APIKeyNetworkError(f"Network error contacting {provider}: {e}")
 
-    cache.set(cache_key, True, timeout=300)
     return True

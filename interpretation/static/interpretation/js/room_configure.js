@@ -26,6 +26,16 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         }
 
+        var invalidKeysRaw = form.getAttribute('data-invalid-keys');
+        var invalidKeys = {};
+        if (invalidKeysRaw) {
+            try {
+                invalidKeys = JSON.parse(invalidKeysRaw);
+            } catch (e) {
+                console.error("Failed to parse invalid keys", e);
+            }
+        }
+
         function updateVisibility() {
             var isVoxbento = interpreterSelect && interpreterSelect.value === 'voxbento';
             var isRoomEnabled = enableRoom ? enableRoom.checked : false;
@@ -200,10 +210,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 inputField.name = prefix + keyMapName + '_api_key';
                 
                 var isConfigured = configuredKeys[keyMapName];
+                var isInvalid = invalidKeys[keyMapName];
                 var cancelButton = inputDiv.querySelector('.btn-cancel-update');
                 var updateInlineButton = inputDiv.querySelector('.btn-save-key-inline');
                 
-                if (isConfigured && !inputField.dataset.wantsUpdate) {
+                if (isConfigured && !inputField.dataset.wantsUpdate && !isInvalid) {
                     statusDiv.style.display = 'block';
                     inputDiv.style.display = 'none';
                     inputField.required = false;
@@ -211,7 +222,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     statusDiv.style.display = 'none';
                     inputDiv.style.display = 'block';
                     inputField.required = true;
-                    if (isConfigured) {
+                    if (isConfigured && !isInvalid) {
                         if (cancelButton) cancelButton.style.display = 'inline-block';
                         if (updateInlineButton) updateInlineButton.style.display = 'inline-block';
                     } else {
