@@ -19,12 +19,18 @@ def augment_room_config(room, room_config: dict) -> None:
         return
 
     interpretation = get_interpretation(room)
-
-    if not interpretation or not interpretation.room_enabled or interpretation.interpreter == "none":
+    if not interpretation:
         room_config["interpretation_use_plugin_streams"] = False
         return
 
-    if interpretation.interpreter == "voxbento":
+    stored = interpretation.language_streams
+    streams = attendee_language_streams(stored, event, room)
+
+    has_alternative = any(s.get("language") != "Original" for s in streams)
+    has_captions = any(s.get("caption_ws_url") for s in streams)
+    has_manual_streams = has_alternative or has_captions
+
+    if interpretation.interpreter == "voxbento" and interpretation.room_enabled:
         from .backends.voxbento_credentials import VoxbentoError, get_voxbento_base_url
 
         try:
@@ -35,15 +41,12 @@ def augment_room_config(room, room_config: dict) -> None:
         has_active_grant = (
             grant and not getattr(grant, "is_disconnected", False) and bool(getattr(grant, "access_token", ""))
         )
-        if not (base_url and has_active_grant):
+        if not (base_url and has_active_grant) and not has_manual_streams:
             room_config["interpretation_use_plugin_streams"] = False
             return
-
-    stored = interpretation.language_streams
-    streams = attendee_language_streams(stored, event, room)
-
-    has_alternative = any(s.get("language") != "Original" for s in streams)
-    has_captions = any(s.get("caption_ws_url") for s in streams)
+    elif not has_manual_streams:
+        room_config["interpretation_use_plugin_streams"] = False
+        return
 
     is_active = has_alternative or has_captions
     room_config["interpretation_use_plugin_streams"] = is_active
