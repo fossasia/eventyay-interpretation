@@ -294,7 +294,7 @@ def _do_sync_single_room_to_voxbento(
                     stream_dict = {entry["language"]: entry for entry in new_streams if "language" in entry}
                     needs_save = False
 
-                    from .language_map import language_code_for_name, language_name_for_code
+                    from .language_map import language_name_for_code
 
                     # Create a reverse lookup for code -> Name
                     code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
