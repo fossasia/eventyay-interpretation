@@ -255,12 +255,15 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
                         for schedule in room.stream_schedules.all():
                             cfg = schedule.config or {}
                             s_streams = cfg.get("language_streams") or cfg.get("languageUrls") or []
-                            for s_entry in s_streams:
-                                s_lang = s_entry.get("language")
-                                if s_lang and s_lang != "Original":
-                                    code = language_code_for_name(s_lang)
-                                    if code:
-                                        langs.append(code)
+                            if isinstance(s_streams, list):
+                                for s_entry in s_streams:
+                                    if not isinstance(s_entry, dict):
+                                        continue
+                                    s_lang = s_entry.get("language")
+                                    if s_lang and s_lang != "Original":
+                                        code = language_code_for_name(s_lang)
+                                        if code:
+                                            langs.append(code)
                 except Exception:
                     pass
 

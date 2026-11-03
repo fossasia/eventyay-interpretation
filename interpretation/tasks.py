@@ -218,29 +218,34 @@ def _do_sync_single_room_to_voxbento(
                         for schedule in room.stream_schedules.all():
                             cfg = schedule.config or {}
                             s_streams = cfg.get("language_streams") or cfg.get("languageUrls") or []
-                            for s_entry in s_streams:
-                                s_lang = s_entry.get("language")
-                                if s_lang and s_lang != "Original":
-                                    code = language_code_for_name(s_lang)
-                                    if code:
-                                        new_lang_set.add(code)
+                            if isinstance(s_streams, list):
+                                for s_entry in s_streams:
+                                    if not isinstance(s_entry, dict):
+                                        continue
+                                    s_lang = s_entry.get("language")
+                                    if s_lang and s_lang != "Original":
+                                        code = language_code_for_name(s_lang)
+                                        if code:
+                                            new_lang_set.add(code)
                 except Exception:
                     pass
 
+                sorted_langs = sorted(new_lang_set)
                 try:
-                    validated_langs = validate_target_language_codes(list(new_lang_set))
+                    validated_langs = validate_target_language_codes(sorted_langs)
                 except ValueError:
-                    validated_langs = list(new_lang_set)[:32]
+                    validated_langs = sorted_langs[:32]
 
                 if set(interpretation.target_languages or []) != set(validated_langs):
                     interpretation.target_languages = validated_langs
-                    interpretation.save(update_fields=["target_languages"])
+                    RoomInterpretation.objects.filter(pk=interpretation.pk).update(target_languages=validated_langs)
         else:
             # When not using plugin streams, we pull the target languages from the Eventyay room config
             # so VoxBento creates the necessary WHEP endpoint booths for them.
             new_lang_set = _extract_langs_from_module_config(room.module_config)
+            validated_langs = list(new_lang_set)
 
-        payload["target_languages"] = list(new_lang_set)
+        payload["target_languages"] = validated_langs
 
         response_data = sync_voxbento_room(event, room_id, payload)
 
@@ -338,8 +343,9 @@ def _do_sync_single_room_to_voxbento(
                                     needs_save = True
 
                     if needs_save:
-                        interpretation.language_streams = list(stream_dict.values())
-                        interpretation.save(update_fields=["language_streams"])
+                        stream_list = list(stream_dict.values())
+                        interpretation.language_streams = stream_list
+                        RoomInterpretation.objects.filter(pk=interpretation.pk).update(language_streams=stream_list)
 
                     # Also update stream schedules configured for this room with returned WHEP URLs
                     try:

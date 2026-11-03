@@ -193,6 +193,10 @@ try:
         if getattr(instance, "_skip_interpretation_sync", False):
             return
 
+        # Synchronous sync is intentional here: it allows ActiveSessionConflict to block
+        # the save and ensures WHEP URLs are populated immediately in the API response.
+        # Temporary external state drift in the unlikely event of transaction rollback is
+        # healed during subsequent room synchronization.
         room = getattr(instance, "room", None)
         if not room or not getattr(room, "event", None):
             return
