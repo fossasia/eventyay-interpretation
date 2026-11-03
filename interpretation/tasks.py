@@ -1,3 +1,4 @@
+import json
 import logging
 
 import redis
@@ -196,27 +197,45 @@ def _do_sync_single_room_to_voxbento(
         from interpretation.settings import use_plugin_language_streams
 
         use_plugin_streams = use_plugin_language_streams(event)
+        new_lang_set = set()
+        validated_langs = []
         if use_plugin_streams:
-            new_lang_set = set()
             if interpretation and interpretation.room_enabled and interpretation.interpreter == "voxbento":
                 from .language_map import language_code_for_name
                 from .utils import validate_target_language_codes
 
+                # 1. Collect room-level target languages (user-configured)
+                room_langs = set()
                 if interpretation.language_streams:
                     for s in interpretation.language_streams:
-                        lang_name = s.get("language")
-                        if lang_name and lang_name != "Original":
-                            code = language_code_for_name(lang_name)
-                            if code:
-                                new_lang_set.add(code)
+                        if isinstance(s, dict):
+                            lang_name = s.get("language")
+                            if lang_name and lang_name != "Original":
+                                code = language_code_for_name(lang_name)
+                                if code and len(code) == 2 and code.isalpha():
+                                    room_langs.add(code)
                 elif interpretation.target_languages:
-                    new_lang_set.update(interpretation.target_languages)
+                    for code in interpretation.target_languages:
+                        if isinstance(code, str):
+                            c = code.strip().lower()
+                            if len(c) == 2 and c.isalpha():
+                                room_langs.add(c)
 
-                # Ensure any language configured in the room's stream schedules is also included
-                try:
-                    if hasattr(room, "stream_schedules"):
-                        for schedule in room.stream_schedules.all():
-                            cfg = schedule.config or {}
+                new_lang_set.update(room_langs)
+
+                # 2. Collect stream-schedule languages dynamically
+                schedule_langs = set()
+                if hasattr(room, "stream_schedules"):
+                    for schedule in room.stream_schedules.all():
+                        try:
+                            cfg = schedule.config
+                            if isinstance(cfg, str):
+                                try:
+                                    cfg = json.loads(cfg)
+                                except Exception:
+                                    cfg = {}
+                            if not isinstance(cfg, dict):
+                                continue
                             s_streams = cfg.get("language_streams") or cfg.get("languageUrls") or []
                             if isinstance(s_streams, list):
                                 for s_entry in s_streams:
@@ -225,20 +244,19 @@ def _do_sync_single_room_to_voxbento(
                                     s_lang = s_entry.get("language")
                                     if s_lang and s_lang != "Original":
                                         code = language_code_for_name(s_lang)
-                                        if code:
-                                            new_lang_set.add(code)
-                except Exception:
-                    pass
+                                        if code and len(code) == 2 and code.isalpha():
+                                            schedule_langs.add(code)
+                        except Exception as e:
+                            logger.warning(
+                                "Error reading schedule config for schedule %s: %s",
+                                getattr(schedule, "id", None),
+                                e,
+                            )
+
+                new_lang_set.update(schedule_langs)
 
                 sorted_langs = sorted(new_lang_set)
-                try:
-                    validated_langs = validate_target_language_codes(sorted_langs)
-                except ValueError:
-                    validated_langs = sorted_langs[:32]
-
-                if set(interpretation.target_languages or []) != set(validated_langs):
-                    interpretation.target_languages = validated_langs
-                    RoomInterpretation.objects.filter(pk=interpretation.pk).update(target_languages=validated_langs)
+                validated_langs = validate_target_language_codes(sorted_langs)
         else:
             # When not using plugin streams, we pull the target languages from the Eventyay room config
             # so VoxBento creates the necessary WHEP endpoint booths for them.
@@ -351,31 +369,47 @@ def _do_sync_single_room_to_voxbento(
                     try:
                         if hasattr(room, "stream_schedules"):
                             for schedule in room.stream_schedules.all():
-                                s_config = dict(schedule.config or {})
-                                s_updated = False
-                                for key in ("language_streams", "languageUrls"):
-                                    s_streams = s_config.get(key)
-                                    if isinstance(s_streams, list) and s_streams:
-                                        for s_entry in s_streams:
-                                            s_lang = s_entry.get("language")
-                                            if s_lang:
-                                                s_code = language_code_for_name(s_lang)
-                                                if s_code in returned_urls:
-                                                    s_url = returned_urls[s_code]
-                                                    if not s_entry.get("url") or "/whep" in s_entry.get("url", ""):
-                                                        current_u = s_entry.get("url")
-                                                        current_yt = s_entry.get("youtube_id")
-                                                        if current_u != s_url or current_yt != s_url:
-                                                            s_entry["url"] = s_url
-                                                            s_entry["youtube_id"] = s_url
-                                                            s_entry["use_video"] = True
-                                                            s_updated = True
-                                        if s_updated:
-                                            s_config[key] = s_streams
-                                if s_updated:
-                                    schedule.config = s_config
-                                    schedule._skip_interpretation_sync = True
-                                    schedule.save(update_fields=["config"])
+                                try:
+                                    cfg = schedule.config
+                                    if isinstance(cfg, str):
+                                        try:
+                                            cfg = json.loads(cfg)
+                                        except Exception:
+                                            cfg = {}
+                                    if not isinstance(cfg, dict):
+                                        continue
+                                    s_config = dict(cfg)
+                                    s_updated = False
+                                    for key in ("language_streams", "languageUrls"):
+                                        s_streams = s_config.get(key)
+                                        if isinstance(s_streams, list) and s_streams:
+                                            for s_entry in s_streams:
+                                                if not isinstance(s_entry, dict):
+                                                    continue
+                                                s_lang = s_entry.get("language")
+                                                if s_lang:
+                                                    s_code = language_code_for_name(s_lang)
+                                                    if s_code in returned_urls:
+                                                        s_url = returned_urls[s_code]
+                                                        if not s_entry.get("url") or "/whep" in s_entry.get("url", ""):
+                                                            current_u = s_entry.get("url")
+                                                            current_yt = s_entry.get("youtube_id")
+                                                            if current_u != s_url or current_yt != s_url:
+                                                                s_entry["url"] = s_url
+                                                                s_entry["youtube_id"] = s_url
+                                                                s_updated = True
+                                            if s_updated:
+                                                s_config[key] = s_streams
+                                    if s_updated:
+                                        schedule.config = s_config
+                                        schedule._skip_interpretation_sync = True
+                                        schedule.save(update_fields=["config"])
+                                except Exception as sched_err:
+                                    logger.warning(
+                                        "Failed to update schedule %s with WHEP URLs: %s",
+                                        getattr(schedule, "id", None),
+                                        sched_err,
+                                    )
                     except Exception as e:
                         logger.warning("Failed to update stream schedules with VoxBento WHEP URLs: %s", e)
             else:

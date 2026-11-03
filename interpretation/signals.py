@@ -108,7 +108,7 @@ def room_interpretation_post_save(sender, instance, created, **kwargs):
             room_instance=instance.room,
             old_module_config=None,  # RoomInterpretation changes are additive; no removal guard needed
         )
-    except ActiveSessionConflict as e:
+    except (ActiveSessionConflict, ValueError) as e:
         _raise_appropriate_exception(str(e), instance.room.event_id)
     except VoxbentoReauthorizationRequired:
         _raise_appropriate_exception(
@@ -152,7 +152,7 @@ def room_pre_save(sender, instance, **kwargs):
             room_instance=instance,
             old_module_config=old_module_config,
         )
-    except ActiveSessionConflict as e:
+    except (ActiveSessionConflict, ValueError) as e:
         _raise_appropriate_exception(str(e), instance.event_id)
     except VoxbentoReauthorizationRequired:
         _raise_appropriate_exception(
@@ -220,7 +220,7 @@ try:
                 room_instance=room,
                 old_module_config=None,
             )
-        except ActiveSessionConflict as e:
+        except (ActiveSessionConflict, ValueError) as e:
             _raise_appropriate_exception(str(e), room.event_id)
         except VoxbentoReauthorizationRequired:
             _raise_appropriate_exception(

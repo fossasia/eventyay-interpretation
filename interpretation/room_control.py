@@ -248,29 +248,14 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
                 from .language_map import language_code_for_name
 
                 langs = [
-                    language_code_for_name(s["language"]) for s in validated_streams if s["language"] != "Original"
+                    language_code_for_name(s["language"])
+                    for s in validated_streams
+                    if isinstance(s, dict) and s.get("language") and s["language"] != "Original"
                 ]
-                try:
-                    if hasattr(room, "stream_schedules"):
-                        for schedule in room.stream_schedules.all():
-                            cfg = schedule.config or {}
-                            s_streams = cfg.get("language_streams") or cfg.get("languageUrls") or []
-                            if isinstance(s_streams, list):
-                                for s_entry in s_streams:
-                                    if not isinstance(s_entry, dict):
-                                        continue
-                                    s_lang = s_entry.get("language")
-                                    if s_lang and s_lang != "Original":
-                                        code = language_code_for_name(s_lang)
-                                        if code:
-                                            langs.append(code)
-                except Exception:
-                    pass
-
                 seen = set()
                 deduped = []
                 for code in langs:
-                    if code and code not in seen:
+                    if code and len(code) == 2 and code.isalpha() and code not in seen:
                         seen.add(code)
                         deduped.append(code)
                 interpretation.target_languages = validate_target_language_codes(deduped)
