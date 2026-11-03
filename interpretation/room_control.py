@@ -182,106 +182,110 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
     if hasattr(data, "copy"):
         data = data.copy()
 
-    interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
-    was_running = bool(interpretation.backend_session_id)
-    old_interpreter = interpretation.interpreter
+    with transaction.atomic():
+        interpretation, _created = RoomInterpretation.objects.get_or_create(room=room)
+        was_running = bool(interpretation.backend_session_id)
+        old_interpreter = interpretation.interpreter
 
-    if "interpreter" in data:
-        interpreter = (data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE).strip()
-        if not is_known_interpreter(interpreter):
-            raise ValueError(_("Unknown interpreter."))
-        interpretation.interpreter = interpreter
+        if "interpreter" in data:
+            interpreter = (data.get("interpreter") or RoomInterpretation.INTERPRETER_NONE).strip()
+            if not is_known_interpreter(interpreter):
+                raise ValueError(_("Unknown interpreter."))
+            interpretation.interpreter = interpreter
 
-    changed_room_enabled = False
-    if "room_enabled" in data:
-        new_room_enabled = _parse_bool(data.get("room_enabled"))
-        if interpretation.room_enabled != new_room_enabled:
-            changed_room_enabled = True
-        interpretation.room_enabled = new_room_enabled
+        changed_room_enabled = False
+        if "room_enabled" in data:
+            new_room_enabled = _parse_bool(data.get("room_enabled"))
+            if interpretation.room_enabled != new_room_enabled:
+                changed_room_enabled = True
+            interpretation.room_enabled = new_room_enabled
 
-    if interpretation.room_enabled and interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE:
+        if interpretation.room_enabled and interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE:
+            changed_interpreter = "interpreter" in data and interpretation.interpreter != old_interpreter
+            if changed_room_enabled or changed_interpreter:
+                raise ValueError(_("An interpreter must be selected to enable interpretation for this room."))
+
+        # Validation: Enforce AI Configuration Invariants
+        trans_enabled = _parse_bool(data.get("enable_transcription", interpretation.enable_transcription))
+        trans_provider = (data.get("transcription_provider", interpretation.transcription_provider) or "").strip()
+        trans_model = (data.get("transcription_model", interpretation.transcription_model) or "").strip()
+
+        transl_enabled = _parse_bool(data.get("enable_translation", interpretation.enable_translation))
+        transl_provider = (data.get("translation_provider", interpretation.translation_provider) or "").strip()
+        transl_model = (data.get("translation_model", interpretation.translation_model) or "").strip()
+
+        if trans_enabled:
+            if not trans_provider:
+                raise ValueError(_("Transcription provider is required when transcription is enabled."))
+            if not trans_model:
+                raise ValueError(_("Transcription model is required when transcription is enabled."))
+        else:
+            # Force clear them if the feature is disabled
+            data["transcription_provider"] = ""
+            data["transcription_model"] = ""
+
+        if transl_enabled:
+            if not trans_enabled:
+                raise ValueError(_("Floor Audio Transcription must be enabled to use translation."))
+            if not transl_provider:
+                raise ValueError(_("Translation provider is required when translation is enabled."))
+            if not transl_model:
+                raise ValueError(_("Translation model is required when translation is enabled."))
+        else:
+            # Force clear them if the feature is disabled
+            data["translation_provider"] = ""
+            data["translation_model"] = ""
+
+        if "target_languages" in data:
+            interpretation.target_languages = validate_target_language_codes(
+                normalize_target_languages(data.get("target_languages"))
+            )
+
+        if "language_streams" in data:
+            try:
+                validated_streams = validate_language_streams(data.get("language_streams"))
+                interpretation.language_streams = validated_streams
+                if interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO:
+                    from .language_map import language_code_for_name
+
+                    seen = set()
+                    deduped = []
+                    for s in validated_streams:
+                        if isinstance(s, dict) and s.get("language") and s["language"] != "Original":
+                            raw_lang = s["language"]
+                            code = language_code_for_name(raw_lang)
+                            if not code or len(code) != 2 or not code.isalpha():
+                                raise ValueError(
+                                    _("Unsupported or unmapped language name for VoxBento: %(name)s")
+                                    % {"name": raw_lang}
+                                )
+                            if code not in seen:
+                                seen.add(code)
+                                deduped.append(code)
+                    interpretation.target_languages = validate_target_language_codes(deduped)
+            except ValidationError as exc:
+                raise ValueError(str(exc)) from exc
+
+        _apply_backend_config(interpretation, data)
+        interpretation.save()
+
         changed_interpreter = "interpreter" in data and interpretation.interpreter != old_interpreter
-        if changed_room_enabled or changed_interpreter:
-            raise ValueError(_("An interpreter must be selected to enable interpretation for this room."))
+        needs_broadcast = changed_room_enabled or changed_interpreter or "language_streams" in data
 
-    # Validation: Enforce AI Configuration Invariants
-    trans_enabled = _parse_bool(data.get("enable_transcription", interpretation.enable_transcription))
-    trans_provider = (data.get("transcription_provider", interpretation.transcription_provider) or "").strip()
-    trans_model = (data.get("transcription_model", interpretation.transcription_model) or "").strip()
+        if needs_broadcast:
+            transaction.on_commit(lambda: notify_video_room_config_changed(event))
 
-    transl_enabled = _parse_bool(data.get("enable_translation", interpretation.enable_translation))
-    transl_provider = (data.get("translation_provider", interpretation.translation_provider) or "").strip()
-    transl_model = (data.get("translation_model", interpretation.translation_model) or "").strip()
+        if was_running and (
+            not interpretation.room_enabled
+            or interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
+            or interpretation.interpreter != old_interpreter
+        ):
+            result = stop_room_session(room, event)
+            interpretation.refresh_from_db()
+            if not result.ok:
+                raise ValueError(result.error)
 
-    if trans_enabled:
-        if not trans_provider:
-            raise ValueError(_("Transcription provider is required when transcription is enabled."))
-        if not trans_model:
-            raise ValueError(_("Transcription model is required when transcription is enabled."))
-    else:
-        # Force clear them if the feature is disabled
-        data["transcription_provider"] = ""
-        data["transcription_model"] = ""
-
-    if transl_enabled:
-        if not trans_enabled:
-            raise ValueError(_("Floor Audio Transcription must be enabled to use translation."))
-        if not transl_provider:
-            raise ValueError(_("Translation provider is required when translation is enabled."))
-        if not transl_model:
-            raise ValueError(_("Translation model is required when translation is enabled."))
-    else:
-        # Force clear them if the feature is disabled
-        data["translation_provider"] = ""
-        data["translation_model"] = ""
-
-    if "target_languages" in data:
-        interpretation.target_languages = validate_target_language_codes(
-            normalize_target_languages(data.get("target_languages"))
-        )
-
-    if "language_streams" in data:
-        try:
-            validated_streams = validate_language_streams(data.get("language_streams"))
-            interpretation.language_streams = validated_streams
-            if interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO:
-                from .language_map import language_code_for_name
-
-                langs = [
-                    language_code_for_name(s["language"])
-                    for s in validated_streams
-                    if isinstance(s, dict) and s.get("language") and s["language"] != "Original"
-                ]
-                seen = set()
-                deduped = []
-                for code in langs:
-                    if code and len(code) == 2 and code.isalpha() and code not in seen:
-                        seen.add(code)
-                        deduped.append(code)
-                interpretation.target_languages = validate_target_language_codes(deduped)
-        except ValidationError as exc:
-            raise ValueError(str(exc)) from exc
-
-    _apply_backend_config(interpretation, data)
-    interpretation.save()
-
-    changed_interpreter = "interpreter" in data and interpretation.interpreter != old_interpreter
-    needs_broadcast = changed_room_enabled or changed_interpreter or "language_streams" in data
-
-    if needs_broadcast:
-        transaction.on_commit(lambda: notify_video_room_config_changed(event))
-
-    if was_running and (
-        not interpretation.room_enabled
-        or interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
-        or interpretation.interpreter != old_interpreter
-    ):
-        result = stop_room_session(room, event)
-        interpretation.refresh_from_db()
-        if not result.ok:
-            raise ValueError(result.error)
-
-    return interpretation
+        return interpretation
 
 
 @dataclass

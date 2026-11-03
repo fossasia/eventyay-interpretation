@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 
@@ -346,19 +348,35 @@ def _do_sync_single_room_to_voxbento(
                     stream_dict = {entry["language"]: entry for entry in new_streams if "language" in entry}
                     needs_save = False
 
-                    from .language_map import language_code_for_name
+                    from .language_map import language_code_for_name, language_name_for_code
 
                     # Create a reverse lookup for code -> Name
                     code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
+                    room_target_codes = set(interpretation.target_languages or [])
 
                     for lang_code, full_url in returned_urls.items():
                         lang_name = code_to_name.get(lang_code)
                         if lang_name and lang_name in stream_dict:
-                            existing = stream_dict[lang_name].get("youtube_id") or ""
-                            if not existing or "/whep" in existing or "localhost" in existing:
-                                if existing != full_url:
+                            existing_yt = stream_dict[lang_name].get("youtube_id") or ""
+                            existing_u = stream_dict[lang_name].get("url") or ""
+                            can_overwrite_u = not existing_u or "/whep" in existing_u or "localhost" in existing_u
+                            can_overwrite_yt = not existing_yt or "/whep" in existing_yt or "localhost" in existing_yt
+                            if can_overwrite_u and can_overwrite_yt:
+                                if existing_yt != full_url or existing_u != full_url:
                                     stream_dict[lang_name]["youtube_id"] = full_url
+                                    if "url" in stream_dict[lang_name]:
+                                        stream_dict[lang_name]["url"] = full_url
                                     needs_save = True
+                        elif lang_code in room_target_codes:
+                            # Restore entry for room-level target_languages that didn't exist in language_streams
+                            resolved_name = language_name_for_code(lang_code)
+                            stream_dict[resolved_name] = {
+                                "language": resolved_name,
+                                "url": full_url,
+                                "youtube_id": full_url,
+                                "use_video": False,
+                            }
+                            needs_save = True
 
                     if needs_save:
                         stream_list = list(stream_dict.values())
@@ -368,46 +386,66 @@ def _do_sync_single_room_to_voxbento(
                     # Also update stream schedules configured for this room with returned WHEP URLs
                     try:
                         if hasattr(room, "stream_schedules"):
-                            for schedule in room.stream_schedules.all():
+                            from django.db import transaction
+                            from eventyay.base.models.stream_schedule import StreamSchedule
+
+                            schedule_ids = list(room.stream_schedules.values_list("id", flat=True))
+                            for sched_id in schedule_ids:
                                 try:
-                                    cfg = schedule.config
-                                    if isinstance(cfg, str):
-                                        try:
-                                            cfg = json.loads(cfg)
-                                        except Exception:
-                                            cfg = {}
-                                    if not isinstance(cfg, dict):
-                                        continue
-                                    s_config = dict(cfg)
-                                    s_updated = False
-                                    for key in ("language_streams", "languageUrls"):
-                                        s_streams = s_config.get(key)
-                                        if isinstance(s_streams, list) and s_streams:
-                                            for s_entry in s_streams:
-                                                if not isinstance(s_entry, dict):
-                                                    continue
-                                                s_lang = s_entry.get("language")
-                                                if s_lang:
-                                                    s_code = language_code_for_name(s_lang)
-                                                    if s_code in returned_urls:
-                                                        s_url = returned_urls[s_code]
-                                                        if not s_entry.get("url") or "/whep" in s_entry.get("url", ""):
-                                                            current_u = s_entry.get("url")
-                                                            current_yt = s_entry.get("youtube_id")
-                                                            if current_u != s_url or current_yt != s_url:
-                                                                s_entry["url"] = s_url
-                                                                s_entry["youtube_id"] = s_url
-                                                                s_updated = True
-                                            if s_updated:
-                                                s_config[key] = s_streams
-                                    if s_updated:
-                                        schedule.config = s_config
-                                        schedule._skip_interpretation_sync = True
-                                        schedule.save(update_fields=["config"])
+                                    with transaction.atomic():
+                                        schedule = (
+                                            StreamSchedule.objects.select_for_update().filter(id=sched_id).first()
+                                        )
+                                        if not schedule:
+                                            continue
+                                        cfg = schedule.config
+                                        if isinstance(cfg, str):
+                                            try:
+                                                cfg = json.loads(cfg)
+                                            except Exception:
+                                                cfg = {}
+                                        if not isinstance(cfg, dict):
+                                            continue
+                                        s_config = dict(cfg)
+                                        s_updated = False
+                                        for key in ("language_streams", "languageUrls"):
+                                            s_streams = s_config.get(key)
+                                            if isinstance(s_streams, list) and s_streams:
+                                                for s_entry in s_streams:
+                                                    if not isinstance(s_entry, dict):
+                                                        continue
+                                                    s_lang = s_entry.get("language")
+                                                    if s_lang:
+                                                        s_code = language_code_for_name(s_lang)
+                                                        if s_code in returned_urls:
+                                                            s_url = returned_urls[s_code]
+                                                            existing_u = s_entry.get("url") or ""
+                                                            existing_yt = s_entry.get("youtube_id") or ""
+                                                            can_overwrite_u = (
+                                                                not existing_u
+                                                                or "/whep" in existing_u
+                                                                or "localhost" in existing_u
+                                                            )
+                                                            can_overwrite_yt = (
+                                                                not existing_yt
+                                                                or "/whep" in existing_yt
+                                                                or "localhost" in existing_yt
+                                                            )
+                                                            if can_overwrite_u and can_overwrite_yt:
+                                                                if existing_u != s_url or existing_yt != s_url:
+                                                                    s_entry["url"] = s_url
+                                                                    s_entry["youtube_id"] = s_url
+                                                                    s_updated = True
+                                                if s_updated:
+                                                    s_config[key] = s_streams
+                                        if s_updated:
+                                            schedule.config = s_config
+                                            schedule._skip_interpretation_sync = True
+                                            schedule.save(update_fields=["config"])
                                 except Exception as sched_err:
                                     logger.warning(
                                         "Failed to update schedule %s with WHEP URLs: %s",
-                                        getattr(schedule, "id", None),
+                                        sched_id,
                                         sched_err,
                                     )
                     except Exception as e:

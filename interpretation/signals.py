@@ -188,6 +188,17 @@ def room_post_delete(sender, instance, **kwargs):
 try:
     from eventyay.base.models.stream_schedule import StreamSchedule
 
+    @receiver(pre_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_pre_save")
+    def stream_schedule_pre_save(sender, instance, **kwargs):
+        if not instance.pk:
+            instance._previous_room_id = None
+            return
+        try:
+            old_room_id = StreamSchedule.objects.filter(pk=instance.pk).values_list("room_id", flat=True).first()
+            instance._previous_room_id = old_room_id
+        except Exception:
+            instance._previous_room_id = None
+
     @receiver(post_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_save")
     def stream_schedule_post_save(sender, instance, **kwargs):
         if getattr(instance, "_skip_interpretation_sync", False):
@@ -204,6 +215,10 @@ try:
             return
         if not is_interpretation_enabled(room.event):
             return
+
+        prev_room_id = getattr(instance, "_previous_room_id", None)
+        if prev_room_id and room and prev_room_id != room.id:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(prev_room_id, room.event_id, "upsert"))
 
         interpretation = getattr(room, "interpretation", None)
         if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":
