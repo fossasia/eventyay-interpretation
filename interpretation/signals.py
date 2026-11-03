@@ -192,12 +192,19 @@ try:
     def stream_schedule_pre_save(sender, instance, **kwargs):
         if not instance.pk:
             instance._previous_room_id = None
+            instance._previous_event_id = None
             return
         try:
-            old_room_id = StreamSchedule.objects.filter(pk=instance.pk).values_list("room_id", flat=True).first()
-            instance._previous_room_id = old_room_id
+            old_info = StreamSchedule.objects.filter(pk=instance.pk).values_list("room_id", "room__event_id").first()
+            if old_info:
+                instance._previous_room_id = old_info[0]
+                instance._previous_event_id = old_info[1]
+            else:
+                instance._previous_room_id = None
+                instance._previous_event_id = None
         except Exception:
             instance._previous_room_id = None
+            instance._previous_event_id = None
 
     @receiver(post_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_save")
     def stream_schedule_post_save(sender, instance, **kwargs):
@@ -208,6 +215,12 @@ try:
         # the save and ensures WHEP URLs are populated immediately in the API response.
         # Temporary external state drift in the unlikely event of transaction rollback is
         # healed during subsequent room synchronization.
+        prev_room_id = getattr(instance, "_previous_room_id", None)
+        prev_event_id = getattr(instance, "_previous_event_id", None)
+        curr_room_id = getattr(instance, "room_id", None)
+        if prev_room_id and prev_event_id and prev_room_id != curr_room_id:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(prev_room_id, prev_event_id, "upsert"))
+
         room = getattr(instance, "room", None)
         if not room or not getattr(room, "event", None):
             return
@@ -215,10 +228,6 @@ try:
             return
         if not is_interpretation_enabled(room.event):
             return
-
-        prev_room_id = getattr(instance, "_previous_room_id", None)
-        if prev_room_id and room and prev_room_id != room.id:
-            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(prev_room_id, room.event_id, "upsert"))
 
         interpretation = getattr(room, "interpretation", None)
         if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":

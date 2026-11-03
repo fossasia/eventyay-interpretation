@@ -341,49 +341,52 @@ def _do_sync_single_room_to_voxbento(
             if use_plugin_streams:
                 interpretation = getattr(room, "interpretation", None)
                 if interpretation:
-                    # Update language_streams
-                    new_streams = list(interpretation.language_streams) if interpretation.language_streams else []
-
-                    # Convert to a dict to update/merge urls
-                    stream_dict = {entry["language"]: entry for entry in new_streams if "language" in entry}
-                    needs_save = False
-
                     from .language_map import language_code_for_name, language_name_for_code
 
-                    # Create a reverse lookup for code -> Name
-                    code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
+                    new_streams = [dict(s) for s in (interpretation.language_streams or []) if isinstance(s, dict)]
+                    needs_save = False
+                    matched_codes = set()
                     room_target_codes = set(interpretation.target_languages or [])
 
-                    for lang_code, full_url in returned_urls.items():
-                        lang_name = code_to_name.get(lang_code)
-                        if lang_name and lang_name in stream_dict:
-                            existing_yt = stream_dict[lang_name].get("youtube_id") or ""
-                            existing_u = stream_dict[lang_name].get("url") or ""
+                    for s_entry in new_streams:
+                        s_lang = s_entry.get("language")
+                        if not s_lang:
+                            continue
+                        s_code = language_code_for_name(s_lang)
+                        if s_code in returned_urls:
+                            matched_codes.add(s_code)
+                            full_url = returned_urls[s_code]
+                            existing_yt = s_entry.get("youtube_id") or ""
+                            existing_u = s_entry.get("url") or ""
                             can_overwrite_u = not existing_u or "/whep" in existing_u or "localhost" in existing_u
                             can_overwrite_yt = not existing_yt or "/whep" in existing_yt or "localhost" in existing_yt
                             if can_overwrite_u and can_overwrite_yt:
                                 if existing_yt != full_url or existing_u != full_url:
-                                    stream_dict[lang_name]["youtube_id"] = full_url
-                                    if "url" in stream_dict[lang_name]:
-                                        stream_dict[lang_name]["url"] = full_url
+                                    s_entry["youtube_id"] = full_url
+                                    if "url" in s_entry or not existing_yt:
+                                        s_entry["url"] = full_url
                                     needs_save = True
-                        elif lang_code in room_target_codes:
-                            # Restore entry for room-level target_languages that didn't exist in language_streams
-                            resolved_name = language_name_for_code(lang_code)
-                            stream_dict[resolved_name] = {
-                                "language": resolved_name,
-                                "url": full_url,
-                                "youtube_id": full_url,
-                                "use_video": False,
-                            }
+
+                    for room_code in room_target_codes:
+                        if room_code not in matched_codes and room_code in returned_urls:
+                            full_url = returned_urls[room_code]
+                            resolved_name = language_name_for_code(room_code)
+                            new_streams.append(
+                                {
+                                    "language": resolved_name,
+                                    "url": full_url,
+                                    "youtube_id": full_url,
+                                    "use_video": False,
+                                }
+                            )
                             needs_save = True
 
                     if needs_save:
-                        stream_list = list(stream_dict.values())
-                        interpretation.language_streams = stream_list
-                        RoomInterpretation.objects.filter(pk=interpretation.pk).update(language_streams=stream_list)
+                        interpretation.language_streams = new_streams
+                        RoomInterpretation.objects.filter(pk=interpretation.pk).update(language_streams=new_streams)
 
                     # Also update stream schedules configured for this room with returned WHEP URLs
+                    has_schedule_write_failure = False
                     try:
                         if hasattr(room, "stream_schedules"):
                             from django.db import transaction
@@ -394,7 +397,9 @@ def _do_sync_single_room_to_voxbento(
                                 try:
                                     with transaction.atomic():
                                         schedule = (
-                                            StreamSchedule.objects.select_for_update().filter(id=sched_id).first()
+                                            StreamSchedule.objects.select_for_update()
+                                            .filter(id=sched_id, room_id=room.id)
+                                            .first()
                                         )
                                         if not schedule:
                                             continue
@@ -448,8 +453,13 @@ def _do_sync_single_room_to_voxbento(
                                         sched_id,
                                         sched_err,
                                     )
+                                    has_schedule_write_failure = True
                     except Exception as e:
                         logger.warning("Failed to update stream schedules with VoxBento WHEP URLs: %s", e)
+                        has_schedule_write_failure = True
+
+                    if has_schedule_write_failure:
+                        return True
             else:
                 needs_save = False
                 if room.module_config:

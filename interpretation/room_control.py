@@ -275,17 +275,17 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
         if needs_broadcast:
             transaction.on_commit(lambda: notify_video_room_config_changed(event))
 
-        if was_running and (
-            not interpretation.room_enabled
-            or interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
-            or interpretation.interpreter != old_interpreter
-        ):
-            result = stop_room_session(room, event)
-            interpretation.refresh_from_db()
-            if not result.ok:
-                raise ValueError(result.error)
+    if was_running and (
+        not interpretation.room_enabled
+        or interpretation.interpreter == RoomInterpretation.INTERPRETER_NONE
+        or interpretation.interpreter != old_interpreter
+    ):
+        result = stop_room_session(room, event)
+        interpretation.refresh_from_db()
+        if not result.ok:
+            raise ValueError(result.error)
 
-        return interpretation
+    return interpretation
 
 
 @dataclass
