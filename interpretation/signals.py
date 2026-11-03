@@ -108,7 +108,7 @@ def room_interpretation_post_save(sender, instance, created, **kwargs):
             room_instance=instance.room,
             old_module_config=None,  # RoomInterpretation changes are additive; no removal guard needed
         )
-    except ActiveSessionConflict as e:
+    except (ActiveSessionConflict, ValueError) as e:
         _raise_appropriate_exception(str(e), instance.room.event_id)
     except VoxbentoReauthorizationRequired:
         _raise_appropriate_exception(
@@ -152,7 +152,7 @@ def room_pre_save(sender, instance, **kwargs):
             room_instance=instance,
             old_module_config=old_module_config,
         )
-    except ActiveSessionConflict as e:
+    except (ActiveSessionConflict, ValueError) as e:
         _raise_appropriate_exception(str(e), instance.event_id)
     except VoxbentoReauthorizationRequired:
         _raise_appropriate_exception(
@@ -183,3 +183,91 @@ def room_post_delete(sender, instance, **kwargs):
     room_id = instance.id
     event_id = instance.event_id
     transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, "delete"))
+
+
+try:
+    from eventyay.base.models.stream_schedule import StreamSchedule
+
+    @receiver(pre_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_pre_save")
+    def stream_schedule_pre_save(sender, instance, **kwargs):
+        if not instance.pk:
+            instance._previous_room_id = None
+            instance._previous_event_id = None
+            return
+        try:
+            old_info = StreamSchedule.objects.filter(pk=instance.pk).values_list("room_id", "room__event_id").first()
+            if old_info:
+                instance._previous_room_id = old_info[0]
+                instance._previous_event_id = old_info[1]
+            else:
+                instance._previous_room_id = None
+                instance._previous_event_id = None
+        except Exception:
+            instance._previous_room_id = None
+            instance._previous_event_id = None
+
+    @receiver(post_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_save")
+    def stream_schedule_post_save(sender, instance, **kwargs):
+        if getattr(instance, "_skip_interpretation_sync", False):
+            return
+
+        # Synchronous sync is intentional here: it allows ActiveSessionConflict to block
+        # the save and ensures WHEP URLs are populated immediately in the API response.
+        # Temporary external state drift in the unlikely event of transaction rollback is
+        # healed during subsequent room synchronization.
+        prev_room_id = getattr(instance, "_previous_room_id", None)
+        prev_event_id = getattr(instance, "_previous_event_id", None)
+        curr_room_id = getattr(instance, "room_id", None)
+        if prev_room_id and prev_event_id and prev_room_id != curr_room_id:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(prev_room_id, prev_event_id, "upsert"))
+
+        room = getattr(instance, "room", None)
+        if not room or not getattr(room, "event", None):
+            return
+        if PLUGIN_MODULE not in room.event.get_plugins():
+            return
+        if not is_interpretation_enabled(room.event):
+            return
+
+        interpretation = getattr(room, "interpretation", None)
+        if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":
+            return
+
+        from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
+
+        needs_retry = False
+        try:
+            needs_retry = _do_sync_single_room_to_voxbento(
+                room.id,
+                room.event_id,
+                "upsert",
+                room_instance=room,
+                old_module_config=None,
+            )
+        except (ActiveSessionConflict, ValueError) as e:
+            _raise_appropriate_exception(str(e), room.event_id)
+        except VoxbentoReauthorizationRequired:
+            _raise_appropriate_exception(
+                "VoxBento authorization expired. Please reconnect your account in settings.", room.event_id
+            )
+
+        if needs_retry:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room.id, room.event_id, "upsert"))
+
+    @receiver(post_delete, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_delete")
+    def stream_schedule_post_delete(sender, instance, **kwargs):
+        room = getattr(instance, "room", None)
+        if not room or not getattr(room, "event", None):
+            return
+        if PLUGIN_MODULE not in room.event.get_plugins():
+            return
+        if not is_interpretation_enabled(room.event):
+            return
+
+        interpretation = getattr(room, "interpretation", None)
+        if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":
+            return
+
+        transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room.id, room.event_id, "upsert"))
+except ImportError:
+    pass

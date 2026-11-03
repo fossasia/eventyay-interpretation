@@ -51,6 +51,16 @@ def augment_room_config(room, room_config: dict) -> None:
     if is_active:
         room_config["interpretation_language_streams"] = streams
 
+    # Also augment active/upcoming scheduled stream language_streams with caption URLs if present
+    for stream_key in ("currentStream", "upcomingStream"):
+        stream_obj = room_config.get(stream_key)
+        if stream_obj and isinstance(stream_obj, dict):
+            cfg = stream_obj.get("config")
+            if isinstance(cfg, dict):
+                sched_streams = cfg.get("language_streams") or cfg.get("languageUrls")
+                if isinstance(sched_streams, list) and sched_streams and is_active:
+                    cfg["language_streams"] = attendee_language_streams(sched_streams, event, room_for_captions)
+
 
 def install_video_integration() -> None:
     """Patch attendee + admin room config builders (no Eventyay core changes)."""

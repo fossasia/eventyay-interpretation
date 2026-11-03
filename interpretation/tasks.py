@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import json
 import logging
 
 import redis
@@ -196,22 +199,73 @@ def _do_sync_single_room_to_voxbento(
         from interpretation.settings import use_plugin_language_streams
 
         use_plugin_streams = use_plugin_language_streams(event)
+        new_lang_set = set()
+        validated_langs = []
         if use_plugin_streams:
-            if (
-                interpretation
-                and interpretation.room_enabled
-                and interpretation.interpreter == "voxbento"
-                and interpretation.target_languages
-            ):
-                new_lang_set = set(interpretation.target_languages)
-            else:
-                new_lang_set = set()
+            if interpretation and interpretation.room_enabled and interpretation.interpreter == "voxbento":
+                from .language_map import language_code_for_name
+                from .utils import validate_target_language_codes
+
+                # 1. Collect room-level target languages (user-configured)
+                room_langs = set()
+                if interpretation.language_streams:
+                    for s in interpretation.language_streams:
+                        if isinstance(s, dict):
+                            lang_name = s.get("language")
+                            if lang_name and lang_name != "Original":
+                                code = language_code_for_name(lang_name)
+                                if code and len(code) == 2 and code.isalpha():
+                                    room_langs.add(code)
+                elif interpretation.target_languages:
+                    for code in interpretation.target_languages:
+                        if isinstance(code, str):
+                            c = code.strip().lower()
+                            if len(c) == 2 and c.isalpha():
+                                room_langs.add(c)
+
+                new_lang_set.update(room_langs)
+
+                # 2. Collect stream-schedule languages dynamically
+                schedule_langs = set()
+                if hasattr(room, "stream_schedules"):
+                    for schedule in room.stream_schedules.all():
+                        try:
+                            cfg = schedule.config
+                            if isinstance(cfg, str):
+                                try:
+                                    cfg = json.loads(cfg)
+                                except Exception:
+                                    cfg = {}
+                            if not isinstance(cfg, dict):
+                                continue
+                            s_streams = cfg.get("language_streams") or cfg.get("languageUrls") or []
+                            if isinstance(s_streams, list):
+                                for s_entry in s_streams:
+                                    if not isinstance(s_entry, dict):
+                                        continue
+                                    s_lang = s_entry.get("language")
+                                    if s_lang and s_lang != "Original":
+                                        code = language_code_for_name(s_lang)
+                                        if code and len(code) == 2 and code.isalpha():
+                                            schedule_langs.add(code)
+                        except Exception as e:
+                            logger.warning(
+                                "Error reading schedule config for schedule %s: %s",
+                                getattr(schedule, "id", None),
+                                e,
+                            )
+
+                new_lang_set.update(schedule_langs)
+
+                sorted_langs = sorted(new_lang_set)
+                validated_langs = validate_target_language_codes(sorted_langs)
         else:
             # When not using plugin streams, we pull the target languages from the Eventyay room config
             # so VoxBento creates the necessary WHEP endpoint booths for them.
             new_lang_set = _extract_langs_from_module_config(room.module_config)
+            validated_langs = list(new_lang_set)
 
-        payload["target_languages"] = list(new_lang_set)
+        payload["target_languages"] = validated_langs
 
         response_data = sync_voxbento_room(event, room_id, payload)
 
@@ -287,35 +341,125 @@ def _do_sync_single_room_to_voxbento(
             if use_plugin_streams:
                 interpretation = getattr(room, "interpretation", None)
                 if interpretation:
-                    # Update language_streams
-                    new_streams = list(interpretation.language_streams) if interpretation.language_streams else []
-
-                    # Convert to a dict to update/merge urls
-                    stream_dict = {entry["language"]: entry for entry in new_streams if "language" in entry}
-                    needs_save = False
-
                     from .language_map import language_code_for_name, language_name_for_code
 
-                    # Create a reverse lookup for code -> Name
-                    code_to_name = {language_code_for_name(name): name for name in stream_dict.keys()}
+                    new_streams = [dict(s) for s in (interpretation.language_streams or []) if isinstance(s, dict)]
+                    needs_save = False
+                    matched_codes = set()
+                    room_target_codes = set(interpretation.target_languages or [])
 
-                    for lang_code, full_url in returned_urls.items():
-                        lang_name = code_to_name.get(lang_code)
-                        if lang_name and lang_name in stream_dict:
-                            existing = stream_dict[lang_name].get("youtube_id") or ""
-                            if not existing or "/whep" in existing or "localhost" in existing:
-                                if existing != full_url:
-                                    stream_dict[lang_name]["youtube_id"] = full_url
+                    for s_entry in new_streams:
+                        s_lang = s_entry.get("language")
+                        if not s_lang:
+                            continue
+                        s_code = language_code_for_name(s_lang)
+                        if s_code in returned_urls:
+                            matched_codes.add(s_code)
+                            full_url = returned_urls[s_code]
+                            existing_yt = s_entry.get("youtube_id") or ""
+                            existing_u = s_entry.get("url") or ""
+                            can_overwrite_u = not existing_u or "/whep" in existing_u or "localhost" in existing_u
+                            can_overwrite_yt = not existing_yt or "/whep" in existing_yt or "localhost" in existing_yt
+                            if can_overwrite_u and can_overwrite_yt:
+                                if existing_yt != full_url or existing_u != full_url:
+                                    s_entry["youtube_id"] = full_url
+                                    if "url" in s_entry or not existing_yt:
+                                        s_entry["url"] = full_url
                                     needs_save = True
-                        else:
-                            # Language added but wasn't in streams (edge case)
-                            resolved_name = language_name_for_code(lang_code)
-                            stream_dict[resolved_name] = {"language": resolved_name, "youtube_id": full_url}
+
+                    for room_code in room_target_codes:
+                        if room_code not in matched_codes and room_code in returned_urls:
+                            full_url = returned_urls[room_code]
+                            resolved_name = language_name_for_code(room_code)
+                            new_streams.append(
+                                {
+                                    "language": resolved_name,
+                                    "url": full_url,
+                                    "youtube_id": full_url,
+                                    "use_video": False,
+                                }
+                            )
                             needs_save = True
 
                     if needs_save:
-                        interpretation.language_streams = list(stream_dict.values())
-                        interpretation.save(update_fields=["language_streams"])
+                        interpretation.language_streams = new_streams
+                        RoomInterpretation.objects.filter(pk=interpretation.pk).update(language_streams=new_streams)
+
+                    # Also update stream schedules configured for this room with returned WHEP URLs
+                    has_schedule_write_failure = False
+                    try:
+                        if hasattr(room, "stream_schedules"):
+                            from django.db import transaction
+                            from eventyay.base.models.stream_schedule import StreamSchedule
+
+                            schedule_ids = list(room.stream_schedules.values_list("id", flat=True))
+                            for sched_id in schedule_ids:
+                                try:
+                                    with transaction.atomic():
+                                        schedule = (
+                                            StreamSchedule.objects.select_for_update()
+                                            .filter(id=sched_id, room_id=room.id)
+                                            .first()
+                                        )
+                                        if not schedule:
+                                            continue
+                                        cfg = schedule.config
+                                        if isinstance(cfg, str):
+                                            try:
+                                                cfg = json.loads(cfg)
+                                            except Exception:
+                                                cfg = {}
+                                        if not isinstance(cfg, dict):
+                                            continue
+                                        s_config = dict(cfg)
+                                        s_updated = False
+                                        for key in ("language_streams", "languageUrls"):
+                                            s_streams = s_config.get(key)
+                                            if isinstance(s_streams, list) and s_streams:
+                                                for s_entry in s_streams:
+                                                    if not isinstance(s_entry, dict):
+                                                        continue
+                                                    s_lang = s_entry.get("language")
+                                                    if s_lang:
+                                                        s_code = language_code_for_name(s_lang)
+                                                        if s_code in returned_urls:
+                                                            s_url = returned_urls[s_code]
+                                                            existing_u = s_entry.get("url") or ""
+                                                            existing_yt = s_entry.get("youtube_id") or ""
+                                                            can_overwrite_u = (
+                                                                not existing_u
+                                                                or "/whep" in existing_u
+                                                                or "localhost" in existing_u
+                                                            )
+                                                            can_overwrite_yt = (
+                                                                not existing_yt
+                                                                or "/whep" in existing_yt
+                                                                or "localhost" in existing_yt
+                                                            )
+                                                            if can_overwrite_u and can_overwrite_yt:
+                                                                if existing_u != s_url or existing_yt != s_url:
+                                                                    s_entry["url"] = s_url
+                                                                    s_entry["youtube_id"] = s_url
+                                                                    s_updated = True
+                                                if s_updated:
+                                                    s_config[key] = s_streams
+                                        if s_updated:
+                                            schedule.config = s_config
+                                            schedule._skip_interpretation_sync = True
+                                            schedule.save(update_fields=["config"])
+                                except Exception as sched_err:
+                                    logger.warning(
+                                        "Failed to update schedule %s with WHEP URLs: %s",
+                                        sched_id,
+                                        sched_err,
+                                    )
+                                    has_schedule_write_failure = True
+                    except Exception as e:
+                        logger.warning("Failed to update stream schedules with VoxBento WHEP URLs: %s", e)
+                        has_schedule_write_failure = True
+
+                    if has_schedule_write_failure:
+                        return True
             else:
                 needs_save = False
                 if room.module_config:
