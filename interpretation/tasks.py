@@ -206,6 +206,23 @@ def _do_sync_single_room_to_voxbento(
                 new_lang_set = set(interpretation.target_languages)
             else:
                 new_lang_set = set()
+
+            # Ensure any language configured in the room's stream schedules is also included
+            if interpretation and interpretation.room_enabled and interpretation.interpreter == "voxbento":
+                from .language_map import language_code_for_name
+
+                try:
+                    if hasattr(room, "stream_schedules"):
+                        for schedule in room.stream_schedules.all():
+                            s_streams = (schedule.config or {}).get("language_streams") or (schedule.config or {}).get("languageUrls") or []
+                            for s_entry in s_streams:
+                                s_lang = s_entry.get("language")
+                                if s_lang and s_lang != "Original":
+                                    code = language_code_for_name(s_lang)
+                                    if code:
+                                        new_lang_set.add(code)
+                except Exception:
+                    pass
         else:
             # When not using plugin streams, we pull the target languages from the Eventyay room config
             # so VoxBento creates the necessary WHEP endpoint booths for them.
@@ -307,15 +324,37 @@ def _do_sync_single_room_to_voxbento(
                                 if existing != full_url:
                                     stream_dict[lang_name]["youtube_id"] = full_url
                                     needs_save = True
-                        else:
-                            # Language added but wasn't in streams (edge case)
-                            resolved_name = language_name_for_code(lang_code)
-                            stream_dict[resolved_name] = {"language": resolved_name, "youtube_id": full_url}
-                            needs_save = True
 
                     if needs_save:
                         interpretation.language_streams = list(stream_dict.values())
                         interpretation.save(update_fields=["language_streams"])
+
+                    # Also update stream schedules configured for this room with returned WHEP URLs
+                    try:
+                        if hasattr(room, "stream_schedules"):
+                            for schedule in room.stream_schedules.all():
+                                s_config = dict(schedule.config or {})
+                                s_streams = s_config.get("language_streams")
+                                if isinstance(s_streams, list) and s_streams:
+                                    s_updated = False
+                                    for s_entry in s_streams:
+                                        s_lang = s_entry.get("language")
+                                        if s_lang:
+                                            s_code = language_code_for_name(s_lang)
+                                            if s_code in returned_urls:
+                                                s_url = returned_urls[s_code]
+                                                if not s_entry.get("url") or "/whep" in s_entry.get("url", ""):
+                                                    if s_entry.get("url") != s_url or s_entry.get("youtube_id") != s_url:
+                                                        s_entry["url"] = s_url
+                                                        s_entry["youtube_id"] = s_url
+                                                        s_entry["use_video"] = True
+                                                        s_updated = True
+                                    if s_updated:
+                                        s_config["language_streams"] = s_streams
+                                        schedule.config = s_config
+                                        schedule.save(update_fields=["config"])
+                    except Exception as e:
+                        logger.warning("Failed to update stream schedules with VoxBento WHEP URLs: %s", e)
             else:
                 needs_save = False
                 if room.module_config:

@@ -250,7 +250,26 @@ def update_room_interpretation(room, event, data: dict) -> RoomInterpretation:
                 langs = [
                     language_code_for_name(s["language"]) for s in validated_streams if s["language"] != "Original"
                 ]
-                interpretation.target_languages = [lang_code for lang_code in langs if lang_code]
+                try:
+                    if hasattr(room, "stream_schedules"):
+                        for schedule in room.stream_schedules.all():
+                            s_streams = (schedule.config or {}).get("language_streams") or (schedule.config or {}).get("languageUrls") or []
+                            for s_entry in s_streams:
+                                s_lang = s_entry.get("language")
+                                if s_lang and s_lang != "Original":
+                                    code = language_code_for_name(s_lang)
+                                    if code:
+                                        langs.append(code)
+                except Exception:
+                    pass
+
+                seen = set()
+                deduped = []
+                for code in langs:
+                    if code and code not in seen:
+                        seen.add(code)
+                        deduped.append(code)
+                interpretation.target_languages = deduped
         except ValidationError as exc:
             raise ValueError(str(exc)) from exc
 

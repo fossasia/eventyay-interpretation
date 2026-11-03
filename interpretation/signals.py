@@ -183,3 +183,80 @@ def room_post_delete(sender, instance, **kwargs):
     room_id = instance.id
     event_id = instance.event_id
     transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, "delete"))
+
+
+try:
+    from eventyay.base.models.stream_schedule import StreamSchedule
+
+    @receiver(post_save, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_save")
+    def stream_schedule_post_save(sender, instance, **kwargs):
+        room = getattr(instance, "room", None)
+        if not room or not getattr(room, "event", None):
+            return
+        if PLUGIN_MODULE not in room.event.get_plugins():
+            return
+        if not is_interpretation_enabled(room.event):
+            return
+
+        interpretation = getattr(room, "interpretation", None)
+        if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":
+            return
+
+        from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
+
+        needs_retry = False
+        try:
+            needs_retry = _do_sync_single_room_to_voxbento(
+                room.id,
+                room.event_id,
+                "upsert",
+                room_instance=room,
+                old_module_config=None,
+            )
+        except ActiveSessionConflict as e:
+            _raise_appropriate_exception(str(e), room.event_id)
+        except VoxbentoReauthorizationRequired:
+            _raise_appropriate_exception(
+                "VoxBento authorization expired. Please reconnect your account in settings.", room.event_id
+            )
+
+        if needs_retry:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room.id, room.event_id, "upsert"))
+
+    @receiver(post_delete, sender=StreamSchedule, dispatch_uid="interpretation_stream_schedule_post_delete")
+    def stream_schedule_post_delete(sender, instance, **kwargs):
+        room = getattr(instance, "room", None)
+        if not room or not getattr(room, "event", None):
+            return
+        if PLUGIN_MODULE not in room.event.get_plugins():
+            return
+        if not is_interpretation_enabled(room.event):
+            return
+
+        interpretation = getattr(room, "interpretation", None)
+        if not interpretation or not interpretation.room_enabled or interpretation.interpreter != "voxbento":
+            return
+
+        from interpretation.backends.voxbento_oauth import VoxbentoReauthorizationRequired
+
+        needs_retry = False
+        try:
+            needs_retry = _do_sync_single_room_to_voxbento(
+                room.id,
+                room.event_id,
+                "upsert",
+                room_instance=room,
+                old_module_config=None,
+            )
+        except ActiveSessionConflict as e:
+            _raise_appropriate_exception(str(e), room.event_id)
+        except VoxbentoReauthorizationRequired:
+            _raise_appropriate_exception(
+                "VoxBento authorization expired. Please reconnect your account in settings.", room.event_id
+            )
+
+        if needs_retry:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room.id, room.event_id, "upsert"))
+except ImportError:
+    pass
+
