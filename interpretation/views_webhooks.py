@@ -68,6 +68,9 @@ class VoxbentoWebhookReceiverView(View):
             return JsonResponse({"detail": "Invalid signature"}, status=401)
 
         event_type = payload.get("event_type")
+        if not isinstance(event_type, str):
+            # An unhashable value (list/dict) would raise TypeError in the handler lookup below.
+            return JsonResponse({"detail": "event_type must be a string"}, status=400)
         logger.info("Received valid VoxBento webhook for event %s: %s", event_slug, event_type)
 
         handlers = {

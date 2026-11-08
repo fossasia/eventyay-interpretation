@@ -176,6 +176,40 @@ def test_same_event_slug_under_two_organizers_still_reaches_the_right_event(
     notify.assert_called_once_with(event)
 
 
+def test_same_event_slug_is_resolved_to_the_grant_whose_secret_signed_the_request(client, event, grant):
+    from eventyay.base.models import Event, Organizer
+
+    other_organizer = Organizer.objects.create(name="Other Organizer", slug="otherorg")
+    other_event = Event.objects.create(
+        organizer=other_organizer,
+        name="Other Event",
+        slug=event.slug,
+        date_from=event.date_from,
+        date_to=event.date_to,
+        currency="USD",
+        locale="en",
+        email="other@example.com",
+    )
+    # Created after `grant`, so a selector that always picks the first grant for the slug would get this wrong.
+    VoxbentoOAuthGrant.objects.create(event=other_event, webhook_secret_key="whsec-other")
+    body = json.dumps({"event_type": "booth.interpreter.joined", "event_slug": event.slug, "data": {}})
+    view_handler = "interpretation.views_webhooks.VoxbentoWebhookReceiverView.handle_interpreter_joined"
+
+    with patch(view_handler) as handler:
+        response = _post_raw(client, body, _sign(body, secret="whsec-other"))
+
+    assert response.status_code == 200
+    handler.assert_called_once_with(other_event, {})
+
+
+def test_event_type_that_is_not_a_string_is_a_bad_request(client, event, grant):
+    body = json.dumps({"event_type": ["booth.interpreter.joined"], "event_slug": event.slug, "data": {}})
+
+    response = _post_raw(client, body, _sign(body))
+
+    assert response.status_code == 400
+
+
 def test_webhook_views_import_notify_from_a_module_that_defines_it():
     tree = ast.parse(inspect.getsource(views_webhooks))
     imports = [
