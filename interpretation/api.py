@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import logging
 
-from django.shortcuts import get_object_or_404
 from eventyay.api.auth.permission import EventPermission
 from eventyay.api.mixins import PretalxViewSetMixin
 from eventyay.base.models.room import Room
@@ -117,14 +118,19 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if not room_id or not self.event:
             self._room_cache = None
             return None
-        self._room_cache = get_object_or_404(
-            Room.objects.filter(event=self.event, deleted=False),
-            pk=room_id,
-        )
+        try:
+            room_pk = int(room_id)
+            if room_pk < 1 or room_pk > 9223372036854775807:
+                self._room_cache = None
+                return None
+            self._room_cache = Room.objects.filter(event=self.event, deleted=False, pk=room_pk).first()
+        except (ValueError, TypeError, OverflowError, Exception):
+            self._room_cache = None
+            return None
         return self._room_cache
 
     def _ensure_room(self):
-        if not plugin_enabled(self.event):
+        if not self.event or not plugin_enabled(self.event):
             raise NotFound("Interpretation is not enabled for this event.")
         room = self._get_room()
         if room is None:
@@ -133,12 +139,35 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
 
     @action(detail=False, methods=["get", "patch"], url_path="config")
     def config(self, request, room_pk=None, **kwargs):
-        if not plugin_enabled(self.event):
+        if not self.event or not plugin_enabled(self.event):
+            if request.method == "GET":
+                return Response(
+                    {
+                        "ui_sync_supported": False,
+                        "plugin_enabled": False,
+                        "room_enabled": False,
+                        "available_interpreters": [],
+                    },
+                    status=200,
+                )
             from django.core.exceptions import PermissionDenied
 
             raise PermissionDenied("Interpretation plugin is disabled for this event.")
 
-        room = self._ensure_room()
+        room = self._get_room()
+        if room is None:
+            if request.method == "GET":
+                return Response(
+                    {
+                        "ui_sync_supported": False,
+                        "plugin_enabled": True,
+                        "room_enabled": False,
+                        "available_interpreters": [],
+                    },
+                    status=200,
+                )
+            raise NotFound("Room not found.")
+
         if request.method == "GET":
             return Response(serialize_room_interpretation(room, self.event))
 
@@ -292,7 +321,25 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
 
     @action(detail=False, methods=["get"], url_path="streams")
     def streams(self, request, room_pk=None, **kwargs):
-        room = self._ensure_room()
+        if not self.event or not plugin_enabled(self.event):
+            return Response(
+                {
+                    "use_plugin_language_streams": False,
+                    "language_streams": [],
+                    "attendee_language_streams": [],
+                },
+                status=200,
+            )
+        room = self._get_room()
+        if room is None:
+            return Response(
+                {
+                    "use_plugin_language_streams": use_plugin_language_streams(self.event),
+                    "language_streams": [],
+                    "attendee_language_streams": [],
+                },
+                status=200,
+            )
         payload = serialize_room_interpretation(room, self.event)
         return Response(
             {
