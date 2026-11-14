@@ -342,12 +342,12 @@ def delete_voxbento_room(event: Event, room_id: int) -> None:
 
     base_url = get_voxbento_base_url(event)
     if not base_url:
-        return
+        raise requests.RequestException("Cannot delete VoxBento room: no base URL configured.")
 
     api_url = f"{base_url.rstrip('/')}/api/v1/events/{event.slug}/rooms/{room_id}"
     access_token = get_valid_access_token(grant.id)
     if not access_token:
-        return
+        raise requests.RequestException("Cannot delete VoxBento room: no access token available.")
 
     headers = {"Authorization": f"Bearer {access_token}"}
     resp = requests.delete(api_url, headers=headers, timeout=5.0)

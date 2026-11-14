@@ -4,6 +4,7 @@ import redis
 import requests
 from celery import shared_task
 from celery.exceptions import MaxRetriesExceededError
+from django.db import transaction
 from eventyay.base.models import Event, Room
 
 from .backends.voxbento_api import (
@@ -130,9 +131,9 @@ def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
         if not grant or grant.event_provisioning_failed:
             return
 
-        rooms = list(event.rooms.filter(deleted=False))
+        rooms = list(event.rooms.all())
         for room in rooms:
-            sync_single_room_to_voxbento.delay(room.id, event.id, "upsert")
+            sync_single_room_to_voxbento.delay(room.id, event.id, "delete" if room.deleted else "upsert")
 
     except Exception as e:
         logger.error(f"Failed to bulk sync rooms for event {event_id}: {e}", exc_info=True)
@@ -159,6 +160,8 @@ def _extract_langs_from_module_config(module_config) -> set:
 def _do_sync_single_room_to_voxbento(
     room_id: int, event_id: int, action: str, room_instance=None, old_module_config=None
 ) -> bool:
+    from .models import RoomInterpretation
+
     try:
         event = Event._base_manager.get(pk=event_id)
         grant = getattr(event, "voxbento_oauth_grant", None)
@@ -166,11 +169,34 @@ def _do_sync_single_room_to_voxbento(
             return False
 
         if action == "delete":
+            if Room.objects.filter(id=room_id, deleted=False).exists():
+                return False
             delete_voxbento_room(event, room_id)
+            if Room.objects.filter(id=room_id, deleted=False).exists():
+                transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, "upsert"))
+                return False
+            with transaction.atomic():
+                interpretation = (
+                    RoomInterpretation.objects.select_for_update()
+                    .filter(
+                        room_id=room_id,
+                        room__deleted=True,
+                        interpreter=RoomInterpretation.INTERPRETER_VOXBENTO,
+                    )
+                    .first()
+                )
+                if interpretation:
+                    config = dict(interpretation.backend_config or {})
+                    config.pop("voxbento_room_id", None)
+                    config.pop("transcription_session_id", None)
+                    RoomInterpretation.objects.filter(pk=interpretation.pk).update(
+                        backend_session_id="", backend_config=config, status=RoomInterpretation.STATUS_IDLE
+                    )
             return False
 
         room = room_instance if room_instance else Room.objects.get(id=room_id)
-        from .models import RoomInterpretation
+        if room.deleted or (room_instance and not Room.objects.filter(id=room_id, deleted=False).exists()):
+            return False
 
         interpretation = RoomInterpretation.objects.filter(room_id=room.id).first()
 
@@ -214,6 +240,9 @@ def _do_sync_single_room_to_voxbento(
         payload["target_languages"] = list(new_lang_set)
 
         response_data = sync_voxbento_room(event, room_id, payload)
+        if not Room.objects.filter(id=room_id, deleted=False).exists():
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, "delete"))
+            return False
 
         voxbento_room_id = response_data.get("room_id")
         if (
@@ -221,8 +250,6 @@ def _do_sync_single_room_to_voxbento(
             and interpretation
             and interpretation.interpreter == RoomInterpretation.INTERPRETER_VOXBENTO
         ):
-            from django.db import transaction
-
             with transaction.atomic():
                 latest_interp = type(interpretation).objects.select_for_update().filter(pk=interpretation.pk).first()
                 if latest_interp:
@@ -346,6 +373,10 @@ def _do_sync_single_room_to_voxbento(
         return False
     except requests.RequestException as e:
         logger.warning(f"Request exception when syncing room {room_id}: {e}")
+        current_action = "upsert" if Room.objects.filter(id=room_id, deleted=False).exists() else "delete"
+        if action != current_action:
+            transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, current_action))
+            return False
         return True
 
 
