@@ -17,10 +17,12 @@ class RoomInterpretation(LoggedModel):
     INTERPRETER_NONE = "none"
     INTERPRETER_SUSI = "susi"
     INTERPRETER_VOXBENTO = "voxbento"
+    INTERPRETER_MANUAL = "manual"
     INTERPRETER_CHOICES = (
         (INTERPRETER_NONE, _("None")),
         (INTERPRETER_SUSI, _("SUSI Translator")),
         (INTERPRETER_VOXBENTO, _("VoxBento Console")),
+        (INTERPRETER_MANUAL, _("Manual / Custom Streams")),
     )
 
     STATUS_IDLE = "idle"

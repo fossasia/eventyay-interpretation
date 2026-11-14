@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .base import InterpreterBackend
+from .manual import ManualBackend
 from .none import NoopBackend
 from .susi import SusiBackend
 from .voxbento import VoxbentoBackend
@@ -8,11 +9,13 @@ from .voxbento import VoxbentoBackend
 INTERPRETER_NONE = NoopBackend.id
 INTERPRETER_SUSI = SusiBackend.id
 INTERPRETER_VOXBENTO = VoxbentoBackend.id
+INTERPRETER_MANUAL = ManualBackend.id
 
 _BACKENDS: dict[str, InterpreterBackend] = {
     INTERPRETER_NONE: NoopBackend(),
     INTERPRETER_SUSI: SusiBackend(),
     INTERPRETER_VOXBENTO: VoxbentoBackend(),
+    INTERPRETER_MANUAL: ManualBackend(),
 }
 
 

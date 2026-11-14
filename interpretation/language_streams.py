@@ -115,7 +115,7 @@ def attendee_language_streams(stored_streams: list | None, event=None, room=None
 
         try:
             base_url = get_voxbento_base_url(event)
-        except VoxbentoError:
+        except (VoxbentoError, ValueError):
             base_url = None
 
         grant = getattr(event, "voxbento_oauth_grant", None)
