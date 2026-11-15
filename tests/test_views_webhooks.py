@@ -314,3 +314,34 @@ def test_webhook_is_rejected_when_the_organizer_disconnects_while_it_is_being_ha
     assert response.status_code == 401
     assert interpretation.status != RoomInterpretation.STATUS_RUNNING
     notify.assert_not_called()
+
+
+def test_webhook_is_rejected_when_the_secret_changes_while_it_is_being_handled(
+    client, event, connected_room, interpretation, grant
+):
+    real_find = views_webhooks.VoxbentoWebhookReceiverView._find_verified_grant
+
+    def find_then_reconnect(self, *args, **kwargs):
+        found = real_find(self, *args, **kwargs)
+        VoxbentoOAuthGrant.objects.filter(pk=grant.pk).update(webhook_secret_key="whsec-new")
+        return found
+
+    with (
+        patch.object(views_webhooks.VoxbentoWebhookReceiverView, "_find_verified_grant", find_then_reconnect),
+        patch(NOTIFY_TARGET) as notify,
+    ):
+        response = _post_webhook(client, event, connected_room, "booth.transcription.started", session_id="sess-1")
+
+    interpretation.refresh_from_db()
+    assert response.status_code == 401
+    assert interpretation.status != RoomInterpretation.STATUS_RUNNING
+    notify.assert_not_called()
+
+
+def test_hitting_the_grant_cap_is_logged(client, event, grant, caplog):
+    body = json.dumps({"event_type": "booth.interpreter.joined", "event_slug": event.slug, "data": {}})
+
+    with patch.object(views_webhooks, "MAX_GRANTS_PER_SLUG", 1), caplog.at_level("WARNING"):
+        _post_raw(client, body, _sign(body))
+
+    assert any("only the first 1 are checked" in record.getMessage() for record in caplog.records)

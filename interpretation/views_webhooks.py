@@ -104,7 +104,8 @@ class VoxbentoWebhookReceiverView(View):
                 .filter(pk=grant.pk, is_disconnected=False)
                 .first()
             )
-            if locked is None:
+            # A reconnect replaces the secret on the same row, so check it is still the one that signed this request.
+            if locked is None or locked.webhook_secret_key != grant.webhook_secret_key:
                 return JsonResponse({"detail": "Invalid signature"}, status=401)
             if handler:
                 handler(locked.event, data)
@@ -126,6 +127,14 @@ class VoxbentoWebhookReceiverView(View):
             .select_related("event")
             .order_by("pk")[:MAX_GRANTS_PER_SLUG]
         )
+        grants = list(grants)
+        if len(grants) == MAX_GRANTS_PER_SLUG:
+            logger.warning(
+                "Event slug %s has %s or more connected grants; only the first %s are checked for webhooks",
+                event_slug,
+                MAX_GRANTS_PER_SLUG,
+                MAX_GRANTS_PER_SLUG,
+            )
         verified = None
         checked = 0
         for grant in grants:
