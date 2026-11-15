@@ -245,3 +245,72 @@ def test_webhook_room_resync_rate_limiting(event):
         room2 = view._get_room_from_booth_id(event, f"{event.slug}-99999-en")
         assert room2 is None
         assert mock_sync.call_count == 1
+
+
+def test_oversized_body_is_rejected_before_any_signature_work(client, event, grant):
+    body = json.dumps(
+        {"event_type": "x", "event_slug": event.slug, "data": {"pad": "a" * views_webhooks.MAX_BODY_BYTES}}
+    )
+
+    signature = _sign(body)
+    with patch("interpretation.views_webhooks.hmac.new") as hmac_new:
+        response = _post_raw(client, body, signature)
+
+    assert response.status_code == 413
+    hmac_new.assert_not_called()
+
+
+def test_only_a_bounded_number_of_grants_are_checked_per_request(client, event, grant):
+    from eventyay.base.models import Event, Organizer
+
+    other_organizer = Organizer.objects.create(name="Other Organizer", slug="otherorg")
+    other_event = Event.objects.create(
+        organizer=other_organizer,
+        name="Other Event",
+        slug=event.slug,
+        date_from=event.date_from,
+        date_to=event.date_to,
+        currency="USD",
+        locale="en",
+        email="other@example.com",
+    )
+    VoxbentoOAuthGrant.objects.create(event=other_event, webhook_secret_key="whsec-other")
+    body = json.dumps({"event_type": "booth.interpreter.joined", "event_slug": event.slug, "data": {}})
+
+    with patch.object(views_webhooks, "MAX_GRANTS_PER_SLUG", 1):
+        response = _post_raw(client, body, _sign(body, secret="whsec-other"))
+
+    assert response.status_code == 401
+
+
+def test_unknown_slug_still_does_an_hmac_so_timing_does_not_reveal_connected_slugs(client, event, grant):
+    body = json.dumps({"event_type": "booth.interpreter.joined", "event_slug": "no-such-event", "data": {}})
+
+    signature = _sign(body)
+    with patch("interpretation.views_webhooks.hmac.new", wraps=hmac.new) as hmac_new:
+        response = _post_raw(client, body, signature)
+
+    assert response.status_code == 401
+    assert hmac_new.call_count == 1
+
+
+def test_webhook_is_rejected_when_the_organizer_disconnects_while_it_is_being_handled(
+    client, event, connected_room, interpretation, grant
+):
+    real_find = views_webhooks.VoxbentoWebhookReceiverView._find_verified_grant
+
+    def find_then_disconnect(self, *args, **kwargs):
+        found = real_find(self, *args, **kwargs)
+        VoxbentoOAuthGrant.objects.filter(pk=grant.pk).update(is_disconnected=True)
+        return found
+
+    with (
+        patch.object(views_webhooks.VoxbentoWebhookReceiverView, "_find_verified_grant", find_then_disconnect),
+        patch(NOTIFY_TARGET) as notify,
+    ):
+        response = _post_webhook(client, event, connected_room, "booth.transcription.started", session_id="sess-1")
+
+    interpretation.refresh_from_db()
+    assert response.status_code == 401
+    assert interpretation.status != RoomInterpretation.STATUS_RUNNING
+    notify.assert_not_called()

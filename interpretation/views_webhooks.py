@@ -4,6 +4,7 @@ import json
 import logging
 import time
 
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -14,6 +15,13 @@ from .models import VoxbentoOAuthGrant
 
 logger = logging.getLogger(__name__)
 
+# Webhook bodies are small JSON events. Reject anything larger before doing any HMAC work.
+MAX_BODY_BYTES = 256 * 1024
+# Event slugs are only unique per organizer. Bound how many secrets one unauthenticated request can make us try.
+MAX_GRANTS_PER_SLUG = 10
+# Used when no grant matches, so an unknown slug costs about as much as a connected one.
+_DUMMY_SECRET = b"voxbento-webhook-dummy-secret"
+
 
 @method_decorator(csrf_exempt, name="dispatch")
 class VoxbentoWebhookReceiverView(View):
@@ -22,6 +30,13 @@ class VoxbentoWebhookReceiverView(View):
     """
 
     def post(self, request, *args, **kwargs):
+        try:
+            declared_length = int(request.META.get("CONTENT_LENGTH") or 0)
+        except ValueError:
+            declared_length = 0
+        if declared_length > MAX_BODY_BYTES:
+            return JsonResponse({"detail": "Request body too large"}, status=413)
+
         signature_header = request.headers.get("X-VoxBento-Signature")
         if not signature_header:
             return JsonResponse({"detail": "Missing X-VoxBento-Signature header"}, status=401)
@@ -80,8 +95,19 @@ class VoxbentoWebhookReceiverView(View):
         }
 
         handler = handlers.get(event_type)
-        if handler:
-            handler(grant.event, data)
+        # Lock the grant row while the handler runs. A disconnect saves the same row, so it either waits for this
+        # request to finish or has already completed, in which case the re-check below rejects the webhook.
+        with transaction.atomic():
+            locked = (
+                VoxbentoOAuthGrant.objects.select_for_update()
+                .select_related("event")
+                .filter(pk=grant.pk, is_disconnected=False)
+                .first()
+            )
+            if locked is None:
+                return JsonResponse({"detail": "Invalid signature"}, status=401)
+            if handler:
+                handler(locked.event, data)
 
         return HttpResponse("OK", status=200)
 
@@ -95,17 +121,27 @@ class VoxbentoWebhookReceiverView(View):
         # The signed payload is "{timestamp}.{raw_request_body}".
         signed_prefix = f"{timestamp}.".encode()
         received = signature.encode("utf-8")
-        grants = VoxbentoOAuthGrant.objects.filter(event__slug=event_slug, is_disconnected=False).select_related(
-            "event"
+        grants = (
+            VoxbentoOAuthGrant.objects.filter(event__slug=event_slug, is_disconnected=False)
+            .select_related("event")
+            .order_by("pk")[:MAX_GRANTS_PER_SLUG]
         )
+        verified = None
+        checked = 0
         for grant in grants:
             if not grant.webhook_secret_key:
                 continue
+            checked += 1
             secret = grant.webhook_secret_key.encode("utf-8")
             expected = hmac.new(secret, signed_prefix + body, hashlib.sha256).hexdigest()
-            if hmac.compare_digest(expected.encode("ascii"), received):
-                return grant
-        return None
+            if verified is None and hmac.compare_digest(expected.encode("ascii"), received):
+                verified = grant
+        if checked == 0:
+            # Do the same work for an unknown slug as for a connected one, so response time does not reveal
+            # which event slugs are connected.
+            expected = hmac.new(_DUMMY_SECRET, signed_prefix + body, hashlib.sha256).hexdigest()
+            hmac.compare_digest(expected.encode("ascii"), received)
+        return verified
 
     def _get_room_from_booth_id(self, event, booth_id):
         if not booth_id:
