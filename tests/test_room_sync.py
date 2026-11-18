@@ -3,6 +3,7 @@ from unittest.mock import Mock
 import pytest
 import requests
 from django.db import transaction
+from django.db.models import QuerySet
 from eventyay.base.models import Room
 from eventyay.base.services.room import soft_delete_room
 
@@ -195,6 +196,49 @@ def test_inflight_upsert_reconciles_concurrent_deletion(
         assert not _do_sync_single_room_to_voxbento(room_id, event_id, "upsert")
 
     assert not remote_rooms
+
+
+@pytest.mark.parametrize("delete_after_check", [False, True])
+def test_upsert_does_not_restore_cleared_mapping(
+    room, room_sync, monkeypatch, django_capture_on_commit_callbacks, delete_after_check
+):
+    upsert, delete = room_sync
+    interpretation = RoomInterpretation.objects.create(
+        room=room,
+        interpreter=RoomInterpretation.INTERPRETER_VOXBENTO,
+        backend_session_id="42",
+        backend_config={"voxbento_room_id": "42", "other_setting": True},
+    )
+    upsert.return_value = {"room_id": 77}
+    original_exists = QuerySet.exists
+    delete_pending = delete_after_check
+
+    def exists(queryset):
+        nonlocal delete_pending
+        active = original_exists(queryset)
+        if queryset.model is Room and active and delete_pending:
+            delete_pending = False
+            with django_capture_on_commit_callbacks(execute=True):
+                soft_delete_room(room.event, room)
+            delete.assert_called_once_with(room.event, room.pk)
+            interpretation.refresh_from_db()
+            assert not interpretation.backend_session_id
+            assert "voxbento_room_id" not in interpretation.backend_config
+        return active
+
+    monkeypatch.setattr(QuerySet, "exists", exists)
+    assert not _do_sync_single_room_to_voxbento(room.pk, room.event_id, "upsert")
+
+    room.refresh_from_db()
+    interpretation.refresh_from_db()
+    assert room.deleted == delete_after_check
+    if delete_after_check:
+        assert interpretation.backend_session_id == ""
+        assert interpretation.backend_config == {"other_setting": True}
+    else:
+        delete.assert_not_called()
+        assert interpretation.backend_session_id == "77"
+        assert interpretation.backend_config == {"voxbento_room_id": "77", "other_setting": True}
 
 
 @pytest.mark.parametrize("via_serializer", [False, True])

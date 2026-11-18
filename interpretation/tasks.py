@@ -252,6 +252,8 @@ def _do_sync_single_room_to_voxbento(
         ):
             with transaction.atomic():
                 latest_interp = type(interpretation).objects.select_for_update().filter(pk=interpretation.pk).first()
+                if not Room.objects.filter(id=room_id, deleted=False).exists():
+                    return False
                 if latest_interp:
                     config = dict(latest_interp.backend_config) if latest_interp.backend_config else {}
                     config["voxbento_room_id"] = str(voxbento_room_id)
