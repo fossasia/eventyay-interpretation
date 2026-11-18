@@ -123,6 +123,9 @@ def room_interpretation_post_save(sender, instance, created, **kwargs):
 
 @receiver(pre_save, sender=Room, dispatch_uid="interpretation_room_pre_save")
 def room_pre_save(sender, instance, **kwargs):
+    instance._interpretation_was_deleted = False
+    if instance.deleted:
+        return
     if PLUGIN_MODULE not in instance.event.get_plugins():
         return
     if not is_interpretation_enabled(instance.event):
@@ -133,7 +136,10 @@ def room_pre_save(sender, instance, **kwargs):
     old_module_config = None
     if instance.pk:
         try:
-            old_module_config = Room.objects.filter(pk=instance.pk).values_list("module_config", flat=True).first()
+            old_state = Room.objects.filter(pk=instance.pk).values("module_config", "deleted").first()
+            if old_state:
+                old_module_config = old_state["module_config"]
+                instance._interpretation_was_deleted = old_state["deleted"]
         except Exception:
             old_module_config = None
 
@@ -165,14 +171,17 @@ def room_pre_save(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Room, dispatch_uid="interpretation_room_post_save")
 def room_post_save(sender, instance, created, **kwargs):
-    if not created:
+    if not created and not instance.deleted and not getattr(instance, "_interpretation_was_deleted", False):
         return
     if PLUGIN_MODULE not in instance.event.get_plugins():
         return
-    if not is_interpretation_enabled(instance.event):
+    if not instance.deleted and not is_interpretation_enabled(instance.event):
         return
 
-    transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(instance.id, instance.event_id, "upsert"))
+    room_id = instance.id
+    event_id = instance.event_id
+    action = "delete" if instance.deleted else "upsert"
+    transaction.on_commit(lambda: sync_single_room_to_voxbento.delay(room_id, event_id, action))
 
 
 @receiver(post_delete, sender=Room, dispatch_uid="interpretation_room_post_delete")
