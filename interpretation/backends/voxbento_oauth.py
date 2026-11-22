@@ -142,7 +142,9 @@ def get_valid_access_token(grant_id):
                             client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
                             client_secret = GlobalSettingsObject().settings.get("voxbento_client_secret", "")
                             if client_id:
-                                requests.post(
+                                logged_request(
+                                    "interpretation",
+                                    "POST",
                                     f"{base_url.rstrip('/')}/oauth/revoke",
                                     data={
                                         "token": new_tokens["access_token"],

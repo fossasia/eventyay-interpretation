@@ -103,7 +103,6 @@ class VoxbentoWebhookReceiverView(View):
         event_type = payload.get("event_type")
         data = payload.get("data", {})
         logger.info("Received valid VoxBento webhook for event %s: %s", event_slug, event_type)
-        _log_webhook(OUTCOME_SUCCESS, status=200, event_id=grant.event_id)
 
         handlers = {
             "booth.transcription.started": self.handle_transcription_started,
@@ -112,8 +111,19 @@ class VoxbentoWebhookReceiverView(View):
         }
 
         handler = handlers.get(event_type)
-        if handler:
-            handler(grant.event, data)
+        try:
+            if handler:
+                handler(grant.event, data)
+        except Exception:
+            _log_webhook(
+                OUTCOME_FAILURE,
+                "dispatch_failed",
+                status=500,
+                event_id=grant.event_id,
+            )
+            raise
+
+        _log_webhook(OUTCOME_SUCCESS, status=200, event_id=grant.event_id)
 
         return HttpResponse("OK", status=200)
 

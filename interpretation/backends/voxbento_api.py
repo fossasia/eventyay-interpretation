@@ -70,6 +70,15 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
 
         old_subscription_id = grant.webhook_subscription_id
 
+        access_token = get_valid_access_token(grant.id)
+        if not access_token:
+            return
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
         # Create the new subscription first without removing the working target
         target_url = get_webhook_target_url()
         payload = {
@@ -116,7 +125,14 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
             try:
                 delete_url = f"{api_url}/{old_subscription_id}"
                 del_headers = {"Authorization": f"Bearer {access_token}"}
-                requests.delete(delete_url, headers=del_headers, timeout=5.0)
+                logged_request(
+                    "interpretation",
+                    "DELETE",
+                    delete_url,
+                    headers=del_headers,
+                    timeout=5.0,
+                    ok_statuses=(404,),
+                )
             except Exception as e:
                 logger.warning("Failed to delete superseded VoxBento webhook %s: %s", old_subscription_id, e)
 
@@ -163,7 +179,15 @@ def create_voxbento_event(event: Event) -> None:
         "organizer_emails": list(organizer_emails),
     }
 
-    resp = logged_request("interpretation", "POST", api_url, headers=headers, json=payload, timeout=5.0)
+    resp = logged_request(
+        "interpretation",
+        "POST",
+        api_url,
+        headers=headers,
+        json=payload,
+        timeout=5.0,
+        ok_statuses=(409,),
+    )
 
     if resp.status_code == 409:
         # Event already exists (idempotent success)
@@ -208,7 +232,7 @@ def delete_voxbento_event(event: Event) -> None:
         "Authorization": f"Bearer {access_token}",
     }
 
-    resp = logged_request("interpretation", "DELETE", api_url, headers=headers, timeout=5.0)
+    resp = logged_request("interpretation", "DELETE", api_url, headers=headers, timeout=5.0, ok_statuses=(404,))
 
     if resp.status_code == 404:
         return
@@ -343,7 +367,7 @@ def delete_voxbento_room(event: Event, room_id: int) -> None:
         return
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    resp = logged_request("interpretation", "DELETE", api_url, headers=headers, timeout=5.0)
+    resp = logged_request("interpretation", "DELETE", api_url, headers=headers, timeout=5.0, ok_statuses=(404,))
     if resp.status_code != 404:
         resp.raise_for_status()
 

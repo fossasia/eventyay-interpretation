@@ -81,8 +81,6 @@ def clear_voxbento_credentials(event: Event) -> None:
     if grant:
         import logging
 
-        import requests
-
         from .voxbento_oauth import _get_cache_lock
 
         logger = logging.getLogger(__name__)
@@ -110,6 +108,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                                     delete_url,
                                     headers=headers,
                                     timeout=(3.0, 5.0),
+                                    ok_statuses=(404,),
                                 )
                                 if resp.status_code not in (204, 404):
                                     resp.raise_for_status()
@@ -129,7 +128,9 @@ def clear_voxbento_credentials(event: Event) -> None:
                         client_secret = GlobalSettingsObject().settings.get("voxbento_client_secret", "")
                         if client_id and grant.access_token:
                             revoke_url = f"{base_url.rstrip('/')}/oauth/revoke"
-                            resp = requests.post(
+                            resp = logged_request(
+                                "interpretation",
+                                "POST",
                                 revoke_url,
                                 data={
                                     "token": grant.access_token,

@@ -13,6 +13,12 @@ import functools
 import logging
 import re
 import time
+from contextvars import ContextVar
+
+try:
+    from eventyay.base.operational_logging import log_event as _HOST_LOG_EVENT
+except Exception:
+    _HOST_LOG_EVENT = None
 
 OUTCOME_SUCCESS = "success"
 OUTCOME_FAILURE = "failure"
@@ -36,12 +42,14 @@ _IDENTIFIER_FIELDS = frozenset(
         "error_code",
         "backend",
         "job_name",
+        "job_id",
         "payment_provider",
         "model",
         "order_code",
     }
 )
 _REQUEST_VERBS = frozenset({"get", "post", "put", "patch", "delete", "head", "options"})
+_JOB_FAILURE: ContextVar[dict | None] = ContextVar("interpretation_job_failure", default=None)
 
 
 def _safe_identifier(value):
@@ -86,14 +94,12 @@ def log_operation(action, outcome, **fields):
             outcome = OUTCOME_FAILURE
         level = logging.WARNING if outcome == OUTCOME_FAILURE else logging.INFO
         payload = _clean(fields)
-        emitter = None
-        try:
-            from eventyay.base.operational_logging import log_event as emitter
-        except Exception:
-            emitter = None
-        if emitter is not None:
-            emitter("plugins", action, outcome, level=level, **payload)
-            return
+        if _HOST_LOG_EVENT is not None:
+            try:
+                _HOST_LOG_EVENT("plugins", action, outcome, level=level, **payload)
+                return
+            except Exception:
+                pass
         extra = {
             "component": "plugins",
             "outcome": outcome,
@@ -182,13 +188,41 @@ def logged_request(backend, method, url, **kwargs):
     return response
 
 
+def mark_job_failed(error_code="failed"):
+    """Mark the active traced job as failed when an error is handled internally."""
+    state = _JOB_FAILURE.get()
+    if state is not None:
+        state["failed"] = True
+        state["error_code"] = error_code or "failed"
+
+
+def _celery_task_fields(args):
+    if not args:
+        return {}
+    req = getattr(args[0], "request", None)
+    if req is None or not hasattr(req, "retries"):
+        return {}
+    fields = {}
+    job_id = _safe_identifier(getattr(req, "id", None))
+    if job_id is not None:
+        fields["job_id"] = job_id
+    retries = getattr(req, "retries", None)
+    if isinstance(retries, int) and not isinstance(retries, bool):
+        fields["retry_count"] = retries
+    return fields
+
+
 def traced_job(job_name):
     """Log job boundaries without changing the return value or exception."""
 
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            log_operation("job.start", OUTCOME_SUCCESS, job_name=job_name)
+            started = time.monotonic()
+            task_fields = _celery_task_fields(args)
+            log_operation("job.start", OUTCOME_SUCCESS, job_name=job_name, **task_fields)
+            state = {"failed": False, "error_code": None}
+            token = _JOB_FAILURE.set(state)
             try:
                 result = fn(*args, **kwargs)
             except Exception as exc:
@@ -198,10 +232,31 @@ def traced_job(job_name):
                     OUTCOME_FAILURE,
                     job_name=job_name,
                     error_code="retry" if retried else type(exc).__name__,
+                    duration_ms=_elapsed_ms(started),
+                    **task_fields,
                 )
                 raise
-            log_operation("job.finish", OUTCOME_SUCCESS, job_name=job_name)
-            return result
+            else:
+                if state["failed"]:
+                    log_operation(
+                        "job.fail",
+                        OUTCOME_FAILURE,
+                        job_name=job_name,
+                        error_code=state["error_code"] or "failed",
+                        duration_ms=_elapsed_ms(started),
+                        **task_fields,
+                    )
+                else:
+                    log_operation(
+                        "job.finish",
+                        OUTCOME_SUCCESS,
+                        job_name=job_name,
+                        duration_ms=_elapsed_ms(started),
+                        **task_fields,
+                    )
+                return result
+            finally:
+                _JOB_FAILURE.reset(token)
 
         return wrapper
 
