@@ -13,6 +13,7 @@ from interpretation.operational_log import (
     log_operation,
     logged_request,
     mark_job_failed,
+    request_context,
     traced_job,
 )
 
@@ -308,3 +309,46 @@ def test_webhook_logs_failure_when_handler_raises(captured, monkeypatch):
     assert extra["error_code"] == "dispatch_failed"
     assert extra["status"] == 500
     assert extra["event_id"] == 77
+
+
+def test_request_context_rejects_non_opaque_header_values(captured):
+    for unsafe_val in ("15551234567", "sk-test-secret"):
+        req = SimpleNamespace(headers={"X-Request-ID": unsafe_val}, META={"HTTP_X_REQUEST_ID": unsafe_val})
+        with request_context(req) as req_id:
+            assert req_id != unsafe_val
+            assert len(req_id) == 32
+            int(req_id, 16)
+            log_operation("room.sync", OUTCOME_SUCCESS, backend="interpretation")
+        assert captured[-1][2]["request_id"] == req_id
+        assert unsafe_val not in str(captured[-1][2])
+
+    valid_hex = "a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    req_valid = SimpleNamespace(headers={"X-Request-ID": valid_hex}, META={})
+    with request_context(req_valid) as req_id:
+        assert req_id == valid_hex
+
+
+def test_logged_request_propagates_correlation_headers(captured, monkeypatch):
+    seen_headers = {}
+
+    class Response:
+        status_code = 200
+
+    def fake_post(url, **kwargs):
+        seen_headers.update(kwargs.get("headers") or {})
+        return Response()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    req = SimpleNamespace(headers={"X-Request-ID": "req-0123456789abcdef"}, META={})
+    caller_headers = {"Authorization": "Bearer secret-token"}
+
+    @traced_job("interpretation.sync")
+    def run_job():
+        with request_context(req):
+            logged_request("interpretation", "POST", "https://example.invalid/sync", headers=caller_headers)
+
+    run_job()
+    assert seen_headers["X-Request-ID"] == "req-0123456789abcdef"
+    assert "X-Job-ID" in seen_headers
+    assert "X-Request-ID" not in caller_headers
+    assert "secret-token" not in str(captured)

@@ -36,6 +36,10 @@ OUTCOME_SUCCESS = "success"
 OUTCOME_FAILURE = "failure"
 
 _SAFE_IDENTIFIER = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
+_OPAQUE_REQUEST_ID = re.compile(
+    r"^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|req-[0-9a-f]{8,64}|(?=.*[a-f])[0-9a-f]{16,64})$",
+    re.IGNORECASE,
+)
 _LOGGER = logging.getLogger("eventyay.plugins")
 _INT_FIELDS = frozenset(
     {
@@ -97,15 +101,15 @@ def request_context(request=None):
         return
     candidate = None
     if request is not None:
-        candidate = _safe_identifier(getattr(request, "_interpretation_request_id", None))
+        candidate = _opaque_request_id(getattr(request, "_interpretation_request_id", None))
         if candidate is None:
             headers = getattr(request, "headers", None)
             if headers is not None and hasattr(headers, "get"):
-                candidate = _safe_identifier(headers.get("X-Request-ID"))
+                candidate = _opaque_request_id(headers.get("X-Request-ID"))
         if candidate is None:
             meta = getattr(request, "META", None)
             if isinstance(meta, dict):
-                candidate = _safe_identifier(meta.get("HTTP_X_REQUEST_ID"))
+                candidate = _opaque_request_id(meta.get("HTTP_X_REQUEST_ID"))
     req_id = candidate or uuid.uuid4().hex
     if request is not None:
         try:
@@ -117,6 +121,12 @@ def request_context(request=None):
         yield req_id
     finally:
         _REQUEST_ID.reset(token)
+
+
+def _opaque_request_id(value):
+    if isinstance(value, str) and _OPAQUE_REQUEST_ID.fullmatch(value):
+        return value
+    return None
 
 
 def _safe_identifier(value):
@@ -232,6 +242,17 @@ def logged_request(backend, method, url, **kwargs):
     log_fields.pop("status", None)
     log_fields.pop("duration_ms", None)
     log_fields.pop("error_code", None)
+    req_id = _safe_identifier(log_fields.get("request_id")) or get_request_id()
+    job_id = _safe_identifier(log_fields.get("job_id")) or get_job_id()
+    if req_id is not None or job_id is not None:
+        raw_headers = kwargs.get("headers")
+        headers = dict(raw_headers) if isinstance(raw_headers, dict) else {}
+        lower_keys = {str(k).lower() for k in headers}
+        if req_id is not None and "x-request-id" not in lower_keys:
+            headers["X-Request-ID"] = req_id
+        if job_id is not None and "x-job-id" not in lower_keys:
+            headers["X-Job-ID"] = job_id
+        kwargs["headers"] = headers
     started = time.monotonic()
     try:
         response = _send_request(method, url, **kwargs)

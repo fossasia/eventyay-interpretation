@@ -368,7 +368,11 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
                 **kwargs,
             )
 
-            if response.status_code == 401 and is_oauth and grant:
+            if (
+                getattr(response, "status_code", 200 if getattr(response, "ok", False) else None) == 401
+                and is_oauth
+                and grant
+            ):
                 from datetime import timedelta
 
                 from django.utils import timezone
@@ -430,6 +434,7 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             )
             return Response({"detail": error["detail"]}, status=error["status"])
 
+        resp_status = getattr(response, "status_code", 200 if getattr(response, "ok", False) else None)
         if response.ok:
             data = response.json()
             token = data.get("listener_token") if is_oauth else data.get("token")
@@ -437,19 +442,19 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
                 "listener_token.issue",
                 OUTCOME_SUCCESS,
                 backend="interpretation",
-                status=response.status_code,
+                status=resp_status,
                 event_id=self.event.id,
                 object_id=room.pk,
             )
             return Response({"token": token})
         else:
-            logger.warning("VoxBento API Error (%s) when fetching listener token.", response.status_code)
+            logger.warning("VoxBento API Error (%s) when fetching listener token.", resp_status)
             log_operation(
                 "listener_token.issue",
                 OUTCOME_FAILURE,
                 backend="interpretation",
                 error_code="http_error",
-                status=response.status_code,
+                status=resp_status,
                 event_id=self.event.id,
                 object_id=room.pk,
             )
