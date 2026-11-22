@@ -21,7 +21,13 @@ from eventyay.base.models import Event
 from eventyay.base.settings import GlobalSettingsObject
 from eventyay.control.permissions import EventPermissionRequiredMixin
 
-from interpretation.operational_log import OUTCOME_FAILURE, OUTCOME_SUCCESS, log_operation, logged_request
+from interpretation.operational_log import (
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    log_operation,
+    logged_request,
+    request_context,
+)
 
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .backends.voxbento_oauth import _get_cache_lock
@@ -45,6 +51,10 @@ class VoxbentoOAuthConnectView(EventPermissionRequiredMixin, View):
         return self.post(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
+        with request_context(request):
+            return self._handle_post(request, *args, **kwargs)
+
+    def _handle_post(self, request, *args, **kwargs):
         event = self.request.event
         dashboard_url = reverse(
             "plugins:interpretation:dashboard",
@@ -158,6 +168,10 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
         return response
 
     def get(self, request, *args, **kwargs):
+        with request_context(request):
+            return self._handle_get(request, *args, **kwargs)
+
+    def _handle_get(self, request, *args, **kwargs):
         state = request.GET.get("state", "")
         if "::" not in state:
             log_operation("oauth.callback", OUTCOME_FAILURE, backend="interpretation", error_code="invalid_state")
@@ -317,6 +331,7 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
                     "event": event.slug,
                 },
                 timeout=(3.0, 5.0),
+                event_id=event.id,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -384,6 +399,7 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
                         headers=headers,
                         timeout=(3.0, 5.0),
                         ok_statuses=(404,),
+                        event_id=event.id,
                     )
                     if del_resp.status_code not in (204, 404):
                         logger.warning(
@@ -392,7 +408,9 @@ class VoxbentoOAuthCallbackView(LoginRequiredMixin, View):
                             del_resp.status_code,
                         )
                 except requests.exceptions.RequestException as e:
-                    logger.warning(f"Failed to delete old webhook during reconnect for event {event.slug}: {e}")
+                    logger.warning(
+                        "Failed to delete old webhook during reconnect for event %s (%s)", event.id, type(e).__name__
+                    )
 
         except Exception as e:
             log_operation(

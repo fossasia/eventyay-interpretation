@@ -11,7 +11,7 @@ from django.views.generic import View
 from eventyay.base.models import Room
 
 from .models import VoxbentoOAuthGrant
-from .operational_log import OUTCOME_FAILURE, OUTCOME_SUCCESS, log_operation
+from .operational_log import OUTCOME_FAILURE, OUTCOME_SUCCESS, log_operation, request_context
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,10 @@ class VoxbentoWebhookReceiverView(View):
     """
 
     def post(self, request, *args, **kwargs):
+        with request_context(request):
+            return self._handle_post(request, *args, **kwargs)
+
+    def _handle_post(self, request, *args, **kwargs):
         signature_header = request.headers.get("X-VoxBento-Signature")
         if not signature_header:
             _log_webhook(OUTCOME_FAILURE, "missing_signature", status=401)
@@ -233,7 +237,7 @@ class VoxbentoWebhookReceiverView(View):
             error_code = data.get("error_code")
             error_detail = data.get("error_detail")
             if error_code:
-                logger.error("VoxBento session crashed for room %s: %s (%s)", room.id, error_detail, error_code)
+                logger.error("VoxBento session crashed for room %s (%s)", room.id, error_code)
                 config["last_error"] = error_detail or error_code
                 config["last_error_code"] = error_code
                 if "backend_config" not in update_fields:

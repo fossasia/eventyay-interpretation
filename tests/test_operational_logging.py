@@ -245,8 +245,12 @@ def test_app_ready_logs_only_after_startup_succeeds(captured, monkeypatch):
 
     with pytest.raises(RuntimeError, match="patch failed"):
         app.ready()
-    assert captured == []
+    assert len(captured) == 1
+    assert captured[0][1] == "plugin.load"
+    assert captured[0][2]["outcome"] == "failure"
+    assert captured[0][2]["error_code"] == "startup_failed"
 
+    captured.clear()
     broken_mod.install_video_integration = lambda: None
     app.ready()
     assert len(captured) == 1

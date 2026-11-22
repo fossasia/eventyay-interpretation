@@ -41,13 +41,13 @@ def _mark_connection_failure_flags(event_id: int) -> None:
 def _retry_connection(task, exc: Exception, event_id: int) -> None:
     """Retry task with backoff; on exhaustion mark failure flags and re-raise."""
     if task.request.retries >= task.max_retries:
-        logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}: {exc}")
+        logger.error("Max retries exceeded syncing VoxBento connection for event %s (%s)", event_id, type(exc).__name__)
         _mark_connection_failure_flags(event_id)
         raise exc
     try:
         task.retry(exc=exc)
     except (MaxRetriesExceededError, requests.RequestException, redis.exceptions.LockError):
-        logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}: {exc}")
+        logger.error("Max retries exceeded syncing VoxBento connection for event %s (%s)", event_id, type(exc).__name__)
         _mark_connection_failure_flags(event_id)
         raise
 
@@ -95,7 +95,11 @@ def sync_voxbento_connection(self, event_id: int) -> None:
                 and e.response.status_code < 500
                 and e.response.status_code not in (408, 429)
             ):
-                logger.error(f"VoxBento webhook failed {e.response.status_code}: {e.response.text}")
+                logger.error(
+                    "VoxBento webhook subscription failed for event %s with status %s",
+                    event_id,
+                    e.response.status_code,
+                )
                 from .models import VoxbentoOAuthGrant
 
                 VoxbentoOAuthGrant.objects.filter(id=grant.id, webhook_subscription_id__isnull=True).update(
@@ -123,7 +127,7 @@ def sync_voxbento_connection(self, event_id: int) -> None:
         _mark_connection_failure_flags(event_id)
         mark_job_failed("max_retries")
     except (requests.RequestException, redis.exceptions.LockError) as e:
-        logger.warning(f"Transient error syncing VoxBento connection for event {event_id}: {e}")
+        logger.warning("Transient error syncing VoxBento connection for event %s (%s)", event_id, type(e).__name__)
         _retry_connection(self, e, event_id)
 
 
@@ -352,7 +356,7 @@ def _do_sync_single_room_to_voxbento(
             logger.warning(f"Entity does not exist for upsert room {room_id}")
         return False
     except requests.RequestException as e:
-        logger.warning(f"Request exception when syncing room {room_id}: {e}")
+        logger.warning("Request exception when syncing room %s (%s)", room_id, type(e).__name__)
         return True
 
 

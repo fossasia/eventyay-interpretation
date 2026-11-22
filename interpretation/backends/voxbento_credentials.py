@@ -109,6 +109,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                                     headers=headers,
                                     timeout=(3.0, 5.0),
                                     ok_statuses=(404,),
+                                    event_id=event.id,
                                 )
                                 if resp.status_code not in (204, 404):
                                     resp.raise_for_status()
@@ -117,7 +118,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                             "Failed to delete VoxBento webhook subscription %s for event %s: %s",
                             grant.webhook_subscription_id,
                             event.id,
-                            str(e),
+                            type(e).__name__,
                         )
 
                     try:
@@ -139,6 +140,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                                 },
                                 timeout=(3.0, 5.0),
                                 allow_redirects=False,
+                                event_id=event.id,
                             )
                             if not (200 <= resp.status_code < 300):
                                 logger.warning(
@@ -150,7 +152,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                         logger.error(
                             "Failed to revoke VoxBento OAuth token for event %s: %s",
                             event.id,
-                            str(e),
+                            type(e).__name__,
                             extra={"notify": True},
                         )
 

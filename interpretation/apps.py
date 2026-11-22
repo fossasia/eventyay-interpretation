@@ -1,7 +1,7 @@
 from django.utils.translation import gettext_lazy as _
 
 from . import __version__
-from .operational_log import log_plugin_loaded
+from .operational_log import OUTCOME_FAILURE, log_operation, log_plugin_loaded
 
 try:
     from eventyay.base.plugins import PluginConfig
@@ -23,8 +23,17 @@ class InterpretationApp(PluginConfig):
         category = "FEATURE"
 
     def ready(self):
-        from . import signals  # NOQA
-        from .video_integration import install_video_integration
+        try:
+            from . import signals  # NOQA
+            from .video_integration import install_video_integration
 
-        install_video_integration()
+            install_video_integration()
+        except Exception:
+            log_operation(
+                "plugin.load",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="startup_failed",
+            )
+            raise
         log_plugin_loaded("interpretation")
