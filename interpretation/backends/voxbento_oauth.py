@@ -6,6 +6,8 @@ import requests
 from django.core.cache import cache
 from django.utils import timezone
 
+from interpretation.operational_log import logged_request
+
 from ..models import VoxbentoOAuthGrant
 from .voxbento_credentials import get_voxbento_base_url
 
@@ -24,7 +26,7 @@ class VoxbentoReauthorizationRequired(requests.RequestException):
     pass
 
 
-def call_voxbento_refresh(refresh_token, base_url):
+def call_voxbento_refresh(refresh_token, base_url, *, event_id=None):
     url = f"{base_url.rstrip('/')}/oauth/token"
     from eventyay.base.settings import GlobalSettingsObject
 
@@ -33,7 +35,9 @@ def call_voxbento_refresh(refresh_token, base_url):
     client_secret = gs.get("voxbento_client_secret", "")
 
     try:
-        response = requests.post(
+        response = logged_request(
+            "interpretation",
+            "POST",
             url,
             data={
                 "grant_type": "refresh_token",
@@ -42,9 +46,10 @@ def call_voxbento_refresh(refresh_token, base_url):
                 "refresh_token": refresh_token,
             },
             timeout=5.0,
+            event_id=event_id,
         )
     except requests.RequestException as e:
-        logger.warning(f"Network error refreshing VoxBento token: {e}")
+        logger.warning("Network error refreshing VoxBento token (%s)", type(e).__name__)
         raise VoxbentoTemporarilyUnavailable("Network error connecting to VoxBento")
 
     if response.status_code in (400, 401):
@@ -99,7 +104,7 @@ def get_valid_access_token(grant_id):
             initial_refresh_token = grant.refresh_token
             initial_access_token = grant.access_token
             try:
-                new_tokens = call_voxbento_refresh(grant.refresh_token, base_url)
+                new_tokens = call_voxbento_refresh(grant.refresh_token, base_url, event_id=grant.event_id)
 
                 # Atomic token update to prevent re-connecting a disconnected grant
                 expires_in = new_tokens.get("expires_in", 3600)
@@ -138,7 +143,9 @@ def get_valid_access_token(grant_id):
                             client_id = GlobalSettingsObject().settings.get("voxbento_client_id", "")
                             client_secret = GlobalSettingsObject().settings.get("voxbento_client_secret", "")
                             if client_id:
-                                requests.post(
+                                logged_request(
+                                    "interpretation",
+                                    "POST",
                                     f"{base_url.rstrip('/')}/oauth/revoke",
                                     data={
                                         "token": new_tokens["access_token"],
@@ -146,6 +153,7 @@ def get_valid_access_token(grant_id):
                                         "client_secret": client_secret,
                                     },
                                     timeout=(3.0, 5.0),
+                                    event_id=grant.event_id,
                                 )
                         except Exception:
                             pass

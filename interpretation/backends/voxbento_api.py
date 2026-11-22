@@ -7,6 +7,8 @@ import requests
 from django.conf import settings
 from eventyay.base.models import Event
 
+from interpretation.operational_log import logged_request
+
 from .voxbento_credentials import get_voxbento_base_url
 from .voxbento_oauth import VoxbentoReauthorizationRequired, get_valid_access_token
 
@@ -66,6 +68,8 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
 
         api_url = f"{base_url.rstrip('/')}/api/v1/webhooks"
 
+        old_subscription_id = grant.webhook_subscription_id
+
         access_token = get_valid_access_token(grant.id)
         if not access_token:
             return
@@ -75,8 +79,6 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
             "Content-Type": "application/json",
         }
 
-        old_subscription_id = grant.webhook_subscription_id
-
         # Create the new subscription first without removing the working target
         target_url = get_webhook_target_url()
         payload = {
@@ -84,7 +86,15 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
             "event_types": ["booth.transcription.started", "booth.transcription.stopped", "booth.interpreter.joined"],
         }
 
-        resp = requests.post(api_url, headers=headers, json=payload, timeout=5.0)
+        resp = logged_request(
+            "interpretation",
+            "POST",
+            api_url,
+            headers=headers,
+            json=payload,
+            timeout=5.0,
+            event_id=event.id,
+        )
 
         if resp.status_code == 403:
             # Scope denied by VoxBento
@@ -123,9 +133,19 @@ def subscribe_to_voxbento_webhooks(event: Event, force: bool = False) -> None:
             try:
                 delete_url = f"{api_url}/{old_subscription_id}"
                 del_headers = {"Authorization": f"Bearer {access_token}"}
-                requests.delete(delete_url, headers=del_headers, timeout=5.0)
+                logged_request(
+                    "interpretation",
+                    "DELETE",
+                    delete_url,
+                    headers=del_headers,
+                    timeout=5.0,
+                    ok_statuses=(404,),
+                    event_id=event.id,
+                )
             except Exception as e:
-                logger.warning("Failed to delete superseded VoxBento webhook %s: %s", old_subscription_id, e)
+                logger.warning(
+                    "Failed to delete superseded VoxBento webhook %s: %s", old_subscription_id, type(e).__name__
+                )
 
 
 def create_voxbento_event(event: Event) -> None:
@@ -170,7 +190,16 @@ def create_voxbento_event(event: Event) -> None:
         "organizer_emails": list(organizer_emails),
     }
 
-    resp = requests.post(api_url, headers=headers, json=payload, timeout=5.0)
+    resp = logged_request(
+        "interpretation",
+        "POST",
+        api_url,
+        headers=headers,
+        json=payload,
+        timeout=5.0,
+        ok_statuses=(409,),
+        event_id=event.id,
+    )
 
     if resp.status_code == 409:
         # Event already exists (idempotent success)
@@ -183,7 +212,7 @@ def create_voxbento_event(event: Event) -> None:
     try:
         resp.raise_for_status()
     except requests.RequestException as e:
-        logger.error("Failed to provision VoxBento event %s: %s", event.id, e)
+        logger.error("Failed to provision VoxBento event %s: %s", event.id, type(e).__name__)
         if resp.status_code < 500 and resp.status_code not in (408, 429):
             grant.event_provisioning_failed = True
             grant.save(update_fields=["event_provisioning_failed"])
@@ -215,7 +244,15 @@ def delete_voxbento_event(event: Event) -> None:
         "Authorization": f"Bearer {access_token}",
     }
 
-    resp = requests.delete(api_url, headers=headers, timeout=5.0)
+    resp = logged_request(
+        "interpretation",
+        "DELETE",
+        api_url,
+        headers=headers,
+        timeout=5.0,
+        ok_statuses=(404,),
+        event_id=event.id,
+    )
 
     if resp.status_code == 404:
         return
@@ -251,7 +288,16 @@ def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> dict:
         "Content-Type": "application/json",
     }
 
-    resp = requests.put(api_url, headers=headers, json=payload, timeout=5.0)
+    resp = logged_request(
+        "interpretation",
+        "PUT",
+        api_url,
+        headers=headers,
+        json=payload,
+        timeout=5.0,
+        event_id=event.id,
+        object_id=room_id,
+    )
 
     if resp.status_code == 404:
         logger.warning(
@@ -261,8 +307,17 @@ def sync_voxbento_room(event: Event, room_id: int, payload: dict) -> dict:
         )
         create_voxbento_event(event)
         # Retry the request
-        logger.debug("VOXBENTO_PAYLOAD_DEBUG: %s %s", api_url, payload)
-        resp = requests.put(api_url, headers=headers, json=payload, timeout=5.0)
+        logger.debug("Retrying VoxBento room sync for event %s room %s", event.id, room_id)
+        resp = logged_request(
+            "interpretation",
+            "PUT",
+            api_url,
+            headers=headers,
+            json=payload,
+            timeout=5.0,
+            event_id=event.id,
+            object_id=room_id,
+        )
 
     if resp.status_code == 409:
         logger.error("VoxBento returned 409 Conflict for room sync on event %s room %s", event.id, room_id)
@@ -316,7 +371,15 @@ def sync_voxbento_api_keys(event: Event) -> None:
     }
 
     try:
-        resp = requests.patch(api_url, headers=headers, json=payload, timeout=5.0)
+        resp = logged_request(
+            "interpretation",
+            "PATCH",
+            api_url,
+            headers=headers,
+            json=payload,
+            timeout=5.0,
+            event_id=event.id,
+        )
 
         if resp.status_code == 404:
             logger.warning(
@@ -324,11 +387,19 @@ def sync_voxbento_api_keys(event: Event) -> None:
                 event.id,
             )
             create_voxbento_event(event)
-            resp = requests.patch(api_url, headers=headers, json=payload, timeout=5.0)
+            resp = logged_request(
+                "interpretation",
+                "PATCH",
+                api_url,
+                headers=headers,
+                json=payload,
+                timeout=5.0,
+                event_id=event.id,
+            )
 
         resp.raise_for_status()
     except requests.RequestException as e:
-        logger.error("Failed to sync API keys to VoxBento for event %s: %s", event.id, e)
+        logger.error("Failed to sync API keys to VoxBento for event %s: %s", event.id, type(e).__name__)
         raise ValueError(f"Failed to synchronize API keys with VoxBento: {e}")
 
 
@@ -350,7 +421,16 @@ def delete_voxbento_room(event: Event, room_id: int) -> None:
         return
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    resp = requests.delete(api_url, headers=headers, timeout=5.0)
+    resp = logged_request(
+        "interpretation",
+        "DELETE",
+        api_url,
+        headers=headers,
+        timeout=5.0,
+        ok_statuses=(404,),
+        event_id=event.id,
+        object_id=room_id,
+    )
     if resp.status_code != 404:
         resp.raise_for_status()
 
@@ -377,7 +457,15 @@ def get_voxbento_room_langs(event: Event, room_id: int) -> set[str]:
             return set()
 
         headers = {"Authorization": f"Bearer {access_token}"}
-        resp = requests.get(api_url, headers=headers, timeout=5.0)
+        resp = logged_request(
+            "interpretation",
+            "GET",
+            api_url,
+            headers=headers,
+            timeout=5.0,
+            event_id=event.id,
+            object_id=room_id,
+        )
         if resp.status_code != 200:
             return set()
 

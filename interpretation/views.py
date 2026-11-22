@@ -27,6 +27,7 @@ from .interpreter_credentials import (
     is_interpreter_configured,
 )
 from .models import RoomInterpretation
+from .operational_log import OUTCOME_FAILURE, OUTCOME_SUCCESS, log_operation, request_context
 from .room_control import (
     clear_room_interpretation_setup,
     notify_video_room_config_changed,
@@ -81,13 +82,35 @@ def _event_settings_form(event, data=None):
     )
 
 
+def _user_id(request):
+    user = getattr(request, "user", None)
+    if user is not None and getattr(user, "is_authenticated", False):
+        return getattr(user, "id", None)
+    return None
+
+
 def _process_event_settings_post(request, event, redirect_url):
     form = _event_settings_form(event, data=request.POST)
     if form.is_valid():
         form.save()
         notify_video_room_config_changed(event)
+        log_operation(
+            "interpretation.settings.update",
+            OUTCOME_SUCCESS,
+            backend="interpretation",
+            event_id=event.id,
+            user_id=_user_id(request),
+        )
         messages.success(request, _("Your changes have been saved."))
     else:
+        log_operation(
+            "interpretation.settings.update",
+            OUTCOME_FAILURE,
+            backend="interpretation",
+            error_code="validation_failed",
+            event_id=event.id,
+            user_id=_user_id(request),
+        )
         messages.error(
             request,
             _("We could not save your changes. See below for details."),
@@ -97,13 +120,22 @@ def _process_event_settings_post(request, event, redirect_url):
 
 class InterpretationEnabledMixin:
     def dispatch(self, request, *args, **kwargs):
-        if PLUGIN_MODULE not in request.event.get_plugins():
-            return redirect(
-                "eventyay_common:event.plugins",
-                organizer=request.event.organizer.slug,
-                event=request.event.slug,
-            )
-        return super().dispatch(request, *args, **kwargs)
+        with request_context(request):
+            if PLUGIN_MODULE not in request.event.get_plugins():
+                log_operation(
+                    "plugin.access",
+                    OUTCOME_FAILURE,
+                    backend="interpretation",
+                    error_code="plugin_disabled",
+                    event_id=getattr(request.event, "id", None),
+                    user_id=_user_id(request),
+                )
+                return redirect(
+                    "eventyay_common:event.plugins",
+                    organizer=request.event.organizer.slug,
+                    event=request.event.slug,
+                )
+            return super().dispatch(request, *args, **kwargs)
 
 
 class XFrameOptionsSameOriginMixin:
@@ -253,14 +285,46 @@ class InterpretationOverview(
                 try:
                     synced += backend.sync_booths(request.event, interp)
                 except VoxbentoTemporarilyUnavailable:
+                    log_operation(
+                        "interpretation.sync_all",
+                        OUTCOME_FAILURE,
+                        backend="voxbento",
+                        error_code="backend_unavailable",
+                        event_id=request.event.id,
+                        user_id=_user_id(request),
+                    )
                     messages.error(request, _("VoxBento is temporarily unavailable."))
                     return redirect(_dashboard_url(request.event))
                 except Exception as e:
+                    log_operation(
+                        "interpretation.sync_all",
+                        OUTCOME_FAILURE,
+                        backend="voxbento",
+                        error_code=type(e).__name__,
+                        event_id=request.event.id,
+                        object_id=interp.room_id,
+                        user_id=_user_id(request),
+                    )
                     messages.error(request, _("Sync failed for room {r}: {e}").format(r=interp.room.name, e=str(e)))
 
             if synced > 0:
+                log_operation(
+                    "interpretation.sync_all",
+                    OUTCOME_SUCCESS,
+                    backend="voxbento",
+                    event_id=request.event.id,
+                    user_id=_user_id(request),
+                )
                 messages.success(request, _("Successfully synced {c} interpretation booths.").format(c=synced))
             else:
+                log_operation(
+                    "interpretation.sync_all",
+                    OUTCOME_FAILURE,
+                    backend="voxbento",
+                    error_code="no_booths_synced",
+                    event_id=request.event.id,
+                    user_id=_user_id(request),
+                )
                 messages.warning(request, _("No interpretation booths were synced."))
 
             return redirect(_dashboard_url(request.event))
@@ -290,11 +354,27 @@ class InterpretationInterpreters(
         backend = get_backend(backend_id or "")
 
         if not backend.uses_event_credentials:
+            log_operation(
+                "interpreter.config",
+                OUTCOME_FAILURE,
+                backend=backend_id or "none",
+                error_code="unknown_action",
+                event_id=event.id,
+                user_id=_user_id(request),
+            )
             messages.error(request, _("Unknown interpreter action."))
             return redirect(redirect_url)
 
         if action == "connect":
             _form, ok = backend.connect(request, event, request.POST)
+            log_operation(
+                "interpreter.connect",
+                OUTCOME_SUCCESS if ok else OUTCOME_FAILURE,
+                backend=backend.id,
+                error_code=None if ok else "connect_failed",
+                event_id=event.id,
+                user_id=_user_id(request),
+            )
             if not ok:
                 messages.error(
                     request,
@@ -303,9 +383,23 @@ class InterpretationInterpreters(
             return redirect(redirect_url)
         if action == "test":
             backend.test_connection(request, event)
+            log_operation(
+                "interpreter.test",
+                OUTCOME_SUCCESS,
+                backend=backend.id,
+                event_id=event.id,
+                user_id=_user_id(request),
+            )
             return redirect(redirect_url)
         if action == "disconnect":
             clear_interpreter_credentials(event, backend.id)
+            log_operation(
+                "interpreter.disconnect",
+                OUTCOME_SUCCESS,
+                backend=backend.id,
+                event_id=event.id,
+                user_id=_user_id(request),
+            )
             messages.success(
                 request,
                 _("Disconnected %(name)s for this event.") % {"name": backend.label},
@@ -323,13 +417,44 @@ class InterpretationInterpreters(
 
                     VoxbentoOAuthGrant.objects.filter(event=event).delete()
 
+                    log_operation(
+                        "interpreter.delete_event",
+                        OUTCOME_SUCCESS,
+                        backend=backend.id,
+                        event_id=event.id,
+                        user_id=_user_id(request),
+                    )
                     messages.success(request, _("Permanently deleted VoxBento event and disconnected."))
                 except Exception as e:
+                    log_operation(
+                        "interpreter.delete_event",
+                        OUTCOME_FAILURE,
+                        backend=backend.id,
+                        error_code=type(e).__name__,
+                        event_id=event.id,
+                        user_id=_user_id(request),
+                    )
                     messages.error(request, _("Could not delete VoxBento event: %(error)s") % {"error": str(e)})
             else:
+                log_operation(
+                    "interpreter.delete_event",
+                    OUTCOME_FAILURE,
+                    backend=backend.id,
+                    error_code="unsupported_backend",
+                    event_id=event.id,
+                    user_id=_user_id(request),
+                )
                 messages.error(request, _("Delete event not supported for this interpreter."))
             return redirect(redirect_url)
 
+        log_operation(
+            "interpreter.config",
+            OUTCOME_FAILURE,
+            backend=backend.id,
+            error_code="unknown_action",
+            event_id=event.id,
+            user_id=_user_id(request),
+        )
         messages.error(request, _("Unknown interpreter action."))
         return redirect(redirect_url)
 
@@ -402,6 +527,15 @@ class InterpretationRoomSettings(
             if action == "stop":
                 return self._handle_room_stop(request, room, event, redirect_url)
 
+            log_operation(
+                "room.config.update",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="unknown_action",
+                event_id=event.id,
+                object_id=room.pk,
+                user_id=_user_id(request),
+            )
             messages.error(request, _("Unknown room action."))
             return redirect(redirect_url)
 
@@ -503,6 +637,15 @@ class InterpretationRoomSettings(
     def _handle_room_save(self, request, room, event, prefix, redirect_url):
         interpretation, error = self._apply_room_configure_form(request, room, event, prefix)
         if error is not None:
+            log_operation(
+                "room.config.update",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="validation_failed",
+                event_id=event.id,
+                object_id=room.pk,
+                user_id=_user_id(request),
+            )
             if isinstance(error, str):
                 messages.error(request, error)
                 is_api_error = "invalid, expired, or revoked" in error
@@ -550,9 +693,26 @@ class InterpretationRoomSettings(
             try:
                 backend.sync_booths(event, interpretation)
             except VoxbentoTemporarilyUnavailable:
+                log_operation(
+                    "room.config.update",
+                    OUTCOME_FAILURE,
+                    backend=interpretation.interpreter,
+                    error_code="backend_unavailable",
+                    event_id=event.id,
+                    object_id=room.pk,
+                    user_id=_user_id(request),
+                )
                 messages.error(request, _("VoxBento is temporarily unavailable. Please try saving again later."))
                 return redirect(redirect_url)
 
+        log_operation(
+            "room.config.update",
+            OUTCOME_SUCCESS,
+            backend=interpretation.interpreter if interpretation else "none",
+            event_id=event.id,
+            object_id=room.pk,
+            user_id=_user_id(request),
+        )
         messages.success(
             request,
             _("Saved interpretation settings for %(room)s.") % {"room": room.name},
@@ -563,8 +723,25 @@ class InterpretationRoomSettings(
         try:
             clear_room_interpretation_setup(room, event)
         except ValueError as exc:
+            log_operation(
+                "room.config.clear",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="clear_failed",
+                event_id=event.id,
+                object_id=room.pk,
+                user_id=_user_id(request),
+            )
             messages.error(request, str(exc))
             return redirect(redirect_url)
+        log_operation(
+            "room.config.clear",
+            OUTCOME_SUCCESS,
+            backend="interpretation",
+            event_id=event.id,
+            object_id=room.pk,
+            user_id=_user_id(request),
+        )
         messages.success(
             request,
             _("Cleared interpretation for %(room)s.") % {"room": room.name},
@@ -573,6 +750,15 @@ class InterpretationRoomSettings(
 
     def _handle_room_stop(self, request, room, event, redirect_url):
         result = stop_room_session(room, event)
+        log_operation(
+            "room.session.stop",
+            OUTCOME_SUCCESS if result.ok else OUTCOME_FAILURE,
+            backend=result.interpretation.interpreter if result.interpretation else "interpretation",
+            error_code=None if result.ok else "stop_failed",
+            event_id=event.id,
+            object_id=room.pk,
+            user_id=_user_id(request),
+        )
         _notify_stop_result(request, room, result)
         return redirect(redirect_url)
 

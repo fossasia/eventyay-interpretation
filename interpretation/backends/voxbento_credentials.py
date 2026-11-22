@@ -5,6 +5,8 @@ from urllib.parse import urlparse
 import requests
 from eventyay.base.models import Event
 
+from interpretation.operational_log import logged_request
+
 SETTING_VOXBENTO_BASE_URL = "interpretation_voxbento_base_url"
 SETTING_VOXBENTO_API_KEY = "interpretation_voxbento_api_key"
 
@@ -79,8 +81,6 @@ def clear_voxbento_credentials(event: Event) -> None:
     if grant:
         import logging
 
-        import requests
-
         from .voxbento_oauth import _get_cache_lock
 
         logger = logging.getLogger(__name__)
@@ -102,7 +102,15 @@ def clear_voxbento_credentials(event: Event) -> None:
                             if access_token:
                                 headers = {"Authorization": f"Bearer {access_token}"}
                                 delete_url = f"{api_url}/{grant.webhook_subscription_id}"
-                                resp = requests.delete(delete_url, headers=headers, timeout=(3.0, 5.0))
+                                resp = logged_request(
+                                    "interpretation",
+                                    "DELETE",
+                                    delete_url,
+                                    headers=headers,
+                                    timeout=(3.0, 5.0),
+                                    ok_statuses=(404,),
+                                    event_id=event.id,
+                                )
                                 if resp.status_code not in (204, 404):
                                     resp.raise_for_status()
                     except Exception as e:
@@ -110,7 +118,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                             "Failed to delete VoxBento webhook subscription %s for event %s: %s",
                             grant.webhook_subscription_id,
                             event.id,
-                            str(e),
+                            type(e).__name__,
                         )
 
                     try:
@@ -121,7 +129,9 @@ def clear_voxbento_credentials(event: Event) -> None:
                         client_secret = GlobalSettingsObject().settings.get("voxbento_client_secret", "")
                         if client_id and grant.access_token:
                             revoke_url = f"{base_url.rstrip('/')}/oauth/revoke"
-                            resp = requests.post(
+                            resp = logged_request(
+                                "interpretation",
+                                "POST",
                                 revoke_url,
                                 data={
                                     "token": grant.access_token,
@@ -130,6 +140,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                                 },
                                 timeout=(3.0, 5.0),
                                 allow_redirects=False,
+                                event_id=event.id,
                             )
                             if not (200 <= resp.status_code < 300):
                                 logger.warning(
@@ -141,7 +152,7 @@ def clear_voxbento_credentials(event: Event) -> None:
                         logger.error(
                             "Failed to revoke VoxBento OAuth token for event %s: %s",
                             event.id,
-                            str(e),
+                            type(e).__name__,
                             extra={"notify": True},
                         )
 
@@ -172,7 +183,7 @@ def test_voxbento_connection(base_url: str, api_key: str, event_slug: str) -> No
     payload = {"event_slug": event_slug}
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=5.0)
+        response = logged_request("interpretation", "POST", url, headers=headers, json=payload, timeout=5.0)
     except requests.RequestException as e:
         raise VoxbentoError(f"Connection failed: {e}")
 

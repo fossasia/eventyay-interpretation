@@ -14,6 +14,7 @@ from .backends.voxbento_api import (
 )
 from .backends.voxbento_credentials import get_voxbento_base_url
 from .language_map import language_code_for_name
+from .operational_log import mark_job_failed, traced_job
 
 logger = logging.getLogger(__name__)
 
@@ -40,18 +41,19 @@ def _mark_connection_failure_flags(event_id: int) -> None:
 def _retry_connection(task, exc: Exception, event_id: int) -> None:
     """Retry task with backoff; on exhaustion mark failure flags and re-raise."""
     if task.request.retries >= task.max_retries:
-        logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}: {exc}")
+        logger.error("Max retries exceeded syncing VoxBento connection for event %s (%s)", event_id, type(exc).__name__)
         _mark_connection_failure_flags(event_id)
         raise exc
     try:
         task.retry(exc=exc)
     except (MaxRetriesExceededError, requests.RequestException, redis.exceptions.LockError):
-        logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}: {exc}")
+        logger.error("Max retries exceeded syncing VoxBento connection for event %s (%s)", event_id, type(exc).__name__)
         _mark_connection_failure_flags(event_id)
         raise
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_connection")
 def sync_voxbento_connection(self, event_id: int) -> None:
     """
     Background task to sync the VoxBento OAuth connection.
@@ -80,6 +82,7 @@ def sync_voxbento_connection(self, event_id: int) -> None:
         if not grant.event_provisioned or grant.event_provisioning_failed:
             logger.error(f"Event provisioning failed for event {event_id}. Halting task chain.")
             _mark_connection_failure_flags(event_id)
+            mark_job_failed("event_provisioning_failed")
             return
 
         # Subscribe Webhooks
@@ -92,7 +95,11 @@ def sync_voxbento_connection(self, event_id: int) -> None:
                 and e.response.status_code < 500
                 and e.response.status_code not in (408, 429)
             ):
-                logger.error(f"VoxBento webhook failed {e.response.status_code}: {e.response.text}")
+                logger.error(
+                    "VoxBento webhook subscription failed for event %s with status %s",
+                    event_id,
+                    e.response.status_code,
+                )
                 from .models import VoxbentoOAuthGrant
 
                 VoxbentoOAuthGrant.objects.filter(id=grant.id, webhook_subscription_id__isnull=True).update(
@@ -106,6 +113,7 @@ def sync_voxbento_connection(self, event_id: int) -> None:
         if (not grant.webhook_subscription_id and not grant.webhook_scope_denied) or grant.webhook_subscription_failed:
             logger.error(f"Webhook subscription failed for event {event_id}. Halting task chain.")
             _mark_connection_failure_flags(event_id)
+            mark_job_failed("webhook_subscription_failed")
             return
 
         # Bulk Sync Rooms
@@ -117,12 +125,14 @@ def sync_voxbento_connection(self, event_id: int) -> None:
     except MaxRetriesExceededError:
         logger.error(f"Max retries exceeded syncing VoxBento connection for event {event_id}")
         _mark_connection_failure_flags(event_id)
+        mark_job_failed("max_retries")
     except (requests.RequestException, redis.exceptions.LockError) as e:
-        logger.warning(f"Transient error syncing VoxBento connection for event {event_id}: {e}")
+        logger.warning("Transient error syncing VoxBento connection for event %s (%s)", event_id, type(e).__name__)
         _retry_connection(self, e, event_id)
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_rooms")
 def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
     try:
         event = Event._base_manager.get(pk=event_id)
@@ -136,6 +146,7 @@ def sync_all_rooms_to_voxbento(self, event_id: int) -> None:
 
     except Exception as e:
         logger.error(f"Failed to bulk sync rooms for event {event_id}: {e}", exc_info=True)
+        mark_job_failed(type(e).__name__)
 
 
 class ActiveSessionConflict(Exception):
@@ -345,21 +356,24 @@ def _do_sync_single_room_to_voxbento(
             logger.warning(f"Entity does not exist for upsert room {room_id}")
         return False
     except requests.RequestException as e:
-        logger.warning(f"Request exception when syncing room {room_id}: {e}")
+        logger.warning("Request exception when syncing room %s (%s)", room_id, type(e).__name__)
         return True
 
 
 @shared_task(bind=True, max_retries=5, retry_backoff=True)
+@traced_job("interpretation.sync_room")
 def sync_single_room_to_voxbento(self, room_id: int, event_id: int, action: str) -> None:
     try:
         needs_retry = _do_sync_single_room_to_voxbento(room_id, event_id, action)
     except ActiveSessionConflict:
+        mark_job_failed("active_session_conflict")
         return
     if needs_retry:
         try:
             self.retry()
         except MaxRetriesExceededError:
             logger.error(f"Max retries exceeded syncing room {room_id}")
+            mark_job_failed("max_retries")
             try:
                 event = Event._base_manager.get(pk=event_id)
                 if hasattr(event, "voxbento_oauth_grant"):

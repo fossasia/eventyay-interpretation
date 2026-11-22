@@ -11,6 +11,14 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 
+from interpretation.operational_log import (
+    OUTCOME_FAILURE,
+    OUTCOME_SUCCESS,
+    log_operation,
+    logged_request,
+    request_context,
+)
+
 from .backends.registry import get_backend
 from .models import RoomInterpretation
 from .room_control import (
@@ -99,6 +107,30 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
     write_permission = "can_change_event_settings"
     endpoint = "room_interpretation"
 
+    def dispatch(self, request, *args, **kwargs):
+        with request_context(request):
+            return super().dispatch(request, *args, **kwargs)
+
+    def _user_id(self, request):
+        user = getattr(request, "user", None)
+        if user is not None and getattr(user, "is_authenticated", False):
+            return getattr(user, "id", None)
+        return None
+
+    def permission_denied(self, request, message=None, code=None):
+        user = getattr(request, "user", None)
+        is_auth = user is not None and getattr(user, "is_authenticated", False)
+        log_operation(
+            "permission.denied",
+            OUTCOME_FAILURE,
+            backend="interpretation",
+            error_code="forbidden" if is_auth else "unauthorized",
+            event_id=getattr(getattr(self, "event", None), "id", None),
+            object_id=self.kwargs.get("room_pk"),
+            user_id=getattr(user, "id", None) if is_auth else None,
+        )
+        super().permission_denied(request, message=message, code=code)
+
     def get_permissions(self):
         # listener_token and booth_status are attendee-facing
         if self.action in ("listener_token", "booth_status"):
@@ -136,6 +168,15 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if not plugin_enabled(self.event):
             from django.core.exceptions import PermissionDenied
 
+            log_operation(
+                "room.config.update",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="plugin_disabled",
+                event_id=getattr(self.event, "id", None),
+                object_id=room_pk,
+                user_id=self._user_id(request),
+            )
             raise PermissionDenied("Interpretation plugin is disabled for this event.")
 
         room = self._ensure_room()
@@ -145,7 +186,24 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         try:
             interpretation = update_room_interpretation(room, self.event, request.data)
         except ValueError as exc:
+            log_operation(
+                "room.config.update",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="validation_failed",
+                event_id=self.event.id,
+                object_id=room.pk,
+                user_id=self._user_id(request),
+            )
             raise ValidationError({"detail": str(exc)}) from exc
+        log_operation(
+            "room.config.update",
+            OUTCOME_SUCCESS,
+            backend=interpretation.interpreter,
+            event_id=self.event.id,
+            object_id=room.pk,
+            user_id=self._user_id(request),
+        )
         return Response(serialize_room_interpretation(room, self.event, interpretation))
 
     @action(detail=False, methods=["post"], url_path="sync")
@@ -153,6 +211,15 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         room = self._ensure_room()
         interpretation = get_interpretation(room)
         if not interpretation or interpretation.interpreter != RoomInterpretation.INTERPRETER_VOXBENTO:
+            log_operation(
+                "room.sync",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="invalid_backend",
+                event_id=self.event.id,
+                object_id=room.pk,
+                user_id=self._user_id(request),
+            )
             return Response({"detail": "Room is not configured for VoxBento."}, status=400)
 
         backend = get_backend(interpretation.interpreter)
@@ -161,14 +228,49 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         try:
             synced_count = backend.sync_booths(self.event, interpretation)
             if synced_count == 0 and interpretation.target_languages:
+                log_operation(
+                    "room.sync",
+                    OUTCOME_FAILURE,
+                    backend=interpretation.interpreter,
+                    error_code="no_booths_synced",
+                    event_id=self.event.id,
+                    object_id=room.pk,
+                    user_id=self._user_id(request),
+                )
                 return Response(
                     {"detail": "Failed to sync any booths with Voxbento. Check credentials or network."},
                     status=400,
                 )
         except VoxbentoTemporarilyUnavailable:
+            log_operation(
+                "room.sync",
+                OUTCOME_FAILURE,
+                backend=interpretation.interpreter,
+                error_code="backend_unavailable",
+                event_id=self.event.id,
+                object_id=room.pk,
+                user_id=self._user_id(request),
+            )
             return Response({"detail": "VoxBento is temporarily unavailable."}, status=503)
         except Exception as e:
+            log_operation(
+                "room.sync",
+                OUTCOME_FAILURE,
+                backend=interpretation.interpreter,
+                error_code=type(e).__name__,
+                event_id=self.event.id,
+                object_id=room.pk,
+                user_id=self._user_id(request),
+            )
             return Response({"detail": str(e)}, status=500)
+        log_operation(
+            "room.sync",
+            OUTCOME_SUCCESS,
+            backend=interpretation.interpreter,
+            event_id=self.event.id,
+            object_id=room.pk,
+            user_id=self._user_id(request),
+        )
         return Response({"status": "synced", "synced_count": synced_count})
 
     @action(detail=False, methods=["post"], url_path="start")
@@ -178,6 +280,15 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         if isinstance(request.data, dict):
             stream_url_override = (request.data.get("stream_url") or "").strip()
         result = start_room_session(room, self.event, stream_url_override=stream_url_override)
+        log_operation(
+            "room.session.start",
+            OUTCOME_SUCCESS if result.ok else OUTCOME_FAILURE,
+            backend=result.interpretation.interpreter if result.interpretation else "interpretation",
+            error_code=None if result.ok else "start_failed",
+            event_id=self.event.id,
+            object_id=room.pk,
+            user_id=self._user_id(request),
+        )
         if not result.ok:
             return Response({"detail": result.error}, status=400)
         payload = serialize_room_interpretation(room, self.event, result.interpretation)
@@ -187,6 +298,15 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
     def stop(self, request, room_pk=None, **kwargs):
         room = self._ensure_room()
         result = stop_room_session(room, self.event)
+        log_operation(
+            "room.session.stop",
+            OUTCOME_SUCCESS if result.ok else OUTCOME_FAILURE,
+            backend=result.interpretation.interpreter if result.interpretation else "interpretation",
+            error_code=None if result.ok else "stop_failed",
+            event_id=self.event.id,
+            object_id=room.pk,
+            user_id=self._user_id(request),
+        )
         if not result.ok:
             return Response({"detail": result.error}, status=400)
         payload = serialize_room_interpretation(room, self.event, result.interpretation)
@@ -236,9 +356,23 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
             headers.setdefault("Accept", "application/json")
 
         try:
-            response = requests.request(method, url, headers=headers, timeout=5.0, **kwargs)
+            room_id = self.kwargs.get("room_pk")
+            response = logged_request(
+                "interpretation",
+                method,
+                url,
+                headers=headers,
+                timeout=5.0,
+                event_id=self.event.id,
+                object_id=room_id,
+                **kwargs,
+            )
 
-            if response.status_code == 401 and is_oauth and grant:
+            if (
+                getattr(response, "status_code", 200 if getattr(response, "ok", False) else None) == 401
+                and is_oauth
+                and grant
+            ):
                 from datetime import timedelta
 
                 from django.utils import timezone
@@ -253,7 +387,16 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
                 if not new_api_key:
                     return None, False, {"detail": "VoxBento authorization expired.", "status": 401}
                 headers["Authorization"] = f"Bearer {new_api_key}"
-                response = requests.request(method, url, headers=headers, timeout=5.0, **kwargs)
+                response = logged_request(
+                    "interpretation",
+                    method,
+                    url,
+                    headers=headers,
+                    timeout=5.0,
+                    event_id=self.event.id,
+                    object_id=room_id,
+                    **kwargs,
+                )
 
             return response, is_oauth, None
         except requests.RequestException as e:
@@ -280,14 +423,41 @@ class RoomInterpretationViewSet(PretalxViewSetMixin, viewsets.ViewSet):
         )
 
         if error:
+            log_operation(
+                "listener_token.issue",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="token_fetch_failed",
+                status=error.get("status"),
+                event_id=self.event.id,
+                object_id=room.pk,
+            )
             return Response({"detail": error["detail"]}, status=error["status"])
 
+        resp_status = getattr(response, "status_code", 200 if getattr(response, "ok", False) else None)
         if response.ok:
             data = response.json()
             token = data.get("listener_token") if is_oauth else data.get("token")
+            log_operation(
+                "listener_token.issue",
+                OUTCOME_SUCCESS,
+                backend="interpretation",
+                status=resp_status,
+                event_id=self.event.id,
+                object_id=room.pk,
+            )
             return Response({"token": token})
         else:
-            logger.warning("VoxBento API Error (%s) when fetching listener token.", response.status_code)
+            logger.warning("VoxBento API Error (%s) when fetching listener token.", resp_status)
+            log_operation(
+                "listener_token.issue",
+                OUTCOME_FAILURE,
+                backend="interpretation",
+                error_code="http_error",
+                status=resp_status,
+                event_id=self.event.id,
+                object_id=room.pk,
+            )
             return Response({"detail": "Failed to retrieve listener token from VoxBento."}, status=400)
 
     @action(detail=False, methods=["get"], url_path="streams")
